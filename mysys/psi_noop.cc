@@ -1,25 +1,55 @@
-/* Copyright (c) 2011, 2017, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2011, 2020, Oracle and/or its affiliates.
 
   This program is free software; you can redistribute it and/or modify
-  it under the terms of the GNU General Public License as published by
-  the Free Software Foundation; version 2 of the License.
+  it under the terms of the GNU General Public License, version 2.0,
+  as published by the Free Software Foundation.
+
+  This program is also distributed with certain software (including
+  but not limited to OpenSSL) that is licensed under separate terms,
+  as designated in a particular file or component or in included license
+  documentation.  The authors of MySQL hereby grant you an additional
+  permission to link the program and your derivative works with the
+  separately licensed software that they have included with MySQL.
+
+  Without limiting anything contained in the foregoing, this file,
+  which is part of C Driver for MySQL (Connector/C), is also subject to the
+  Universal FOSS Exception, version 1.0, a copy of which can be found at
+  http://oss.oracle.com/licenses/universal-foss-exception.
 
   This program is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  GNU General Public License for more details.
+  GNU General Public License, version 2.0, for more details.
 
   You should have received a copy of the GNU General Public License
-  along with this program; if not, write to the Free Software Foundation,
-  51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
+  along with this program; if not, write to the Free Software
+  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 /**
   @file mysys/psi_noop.cc
   Always provide the noop performance interface, for plugins.
 */
 
-#define USE_PSI_V1
-#define HAVE_PSI_INTERFACE
+#define HAVE_PSI_MUTEX_INTERFACE
+#define HAVE_PSI_RWLOCK_INTERFACE
+#define HAVE_PSI_COND_INTERFACE
+#define HAVE_PSI_FILE_INTERFACE
+#define HAVE_PSI_THREAD_INTERFACE
+#define HAVE_PSI_TABLE_INTERFACE
+#define HAVE_PSI_STAGE_INTERFACE
+#define HAVE_PSI_STATEMENT_INTERFACE
+#define HAVE_PSI_SP_INTERFACE
+#define HAVE_PSI_PS_INTERFACE
+#define HAVE_PSI_STATEMENT_DIGEST_INTERFACE
+#define HAVE_PSI_TRANSACTION_INTERFACE
+#define HAVE_PSI_SOCKET_INTERFACE
+#define HAVE_PSI_MEMORY_INTERFACE
+#define HAVE_PSI_ERROR_INTERFACE
+#define HAVE_PSI_IDLE_INTERFACE
+#define HAVE_PSI_METADATA_INTERFACE
+#define HAVE_PSI_DATA_LOCK_INTERFACE
+#define HAVE_PSI_SYSTEM_INTERFACE
+#define HAVE_PSI_TLS_CHANNEL_INTERFACE
 
 #ifdef HAVE_SYS_SOCKET_H
 #include <sys/socket.h>
@@ -33,7 +63,7 @@
 #include "my_macros.h"
 #include "my_sys.h"  // IWYU pragma: keep
 #include "my_thread.h"
-#include "mysql/psi/psi_base.h"
+#include "mysql/components/services/bits/psi_bits.h"
 #include "mysql/psi/psi_cond.h"
 #include "mysql/psi/psi_data_lock.h"
 #include "mysql/psi/psi_error.h"
@@ -46,1233 +76,897 @@
 #include "mysql/psi/psi_socket.h"
 #include "mysql/psi/psi_stage.h"
 #include "mysql/psi/psi_statement.h"
+#include "mysql/psi/psi_system.h"
 #include "mysql/psi/psi_table.h"
 #include "mysql/psi/psi_thread.h"
+#include "mysql/psi/psi_tls_channel.h"
 #include "mysql/psi/psi_transaction.h"
 
 class THD;
 struct MDL_key;
 
-C_MODE_START
-
-#define NNN MY_ATTRIBUTE((unused))
-
 // ===========================================================================
 
-static void register_thread_noop(const char *category NNN,
-                                 PSI_thread_info *info NNN,
-                                 int count NNN)
-{
+static void register_thread_noop(const char *, PSI_thread_info *, int) {
   return;
 }
 
-static int spawn_thread_noop(PSI_thread_key key NNN,
-                             my_thread_handle *thread,
+static int spawn_thread_noop(PSI_thread_key, my_thread_handle *thread,
                              const my_thread_attr_t *attr,
-                             my_start_routine start_routine, void *arg)
-{
+                             my_start_routine start_routine, void *arg) {
   return my_thread_create(thread, attr, start_routine, arg);
 }
 
-static PSI_thread*
-new_thread_noop(PSI_thread_key key NNN,
-                const void *identity NNN, ulonglong thread_id NNN)
-{
-  return NULL;
+static PSI_thread *new_thread_noop(PSI_thread_key, const void *, ulonglong) {
+  return nullptr;
 }
 
-static void set_thread_id_noop(PSI_thread *thread NNN, ulonglong id NNN)
-{
+static void set_thread_id_noop(PSI_thread *, ulonglong) { return; }
+
+static ulonglong get_current_thread_internal_id_noop() { return 0; }
+
+static ulonglong get_thread_internal_id_noop(PSI_thread *) { return 0; }
+
+static PSI_thread *get_thread_by_id_noop(ulonglong) { return nullptr; }
+
+static void set_thread_THD_noop(PSI_thread *, THD *) { return; }
+
+static void set_thread_os_id_noop(PSI_thread *) { return; }
+
+static PSI_thread *get_thread_noop(void) { return nullptr; }
+
+static void set_thread_user_noop(const char *, int) { return; }
+
+static void set_thread_user_host_noop(const char *, int, const char *, int) {
   return;
 }
 
-static void set_thread_THD_noop(PSI_thread *thread NNN, THD *thd NNN)
-{
-  return;
-}
+static void set_thread_db_noop(const char *, int) { return; }
 
-static void set_thread_os_id_noop(PSI_thread *thread NNN)
-{
-  return;
-}
+static void set_thread_command_noop(int) { return; }
 
-static PSI_thread*
-get_thread_noop(void)
-{
-  return NULL;
-}
+static void set_connection_type_noop(opaque_vio_type) { return; }
 
-static void set_thread_user_noop(const char *user NNN, int user_len NNN)
-{
-  return;
-}
+static void set_thread_start_time_noop(time_t) { return; }
 
-static void set_thread_user_host_noop(const char *user NNN, int user_len NNN,
-                                      const char *host NNN, int host_len NNN)
-{
-  return;
-}
+static void set_thread_info_noop(const char *, uint) { return; }
 
-static void set_thread_db_noop(const char* db NNN, int db_len NNN)
-{
-  return;
-}
+static void set_thread_noop(PSI_thread *) { return; }
 
-static void set_thread_command_noop(int command NNN)
-{
-  return;
-}
+static void set_thread_peer_port_noop(PSI_thread *, uint) { return; }
 
-static void set_connection_type_noop(opaque_vio_type conn_type NNN)
-{
-  return;
-}
-
-static void set_thread_start_time_noop(time_t start_time NNN)
-{
-  return;
-}
-
-static void set_thread_state_noop(const char* state NNN)
-{
-  return;
-}
-
-static void set_thread_info_noop(const char* info NNN, uint info_len NNN)
-{
-  return;
-}
-
-static void set_thread_noop(PSI_thread* thread NNN)
-{
-  return;
-}
-
-static void delete_current_thread_noop(void)
-{
-  return;
-}
-
-static void delete_thread_noop(PSI_thread *thread NNN)
-{
-  return;
-}
-
-static int
-set_thread_connect_attrs_noop(const char *buffer MY_ATTRIBUTE((unused)),
-                             uint length  MY_ATTRIBUTE((unused)),
-                             const void *from_cs MY_ATTRIBUTE((unused)))
-{
+static int set_thread_resource_group_noop(const char *, int, void *) {
   return 0;
 }
 
-static void get_thread_event_id_noop(ulonglong *thread_internal_id,
-                                     ulonglong *event_id)
-{
-  *thread_internal_id= 0;
-  *event_id= 0;
+static int set_thread_resource_group_by_id_noop(PSI_thread *, ulonglong,
+                                                const char *, int, void *) {
+  return 0;
 }
 
-static PSI_thread_service_t psi_thread_noop=
-{
-  register_thread_noop,
-  spawn_thread_noop,
-  new_thread_noop,
-  set_thread_id_noop,
-  set_thread_THD_noop,
-  set_thread_os_id_noop,
-  get_thread_noop,
-  set_thread_user_noop,
-  set_thread_user_host_noop,
-  set_thread_db_noop,
-  set_thread_command_noop,
-  set_connection_type_noop,
-  set_thread_start_time_noop,
-  set_thread_state_noop,
-  set_thread_info_noop,
-  set_thread_noop,
-  delete_current_thread_noop,
-  delete_thread_noop,
-  set_thread_connect_attrs_noop,
-  get_thread_event_id_noop
-};
+static void aggregate_thread_status_noop(PSI_thread *) { return; }
 
-struct PSI_thread_bootstrap *psi_thread_hook= NULL;
-PSI_thread_service_t *psi_thread_service= & psi_thread_noop;
+static void delete_current_thread_noop(void) { return; }
 
-void set_psi_thread_service(PSI_thread_service_t *psi)
-{
-  psi_thread_service= psi;
+static void delete_thread_noop(PSI_thread *) { return; }
+
+static int set_thread_connect_attrs_noop(
+    const char *buffer MY_ATTRIBUTE((unused)),
+    uint length MY_ATTRIBUTE((unused)),
+    const void *from_cs MY_ATTRIBUTE((unused))) {
+  return 0;
 }
 
-// ===========================================================================
-
-static void register_mutex_noop(const char *category NNN,
-                                PSI_mutex_info *info NNN,
-                                int count NNN)
-{
-  return;
+static void get_current_thread_event_id_noop(ulonglong *thread_internal_id,
+                                             ulonglong *event_id) {
+  *thread_internal_id = 0;
+  *event_id = 0;
 }
 
-static PSI_mutex*
-init_mutex_noop(PSI_mutex_key key NNN, const void *identity NNN)
-{
-  return NULL;
+static void get_thread_event_id_noop(PSI_thread *,
+                                     ulonglong *thread_internal_id,
+                                     ulonglong *event_id) {
+  *thread_internal_id = 0;
+  *event_id = 0;
 }
 
-static void destroy_mutex_noop(PSI_mutex* mutex NNN)
-{
-  return;
+static int get_thread_system_attrs_noop(PSI_thread_attrs *) { return 0; }
+
+static int get_thread_system_attrs_by_id_noop(PSI_thread *, ulonglong,
+                                              PSI_thread_attrs *) {
+  return 0;
 }
 
-static PSI_mutex_locker*
-start_mutex_wait_noop(PSI_mutex_locker_state *state NNN,
-                      PSI_mutex *mutex NNN,
-                      PSI_mutex_operation op NNN,
-                      const char *src_file NNN, uint src_line NNN)
-{
-  return NULL;
+static int register_notification_noop(const PSI_notification *, bool) {
+  return 0;
 }
 
-static void end_mutex_wait_noop(PSI_mutex_locker* locker NNN, int rc NNN)
-{
-  return;
-}
+static int unregister_notification_noop(int) { return 0; }
 
-static void unlock_mutex_noop(PSI_mutex *mutex NNN)
-{
-  return;
-}
+static void notify_session_connect_noop(PSI_thread *) { return; }
 
-static PSI_mutex_service_t psi_mutex_noop=
-{
-  register_mutex_noop,
-  init_mutex_noop,
-  destroy_mutex_noop,
-  start_mutex_wait_noop,
-  end_mutex_wait_noop,
-  unlock_mutex_noop
-};
+static void notify_session_disconnect_noop(PSI_thread *) { return; }
 
-struct PSI_mutex_bootstrap *psi_mutex_hook= NULL;
-PSI_mutex_service_t *psi_mutex_service= & psi_mutex_noop;
+static void notify_session_change_user_noop(PSI_thread *) { return; }
 
-void set_psi_mutex_service(PSI_mutex_service_t *psi)
-{
-  psi_mutex_service= psi;
+static PSI_thread_service_t psi_thread_noop = {
+    register_thread_noop,
+    spawn_thread_noop,
+    new_thread_noop,
+    set_thread_id_noop,
+    get_current_thread_internal_id_noop,
+    get_thread_internal_id_noop,
+    get_thread_by_id_noop,
+    set_thread_THD_noop,
+    set_thread_os_id_noop,
+    get_thread_noop,
+    set_thread_user_noop,
+    set_thread_user_host_noop,
+    set_thread_db_noop,
+    set_thread_command_noop,
+    set_connection_type_noop,
+    set_thread_start_time_noop,
+    set_thread_info_noop,
+    set_thread_resource_group_noop,
+    set_thread_resource_group_by_id_noop,
+    set_thread_noop,
+    set_thread_peer_port_noop,
+    aggregate_thread_status_noop,
+    delete_current_thread_noop,
+    delete_thread_noop,
+    set_thread_connect_attrs_noop,
+    get_current_thread_event_id_noop,
+    get_thread_event_id_noop,
+    get_thread_system_attrs_noop,
+    get_thread_system_attrs_by_id_noop,
+    register_notification_noop,
+    unregister_notification_noop,
+    notify_session_connect_noop,
+    notify_session_disconnect_noop,
+    notify_session_change_user_noop};
+
+struct PSI_thread_bootstrap *psi_thread_hook = nullptr;
+PSI_thread_service_t *psi_thread_service = &psi_thread_noop;
+
+void set_psi_thread_service(void *psi) {
+  psi_thread_service = (PSI_thread_service_t *)psi;
 }
 
 // ===========================================================================
 
-static void register_rwlock_noop(const char *category NNN,
-                                 PSI_rwlock_info *info NNN,
-                                 int count NNN)
-{
-  return;
+static void register_mutex_noop(const char *, PSI_mutex_info *, int) { return; }
+
+static PSI_mutex *init_mutex_noop(PSI_mutex_key, const void *) {
+  return nullptr;
 }
 
-static PSI_rwlock*
-init_rwlock_noop(PSI_rwlock_key key NNN, const void *identity NNN)
-{
-  return NULL;
+static void destroy_mutex_noop(PSI_mutex *) { return; }
+
+static PSI_mutex_locker *start_mutex_wait_noop(PSI_mutex_locker_state *,
+                                               PSI_mutex *, PSI_mutex_operation,
+                                               const char *, uint) {
+  return nullptr;
 }
 
-static void destroy_rwlock_noop(PSI_rwlock* rwlock NNN)
-{
-  return;
-}
+static void end_mutex_wait_noop(PSI_mutex_locker *, int) { return; }
 
-static PSI_rwlock_locker*
-start_rwlock_rdwait_noop(struct PSI_rwlock_locker_state_v1 *state NNN,
-                         struct PSI_rwlock *rwlock NNN,
-                         enum PSI_rwlock_operation op NNN,
-                         const char *src_file NNN, uint src_line NNN)
-{
-  return NULL;
-}
+static void unlock_mutex_noop(PSI_mutex *) { return; }
 
-static void end_rwlock_rdwait_noop(PSI_rwlock_locker* locker NNN, int rc NNN)
-{
-  return;
-}
+static PSI_mutex_service_t psi_mutex_noop = {
+    register_mutex_noop,   init_mutex_noop,     destroy_mutex_noop,
+    start_mutex_wait_noop, end_mutex_wait_noop, unlock_mutex_noop};
 
-static struct PSI_rwlock_locker*
-start_rwlock_wrwait_noop(struct PSI_rwlock_locker_state_v1 *state NNN,
-                         struct PSI_rwlock *rwlock NNN,
-                         enum PSI_rwlock_operation op NNN,
-                         const char *src_file NNN, uint src_line NNN)
-{
-  return NULL;
-}
+struct PSI_mutex_bootstrap *psi_mutex_hook = nullptr;
+PSI_mutex_service_t *psi_mutex_service = &psi_mutex_noop;
 
-static void end_rwlock_wrwait_noop(PSI_rwlock_locker* locker NNN, int rc NNN)
-{
-  return;
-}
-
-static void unlock_rwlock_noop(PSI_rwlock *rwlock NNN)
-{
-  return;
-}
-
-static PSI_rwlock_service_t psi_rwlock_noop=
-{
-  register_rwlock_noop,
-  init_rwlock_noop,
-  destroy_rwlock_noop,
-  start_rwlock_rdwait_noop,
-  end_rwlock_rdwait_noop,
-  start_rwlock_wrwait_noop,
-  end_rwlock_wrwait_noop,
-  unlock_rwlock_noop
-};
-
-struct PSI_rwlock_bootstrap *psi_rwlock_hook= NULL;
-PSI_rwlock_service_t *psi_rwlock_service= & psi_rwlock_noop;
-
-void set_psi_rwlock_service(PSI_rwlock_service_t *psi)
-{
-  psi_rwlock_service= psi;
+void set_psi_mutex_service(void *psi) {
+  psi_mutex_service = (PSI_mutex_service_t *)psi;
 }
 
 // ===========================================================================
 
-static void register_cond_noop(const char *category NNN,
-                               PSI_cond_info *info NNN,
-                               int count NNN)
-{
+static void register_rwlock_noop(const char *, PSI_rwlock_info *, int) {
   return;
 }
 
-static PSI_cond*
-init_cond_noop(PSI_cond_key key NNN, const void *identity NNN)
-{
-  return NULL;
+static PSI_rwlock *init_rwlock_noop(PSI_rwlock_key, const void *) {
+  return nullptr;
 }
 
-static void destroy_cond_noop(PSI_cond* cond NNN)
-{
+static void destroy_rwlock_noop(PSI_rwlock *) { return; }
+
+static PSI_rwlock_locker *start_rwlock_rdwait_noop(
+    struct PSI_rwlock_locker_state_v1 *, struct PSI_rwlock *,
+    enum PSI_rwlock_operation, const char *, uint) {
+  return nullptr;
+}
+
+static void end_rwlock_rdwait_noop(PSI_rwlock_locker *, int) { return; }
+
+static struct PSI_rwlock_locker *start_rwlock_wrwait_noop(
+    struct PSI_rwlock_locker_state_v1 *, struct PSI_rwlock *,
+    enum PSI_rwlock_operation, const char *, uint) {
+  return nullptr;
+}
+
+static void end_rwlock_wrwait_noop(PSI_rwlock_locker *, int) { return; }
+
+static void unlock_rwlock_noop(PSI_rwlock *, enum PSI_rwlock_operation) {
   return;
 }
 
-static void signal_cond_noop(PSI_cond* cond NNN)
-{
-  return;
-}
+static PSI_rwlock_service_t psi_rwlock_noop = {
+    register_rwlock_noop,     init_rwlock_noop,       destroy_rwlock_noop,
+    start_rwlock_rdwait_noop, end_rwlock_rdwait_noop, start_rwlock_wrwait_noop,
+    end_rwlock_wrwait_noop,   unlock_rwlock_noop};
 
-static void broadcast_cond_noop(PSI_cond* cond NNN)
-{
-  return;
-}
+struct PSI_rwlock_bootstrap *psi_rwlock_hook = nullptr;
+PSI_rwlock_service_t *psi_rwlock_service = &psi_rwlock_noop;
 
-static struct PSI_cond_locker*
-start_cond_wait_noop(struct PSI_cond_locker_state_v1 *state NNN,
-                     struct PSI_cond *cond NNN,
-                     struct PSI_mutex *mutex NNN,
-                     enum PSI_cond_operation op NNN,
-                     const char *src_file NNN, uint src_line NNN)
-{
-  return NULL;
-}
-
-static void end_cond_wait_noop(PSI_cond_locker* locker NNN, int rc NNN)
-{
-  return;
-}
-
-static PSI_cond_service_t psi_cond_noop=
-{
-  register_cond_noop,
-  init_cond_noop,
-  destroy_cond_noop,
-  signal_cond_noop,
-  broadcast_cond_noop,
-  start_cond_wait_noop,
-  end_cond_wait_noop
-};
-
-struct PSI_cond_bootstrap *psi_cond_hook= NULL;
-PSI_cond_service_t *psi_cond_service= & psi_cond_noop;
-
-void set_psi_cond_service(PSI_cond_service_t *psi)
-{
-  psi_cond_service= psi;
+void set_psi_rwlock_service(void *psi) {
+  psi_rwlock_service = (PSI_rwlock_service_t *)psi;
 }
 
 // ===========================================================================
 
-static void register_file_noop(const char *category NNN,
-                               PSI_file_info *info NNN,
-                               int count NNN)
-{
-  return;
+static void register_cond_noop(const char *, PSI_cond_info *, int) { return; }
+
+static PSI_cond *init_cond_noop(PSI_cond_key, const void *) { return nullptr; }
+
+static void destroy_cond_noop(PSI_cond *) { return; }
+
+static void signal_cond_noop(PSI_cond *) { return; }
+
+static void broadcast_cond_noop(PSI_cond *) { return; }
+
+static struct PSI_cond_locker *start_cond_wait_noop(
+    struct PSI_cond_locker_state_v1 *, struct PSI_cond *, struct PSI_mutex *,
+    enum PSI_cond_operation, const char *, uint) {
+  return nullptr;
 }
 
-static PSI_file_locker*
-get_thread_file_name_locker_noop(PSI_file_locker_state *state NNN,
-                                 PSI_file_key key NNN,
-                                 enum PSI_file_operation op NNN,
-                                 const char *name NNN, const void *identity NNN)
-{
-  return NULL;
-}
+static void end_cond_wait_noop(PSI_cond_locker *, int) { return; }
 
-static PSI_file_locker*
-get_thread_file_stream_locker_noop(PSI_file_locker_state *state NNN,
-                                   PSI_file *file NNN,
-                                   enum PSI_file_operation op NNN)
-{
-  return NULL;
-}
+static PSI_cond_service_t psi_cond_noop = {
+    register_cond_noop, init_cond_noop,      destroy_cond_noop,
+    signal_cond_noop,   broadcast_cond_noop, start_cond_wait_noop,
+    end_cond_wait_noop};
 
+struct PSI_cond_bootstrap *psi_cond_hook = nullptr;
+PSI_cond_service_t *psi_cond_service = &psi_cond_noop;
 
-static PSI_file_locker*
-get_thread_file_descriptor_locker_noop(PSI_file_locker_state *state NNN,
-                                       File file NNN,
-                                       enum PSI_file_operation op NNN)
-{
-  return NULL;
-}
-
-static void create_file_noop(PSI_file_key key NNN,
-                             const char *name NNN, File file NNN)
-{
-  return;
-}
-
-static void start_file_open_wait_noop(PSI_file_locker *locker NNN,
-                                      const char *src_file NNN,
-                                      uint src_line NNN)
-{
-  return;
-}
-
-static PSI_file* end_file_open_wait_noop(PSI_file_locker *locker NNN,
-                                         void *result NNN)
-{
-  return NULL;
-}
-
-static void end_file_open_wait_and_bind_to_descriptor_noop
-  (PSI_file_locker *locker NNN, File file NNN)
-{
-  return;
-}
-
-static void end_temp_file_open_wait_and_bind_to_descriptor_noop
-  (PSI_file_locker *locker NNN, File file NNN, const char *filaneme NNN)
-{
-  return;
-}
-
-static void start_file_wait_noop(PSI_file_locker *locker NNN,
-                                 size_t count NNN,
-                                 const char *src_file NNN,
-                                 uint src_line NNN)
-{
-  return;
-}
-
-static void end_file_wait_noop(PSI_file_locker *locker NNN,
-                               size_t count NNN)
-{
-  return;
-}
-
-static void start_file_close_wait_noop(PSI_file_locker *locker NNN,
-                                       const char *src_file NNN,
-                                       uint src_line NNN)
-{
-  return;
-}
-
-static void end_file_close_wait_noop(PSI_file_locker *locker NNN,
-                                     int result NNN)
-{
-  return;
-}
-
-static PSI_file_service_t psi_file_noop=
-{
-  register_file_noop,
-  create_file_noop,
-  get_thread_file_name_locker_noop,
-  get_thread_file_stream_locker_noop,
-  get_thread_file_descriptor_locker_noop,
-  start_file_open_wait_noop,
-  end_file_open_wait_noop,
-  end_file_open_wait_and_bind_to_descriptor_noop,
-  end_temp_file_open_wait_and_bind_to_descriptor_noop,
-  start_file_wait_noop,
-  end_file_wait_noop,
-  start_file_close_wait_noop,
-  end_file_close_wait_noop
-};
-
-struct PSI_file_bootstrap *psi_file_hook= NULL;
-PSI_file_service_t *psi_file_service= & psi_file_noop;
-
-void set_psi_file_service(PSI_file_service_t *psi)
-{
-  psi_file_service= psi;
+void set_psi_cond_service(void *psi) {
+  psi_cond_service = (PSI_cond_service_t *)psi;
 }
 
 // ===========================================================================
 
-static void register_socket_noop(const char *category NNN,
-                                 PSI_socket_info *info NNN,
-                                 int count NNN)
-{
+static void register_file_noop(const char *, PSI_file_info *, int) { return; }
+
+static PSI_file_locker *get_thread_file_name_locker_noop(
+    PSI_file_locker_state *, PSI_file_key, enum PSI_file_operation,
+    const char *, const void *) {
+  return nullptr;
+}
+
+static PSI_file_locker *get_thread_file_stream_locker_noop(
+    PSI_file_locker_state *, PSI_file *, enum PSI_file_operation) {
+  return nullptr;
+}
+
+static PSI_file_locker *get_thread_file_descriptor_locker_noop(
+    PSI_file_locker_state *, File, enum PSI_file_operation) {
+  return nullptr;
+}
+
+static void create_file_noop(PSI_file_key, const char *, File) { return; }
+
+static void start_file_open_wait_noop(PSI_file_locker *, const char *, uint) {
   return;
 }
 
-static PSI_socket*
-init_socket_noop(PSI_socket_key key NNN, const my_socket *fd NNN,
-                 const struct sockaddr *addr NNN, socklen_t addr_len NNN)
-{
-  return NULL;
+static PSI_file *end_file_open_wait_noop(PSI_file_locker *, void *) {
+  return nullptr;
 }
 
-static void destroy_socket_noop(PSI_socket* socket NNN)
-{
+static void end_file_open_wait_and_bind_to_descriptor_noop(PSI_file_locker *,
+                                                           File) {
   return;
 }
 
-static PSI_socket_locker*
-start_socket_wait_noop(PSI_socket_locker_state *state NNN,
-                       PSI_socket *socket NNN,
-                       PSI_socket_operation op NNN,
-                       size_t count NNN,
-                       const char *src_file NNN,
-                       uint src_line NNN)
-{
-  return NULL;
-}
-
-static void end_socket_wait_noop(PSI_socket_locker *locker NNN,
-                                 size_t count NNN)
-{
+static void end_temp_file_open_wait_and_bind_to_descriptor_noop(
+    PSI_file_locker *, File, const char *) {
   return;
 }
 
-static void set_socket_state_noop(PSI_socket *socket NNN,
-                                  enum PSI_socket_state state NNN)
-{
+static void start_file_wait_noop(PSI_file_locker *, size_t, const char *,
+                                 uint) {
   return;
 }
 
-static void set_socket_info_noop(PSI_socket *socket NNN,
-                                 const my_socket *fd NNN,
-                                 const struct sockaddr *addr NNN,
-                                 socklen_t addr_len NNN)
-{
+static void end_file_wait_noop(PSI_file_locker *, size_t) { return; }
+
+static void start_file_close_wait_noop(PSI_file_locker *, const char *, uint) {
   return;
 }
 
-static void set_socket_thread_owner_noop(PSI_socket *socket NNN)
-{
+static void end_file_close_wait_noop(PSI_file_locker *, int) { return; }
+
+static void start_file_rename_wait_noop(PSI_file_locker *, size_t, const char *,
+                                        const char *, const char *, uint) {
   return;
 }
 
-static PSI_socket_service_t psi_socket_noop=
-{
-  register_socket_noop,
-  init_socket_noop,
-  destroy_socket_noop,
-  start_socket_wait_noop,
-  end_socket_wait_noop,
-  set_socket_state_noop,
-  set_socket_info_noop,
-  set_socket_thread_owner_noop
-};
+static void end_file_rename_wait_noop(PSI_file_locker *, const char *,
+                                      const char *, int) {
+  return;
+}
 
-struct PSI_socket_bootstrap *psi_socket_hook= NULL;
-PSI_socket_service_t *psi_socket_service= & psi_socket_noop;
+static PSI_file_service_t psi_file_noop = {
+    register_file_noop,
+    create_file_noop,
+    get_thread_file_name_locker_noop,
+    get_thread_file_stream_locker_noop,
+    get_thread_file_descriptor_locker_noop,
+    start_file_open_wait_noop,
+    end_file_open_wait_noop,
+    end_file_open_wait_and_bind_to_descriptor_noop,
+    end_temp_file_open_wait_and_bind_to_descriptor_noop,
+    start_file_wait_noop,
+    end_file_wait_noop,
+    start_file_close_wait_noop,
+    end_file_close_wait_noop,
+    start_file_rename_wait_noop,
+    end_file_rename_wait_noop};
 
-void set_psi_socket_service(PSI_socket_service_t *psi)
-{
-  psi_socket_service= psi;
+struct PSI_file_bootstrap *psi_file_hook = nullptr;
+PSI_file_service_t *psi_file_service = &psi_file_noop;
+
+void set_psi_file_service(void *psi) {
+  psi_file_service = (PSI_file_service_t *)psi;
 }
 
 // ===========================================================================
 
-static PSI_table_share*
-get_table_share_noop(bool temporary NNN, struct TABLE_SHARE *share NNN)
-{
-  return NULL;
-}
-
-static void release_table_share_noop(PSI_table_share* share NNN)
-{
+static void register_socket_noop(const char *, PSI_socket_info *, int) {
   return;
 }
 
-static void
-drop_table_share_noop(bool temporary NNN, const char *schema_name NNN,
-                      int schema_name_length NNN, const char *table_name NNN,
-                      int table_name_length NNN)
-{
+static PSI_socket *init_socket_noop(PSI_socket_key, const my_socket *,
+                                    const struct sockaddr *, socklen_t) {
+  return nullptr;
+}
+
+static void destroy_socket_noop(PSI_socket *) { return; }
+
+static PSI_socket_locker *start_socket_wait_noop(PSI_socket_locker_state *,
+                                                 PSI_socket *,
+                                                 PSI_socket_operation, size_t,
+                                                 const char *, uint) {
+  return nullptr;
+}
+
+static void end_socket_wait_noop(PSI_socket_locker *, size_t) { return; }
+
+static void set_socket_state_noop(PSI_socket *, enum PSI_socket_state) {
   return;
 }
 
-static PSI_table*
-open_table_noop(PSI_table_share *share NNN, const void *identity NNN)
-{
-  return NULL;
-}
-
-static void unbind_table_noop(PSI_table *table NNN)
-{
+static void set_socket_info_noop(PSI_socket *, const my_socket *,
+                                 const struct sockaddr *, socklen_t) {
   return;
 }
 
-static PSI_table*
-rebind_table_noop(PSI_table_share *share NNN,
-                  const void *identity NNN,
-                  PSI_table *table NNN)
-{
-  return NULL;
-}
+static void set_socket_thread_owner_noop(PSI_socket *) { return; }
 
-static void close_table_noop(struct TABLE_SHARE *share NNN,
-                             PSI_table *table NNN)
-{
-  return;
-}
+static PSI_socket_service_t psi_socket_noop = {
+    register_socket_noop, init_socket_noop,
+    destroy_socket_noop,  start_socket_wait_noop,
+    end_socket_wait_noop, set_socket_state_noop,
+    set_socket_info_noop, set_socket_thread_owner_noop};
 
-static struct PSI_table_locker*
-start_table_io_wait_noop(struct PSI_table_locker_state *state NNN,
-                         struct PSI_table *table NNN,
-                         enum PSI_table_io_operation op NNN,
-                         uint index NNN,
-                         const char *src_file NNN, uint src_line NNN)
-{
-  return NULL;
-}
+struct PSI_socket_bootstrap *psi_socket_hook = nullptr;
+PSI_socket_service_t *psi_socket_service = &psi_socket_noop;
 
-static void end_table_io_wait_noop(PSI_table_locker* locker NNN,
-                                   ulonglong numrows NNN)
-{
-  return;
-}
-
-static struct PSI_table_locker*
-start_table_lock_wait_noop(struct PSI_table_locker_state *state NNN,
-                           struct PSI_table *table NNN,
-                           enum PSI_table_lock_operation op NNN,
-                           ulong flags NNN,
-                           const char *src_file NNN, uint src_line NNN)
-{
-  return NULL;
-}
-
-static void end_table_lock_wait_noop(PSI_table_locker* locker NNN)
-{
-  return;
-}
-
-static void unlock_table_noop(PSI_table *table NNN)
-{
-  return;
-}
-
-static PSI_table_service_t psi_table_noop=
-{
-  get_table_share_noop,
-  release_table_share_noop,
-  drop_table_share_noop,
-  open_table_noop,
-  unbind_table_noop,
-  rebind_table_noop,
-  close_table_noop,
-  start_table_io_wait_noop,
-  end_table_io_wait_noop,
-  start_table_lock_wait_noop,
-  end_table_lock_wait_noop,
-  unlock_table_noop
-};
-
-struct PSI_table_bootstrap *psi_table_hook= NULL;
-PSI_table_service_t *psi_table_service= & psi_table_noop;
-
-void set_psi_table_service(PSI_table_service_t *psi)
-{
-  psi_table_service= psi;
+void set_psi_socket_service(void *psi) {
+  psi_socket_service = (PSI_socket_service_t *)psi;
 }
 
 // ===========================================================================
 
-static PSI_metadata_lock *
-create_metadata_lock_noop(void *identity NNN,
-                          const MDL_key *mdl_key NNN,
-                          opaque_mdl_type mdl_type NNN,
-                          opaque_mdl_duration mdl_duration NNN,
-                          opaque_mdl_status mdl_status NNN,
-                          const char *src_file NNN,
-                          uint src_line NNN)
-{
-  return NULL;
+static PSI_table_share *get_table_share_noop(bool, struct TABLE_SHARE *) {
+  return nullptr;
 }
 
-static void
-set_metadata_lock_status_noop(PSI_metadata_lock* lock NNN,
-                              opaque_mdl_status mdl_status NNN)
-{
+static void release_table_share_noop(PSI_table_share *) { return; }
+
+static void drop_table_share_noop(bool, const char *, int, const char *, int) {
+  return;
 }
 
-static void
-destroy_metadata_lock_noop(PSI_metadata_lock* lock NNN)
-{
+static PSI_table *open_table_noop(PSI_table_share *, const void *) {
+  return nullptr;
 }
 
-static PSI_metadata_locker *
-start_metadata_wait_noop(PSI_metadata_locker_state *state NNN,
-                         PSI_metadata_lock *mdl NNN,
-                         const char *src_file NNN,
-                         uint src_line NNN)
-{
-  return NULL;
+static void unbind_table_noop(PSI_table *) { return; }
+
+static PSI_table *rebind_table_noop(PSI_table_share *, const void *,
+                                    PSI_table *) {
+  return nullptr;
 }
 
-static void
-end_metadata_wait_noop(PSI_metadata_locker *locker NNN,
-                       int rc NNN)
-{
+static void close_table_noop(struct TABLE_SHARE *, PSI_table *) { return; }
+
+static struct PSI_table_locker *start_table_io_wait_noop(
+    struct PSI_table_locker_state *, struct PSI_table *,
+    enum PSI_table_io_operation, uint, const char *, uint) {
+  return nullptr;
 }
 
-static PSI_mdl_service_t psi_mdl_noop=
-{
-  create_metadata_lock_noop,
-  set_metadata_lock_status_noop,
-  destroy_metadata_lock_noop,
-  start_metadata_wait_noop,
-  end_metadata_wait_noop
-};
+static void end_table_io_wait_noop(PSI_table_locker *, ulonglong) { return; }
 
-struct PSI_mdl_bootstrap *psi_mdl_hook= NULL;
-PSI_mdl_service_t *psi_mdl_service= & psi_mdl_noop;
+static struct PSI_table_locker *start_table_lock_wait_noop(
+    struct PSI_table_locker_state *, struct PSI_table *,
+    enum PSI_table_lock_operation, ulong, const char *, uint) {
+  return nullptr;
+}
 
-void set_psi_mdl_service(PSI_mdl_service_t *psi)
-{
-  psi_mdl_service= psi;
+static void end_table_lock_wait_noop(PSI_table_locker *) { return; }
+
+static void unlock_table_noop(PSI_table *) { return; }
+
+static PSI_table_service_t psi_table_noop = {
+    get_table_share_noop,     release_table_share_noop,
+    drop_table_share_noop,    open_table_noop,
+    unbind_table_noop,        rebind_table_noop,
+    close_table_noop,         start_table_io_wait_noop,
+    end_table_io_wait_noop,   start_table_lock_wait_noop,
+    end_table_lock_wait_noop, unlock_table_noop};
+
+struct PSI_table_bootstrap *psi_table_hook = nullptr;
+PSI_table_service_t *psi_table_service = &psi_table_noop;
+
+void set_psi_table_service(void *psi) {
+  psi_table_service = (PSI_table_service_t *)psi;
 }
 
 // ===========================================================================
 
-static PSI_idle_locker*
-start_idle_wait_noop(PSI_idle_locker_state* state NNN,
-                     const char *src_file NNN, uint src_line NNN)
-{
-  return NULL;
+static PSI_metadata_lock *create_metadata_lock_noop(void *, const MDL_key *,
+                                                    opaque_mdl_type,
+                                                    opaque_mdl_duration,
+                                                    opaque_mdl_status,
+                                                    const char *, uint) {
+  return nullptr;
 }
 
-static void end_idle_wait_noop(PSI_idle_locker* locker NNN)
-{
-  return;
+static void set_metadata_lock_status_noop(PSI_metadata_lock *,
+                                          opaque_mdl_status) {}
+
+static void destroy_metadata_lock_noop(PSI_metadata_lock *) {}
+
+static PSI_metadata_locker *start_metadata_wait_noop(
+    PSI_metadata_locker_state *, PSI_metadata_lock *, const char *, uint) {
+  return nullptr;
 }
 
-static PSI_idle_service_t psi_idle_noop=
-{
-  start_idle_wait_noop,
-  end_idle_wait_noop
-};
+static void end_metadata_wait_noop(PSI_metadata_locker *, int) {}
 
-struct PSI_idle_bootstrap *psi_idle_hook= NULL;
-PSI_idle_service_t *psi_idle_service= & psi_idle_noop;
+static PSI_mdl_service_t psi_mdl_noop = {
+    create_metadata_lock_noop, set_metadata_lock_status_noop,
+    destroy_metadata_lock_noop, start_metadata_wait_noop,
+    end_metadata_wait_noop};
 
-void set_psi_idle_service(PSI_idle_service_t *psi)
-{
-  psi_idle_service= psi;
-}
+struct PSI_mdl_bootstrap *psi_mdl_hook = nullptr;
+PSI_mdl_service_t *psi_mdl_service = &psi_mdl_noop;
 
-// ===========================================================================
-
-static void register_stage_noop(const char *category NNN,
-                                PSI_stage_info **info_array NNN,
-                                int count NNN)
-{
-  return;
-}
-
-static PSI_stage_progress*
-start_stage_noop(PSI_stage_key key NNN,
-                 const char *src_file NNN, int src_line NNN)
-{
-  return NULL;
-}
-
-static PSI_stage_progress*
-get_current_stage_progress_noop()
-{
-  return NULL;
-}
-
-static void end_stage_noop(void)
-{
-  return;
-}
-
-static PSI_stage_service_t psi_stage_noop=
-{
-  register_stage_noop,
-  start_stage_noop,
-  get_current_stage_progress_noop,
-  end_stage_noop
-};
-
-struct PSI_stage_bootstrap *psi_stage_hook= NULL;
-PSI_stage_service_t *psi_stage_service= & psi_stage_noop;
-
-void set_psi_stage_service(PSI_stage_service_t *psi)
-{
-  psi_stage_service= psi;
+void set_psi_mdl_service(void *psi) {
+  psi_mdl_service = (PSI_mdl_service_t *)psi;
 }
 
 // ===========================================================================
 
-static void register_statement_noop(const char *category NNN,
-                                    PSI_statement_info *info NNN,
-                                    int count NNN)
-{
-  return;
+static PSI_idle_locker *start_idle_wait_noop(PSI_idle_locker_state *,
+                                             const char *, uint) {
+  return nullptr;
 }
 
-static PSI_statement_locker*
-get_thread_statement_locker_noop(PSI_statement_locker_state *state NNN,
-                                 PSI_statement_key key NNN,
-                                 const void *charset NNN,
-                                 PSI_sp_share *sp_share NNN)
-{
-  return NULL;
-}
+static void end_idle_wait_noop(PSI_idle_locker *) { return; }
 
-static PSI_statement_locker*
-refine_statement_noop(PSI_statement_locker *locker NNN,
-                      PSI_statement_key key NNN)
-{
-  return NULL;
-}
+static PSI_idle_service_t psi_idle_noop = {start_idle_wait_noop,
+                                           end_idle_wait_noop};
 
-static void start_statement_noop(PSI_statement_locker *locker NNN,
-                                 const char *db NNN, uint db_len NNN,
-                                 const char *src_file NNN, uint src_line NNN)
-{
-  return;
-}
+struct PSI_idle_bootstrap *psi_idle_hook = nullptr;
+PSI_idle_service_t *psi_idle_service = &psi_idle_noop;
 
-static void set_statement_text_noop(PSI_statement_locker *locker NNN,
-                                    const char *text NNN, uint text_len NNN)
-{
-  return;
-}
-
-static void set_statement_lock_time_noop(PSI_statement_locker *locker NNN,
-                                         ulonglong count NNN)
-{
-  return;
-}
-
-static void set_statement_rows_sent_noop(PSI_statement_locker *locker NNN,
-                                         ulonglong count NNN)
-{
-  return;
-}
-
-static void set_statement_rows_examined_noop(PSI_statement_locker *locker NNN,
-                                             ulonglong count NNN)
-{
-  return;
-}
-
-static void inc_statement_created_tmp_disk_tables_noop(PSI_statement_locker *locker NNN,
-                                                       ulong count NNN)
-{
-  return;
-}
-
-static void inc_statement_created_tmp_tables_noop(PSI_statement_locker *locker NNN,
-                                                  ulong count NNN)
-{
-  return;
-}
-
-static void inc_statement_select_full_join_noop(PSI_statement_locker *locker NNN,
-                                                ulong count NNN)
-{
-  return;
-}
-
-static void inc_statement_select_full_range_join_noop(PSI_statement_locker *locker NNN,
-                                                      ulong count NNN)
-{
-  return;
-}
-
-static void inc_statement_select_range_noop(PSI_statement_locker *locker NNN,
-                                            ulong count NNN)
-{
-  return;
-}
-
-static void inc_statement_select_range_check_noop(PSI_statement_locker *locker NNN,
-                                                  ulong count NNN)
-{
-  return;
-}
-
-static void inc_statement_select_scan_noop(PSI_statement_locker *locker NNN,
-                                           ulong count NNN)
-{
-  return;
-}
-
-static void inc_statement_sort_merge_passes_noop(PSI_statement_locker *locker NNN,
-                                                 ulong count NNN)
-{
-  return;
-}
-
-static void inc_statement_sort_range_noop(PSI_statement_locker *locker NNN,
-                                          ulong count NNN)
-{
-  return;
-}
-
-static void inc_statement_sort_rows_noop(PSI_statement_locker *locker NNN,
-                                         ulong count NNN)
-{
-  return;
-}
-
-static void inc_statement_sort_scan_noop(PSI_statement_locker *locker NNN,
-                                         ulong count NNN)
-{
-  return;
-}
-
-static void set_statement_no_index_used_noop(PSI_statement_locker *locker NNN)
-{
-  return;
-}
-
-static void set_statement_no_good_index_used_noop(PSI_statement_locker *locker NNN)
-{
-  return;
-}
-
-static void end_statement_noop(PSI_statement_locker *locker NNN,
-                               void *stmt_da NNN)
-{
-  return;
-}
-
-static PSI_prepared_stmt*
-create_prepared_stmt_noop(void *identity NNN, uint stmt_id NNN,
-                          PSI_statement_locker *locker NNN,
-                          const char *stmt_name NNN, size_t stmt_name_length NNN,
-                          const char *name NNN, size_t length NNN)
-{
-  return NULL;
-}
-
-static void
-destroy_prepared_stmt_noop(PSI_prepared_stmt *prepared_stmt NNN)
-{
-  return;
-}
-
-static void
-reprepare_prepared_stmt_noop(PSI_prepared_stmt *prepared_stmt NNN)
-{
-  return;
-}
-
-static void
-execute_prepared_stmt_noop(PSI_statement_locker *locker NNN,
-                           PSI_prepared_stmt *prepared_stmt NNN)
-{
-  return;
-}
-
-static struct PSI_digest_locker*
-digest_start_noop(PSI_statement_locker *locker NNN)
-{
-  return NULL;
-}
-
-static void
-digest_end_noop(PSI_digest_locker *locker NNN,
-                const struct sql_digest_storage *digest NNN)
-{
-  return;
-}
-
-static PSI_sp_share*
-get_sp_share_noop(uint object_type NNN,
-                  const char *schema_name NNN, uint schema_name_length NNN,
-                  const char *object_name NNN, uint object_name_length NNN)
-{
-  return NULL;
-}
-
-static void
-release_sp_share_noop(PSI_sp_share *sp_share NNN)
-{
-  return;
-}
-
-static PSI_sp_locker*
-start_sp_noop(PSI_sp_locker_state *state NNN, PSI_sp_share *sp_share NNN)
-{
-  return NULL;
-}
-
-static void end_sp_noop(PSI_sp_locker *locker NNN)
-{
-  return;
-}
-
-static void
-drop_sp_noop(uint object_type NNN,
-             const char *schema_name NNN, uint schema_name_length NNN,
-             const char *object_name NNN, uint object_name_length NNN)
-{
-  return;
-}
-
-static PSI_statement_service_t psi_statement_noop=
-{
-  register_statement_noop,
-  get_thread_statement_locker_noop,
-  refine_statement_noop,
-  start_statement_noop,
-  set_statement_text_noop,
-  set_statement_lock_time_noop,
-  set_statement_rows_sent_noop,
-  set_statement_rows_examined_noop,
-  inc_statement_created_tmp_disk_tables_noop,
-  inc_statement_created_tmp_tables_noop,
-  inc_statement_select_full_join_noop,
-  inc_statement_select_full_range_join_noop,
-  inc_statement_select_range_noop,
-  inc_statement_select_range_check_noop,
-  inc_statement_select_scan_noop,
-  inc_statement_sort_merge_passes_noop,
-  inc_statement_sort_range_noop,
-  inc_statement_sort_rows_noop,
-  inc_statement_sort_scan_noop,
-  set_statement_no_index_used_noop,
-  set_statement_no_good_index_used_noop,
-  end_statement_noop,
-  create_prepared_stmt_noop,
-  destroy_prepared_stmt_noop,
-  reprepare_prepared_stmt_noop,
-  execute_prepared_stmt_noop,
-  digest_start_noop,
-  digest_end_noop,
-  get_sp_share_noop,
-  release_sp_share_noop,
-  start_sp_noop,
-  end_sp_noop,
-  drop_sp_noop
-};
-
-struct PSI_statement_bootstrap *psi_statement_hook= NULL;
-PSI_statement_service_t *psi_statement_service= & psi_statement_noop;
-
-void set_psi_statement_service(PSI_statement_service_t *psi)
-{
-  psi_statement_service= psi;
+void set_psi_idle_service(void *psi) {
+  psi_idle_service = (PSI_idle_service_t *)psi;
 }
 
 // ===========================================================================
 
-static PSI_transaction_locker*
-get_thread_transaction_locker_noop(PSI_transaction_locker_state *state NNN,
-                                   const void *xid NNN,
-                                   const ulonglong *trxid NNN,
-                                   int isolation_level NNN,
-                                   bool read_only NNN,
-                                   bool autocommit NNN)
-{
-  return NULL;
-}
-
-static void start_transaction_noop(PSI_transaction_locker *locker NNN,
-                                   const char *src_file NNN, uint src_line NNN)
-{
+static void register_stage_noop(const char *, PSI_stage_info **, int) {
   return;
 }
 
-static void set_transaction_xid_noop(PSI_transaction_locker *locker NNN,
-                                     const void *xid NNN,
-                                     int xa_state NNN)
-{
-  return;
+static PSI_stage_progress *start_stage_noop(PSI_stage_key, const char *, int) {
+  return nullptr;
 }
 
-static void set_transaction_xa_state_noop(PSI_transaction_locker *locker NNN,
-                                          int xa_state NNN)
-{
-  return;
-}
+static PSI_stage_progress *get_current_stage_progress_noop() { return nullptr; }
 
-static void set_transaction_gtid_noop(PSI_transaction_locker *locker NNN,
-                                      const void *sid NNN,
-                                      const void *gtid_spec NNN)
-{
-  return;
-}
+static void end_stage_noop(void) { return; }
 
-static void set_transaction_trxid_noop(PSI_transaction_locker *locker NNN,
-                                       const ulonglong *trxid NNN)
-{
-  return;
-}
+static PSI_stage_service_t psi_stage_noop = {
+    register_stage_noop, start_stage_noop, get_current_stage_progress_noop,
+    end_stage_noop};
 
-static void inc_transaction_savepoints_noop(PSI_transaction_locker *locker NNN,
-                                            ulong count NNN)
-{
-  return;
-}
+struct PSI_stage_bootstrap *psi_stage_hook = nullptr;
+PSI_stage_service_t *psi_stage_service = &psi_stage_noop;
 
-static void inc_transaction_rollback_to_savepoint_noop(PSI_transaction_locker *locker NNN,
-                                                       ulong count NNN)
-{
-  return;
-}
-
-static void inc_transaction_release_savepoint_noop(PSI_transaction_locker *locker NNN,
-                                                   ulong count NNN)
-{
-  return;
-}
-
-static void end_transaction_noop(PSI_transaction_locker *locker NNN,
-                                 bool commit NNN)
-{
-  return;
-}
-
-static PSI_transaction_service_t psi_transaction_noop=
-{
-  get_thread_transaction_locker_noop,
-  start_transaction_noop,
-  set_transaction_xid_noop,
-  set_transaction_xa_state_noop,
-  set_transaction_gtid_noop,
-  set_transaction_trxid_noop,
-  inc_transaction_savepoints_noop,
-  inc_transaction_rollback_to_savepoint_noop,
-  inc_transaction_release_savepoint_noop,
-  end_transaction_noop
-};
-
-struct PSI_transaction_bootstrap *psi_transaction_hook= NULL;
-PSI_transaction_service_t *psi_transaction_service= & psi_transaction_noop;
-
-void set_psi_transaction_service(PSI_transaction_service_t *psi)
-{
-  psi_transaction_service= psi;
+void set_psi_stage_service(void *psi) {
+  psi_stage_service = (PSI_stage_service_t *)psi;
 }
 
 // ===========================================================================
 
-static void
-log_error_noop(unsigned int error_num NNN, PSI_error_operation error_operation NNN)
-{
+static void register_statement_noop(const char *, PSI_statement_info *, int) {
+  return;
 }
 
+static PSI_statement_locker *get_thread_statement_locker_noop(
+    PSI_statement_locker_state *, PSI_statement_key, const void *,
+    PSI_sp_share *) {
+  return nullptr;
+}
 
-static PSI_error_service_t psi_error_noop=
-{
-  log_error_noop
-};
+static PSI_statement_locker *refine_statement_noop(PSI_statement_locker *,
+                                                   PSI_statement_key) {
+  return nullptr;
+}
 
-struct PSI_error_bootstrap *psi_error_hook= NULL;
-PSI_error_service_t *psi_error_service= & psi_error_noop;
+static void start_statement_noop(PSI_statement_locker *, const char *, uint,
+                                 const char *, uint) {
+  return;
+}
 
-void set_psi_error_service(PSI_error_service_t *psi)
-{
-  psi_error_service= psi;
+static void set_statement_text_noop(PSI_statement_locker *, const char *,
+                                    uint) {
+  return;
+}
+
+static void set_statement_query_id_noop(PSI_statement_locker *, ulonglong) {
+  return;
+}
+
+static void set_statement_lock_time_noop(PSI_statement_locker *, ulonglong) {
+  return;
+}
+
+static void set_statement_rows_sent_noop(PSI_statement_locker *, ulonglong) {
+  return;
+}
+
+static void set_statement_rows_examined_noop(PSI_statement_locker *,
+                                             ulonglong) {
+  return;
+}
+
+static void inc_statement_created_tmp_disk_tables_noop(PSI_statement_locker *,
+                                                       ulong) {
+  return;
+}
+
+static void inc_statement_created_tmp_tables_noop(PSI_statement_locker *,
+                                                  ulong) {
+  return;
+}
+
+static void inc_statement_select_full_join_noop(PSI_statement_locker *, ulong) {
+  return;
+}
+
+static void inc_statement_select_full_range_join_noop(PSI_statement_locker *,
+                                                      ulong) {
+  return;
+}
+
+static void inc_statement_select_range_noop(PSI_statement_locker *, ulong) {
+  return;
+}
+
+static void inc_statement_select_range_check_noop(PSI_statement_locker *,
+                                                  ulong) {
+  return;
+}
+
+static void inc_statement_select_scan_noop(PSI_statement_locker *, ulong) {
+  return;
+}
+
+static void inc_statement_sort_merge_passes_noop(PSI_statement_locker *,
+                                                 ulong) {
+  return;
+}
+
+static void inc_statement_sort_range_noop(PSI_statement_locker *, ulong) {
+  return;
+}
+
+static void inc_statement_sort_rows_noop(PSI_statement_locker *, ulong) {
+  return;
+}
+
+static void inc_statement_sort_scan_noop(PSI_statement_locker *, ulong) {
+  return;
+}
+
+static void set_statement_no_index_used_noop(PSI_statement_locker *) { return; }
+
+static void set_statement_no_good_index_used_noop(PSI_statement_locker *) {
+  return;
+}
+
+static void end_statement_noop(PSI_statement_locker *, void *) { return; }
+
+static PSI_prepared_stmt *create_prepared_stmt_noop(void *, uint,
+                                                    PSI_statement_locker *,
+                                                    const char *, size_t,
+                                                    const char *, size_t) {
+  return nullptr;
+}
+
+static void destroy_prepared_stmt_noop(PSI_prepared_stmt *) { return; }
+
+static void reprepare_prepared_stmt_noop(PSI_prepared_stmt *) { return; }
+
+static void execute_prepared_stmt_noop(PSI_statement_locker *,
+                                       PSI_prepared_stmt *) {
+  return;
+}
+
+static void set_prepared_stmt_text_noop(PSI_prepared_stmt *, const char *,
+                                        uint) {
+  return;
+}
+
+static struct PSI_digest_locker *digest_start_noop(PSI_statement_locker *) {
+  return nullptr;
+}
+
+static void digest_end_noop(PSI_digest_locker *,
+                            const struct sql_digest_storage *) {
+  return;
+}
+
+static PSI_sp_share *get_sp_share_noop(uint, const char *, uint, const char *,
+                                       uint) {
+  return nullptr;
+}
+
+static void release_sp_share_noop(PSI_sp_share *) { return; }
+
+static PSI_sp_locker *start_sp_noop(PSI_sp_locker_state *, PSI_sp_share *) {
+  return nullptr;
+}
+
+static void end_sp_noop(PSI_sp_locker *) { return; }
+
+static void drop_sp_noop(uint, const char *, uint, const char *, uint) {
+  return;
+}
+
+static PSI_statement_service_t psi_statement_noop = {
+    register_statement_noop,
+    get_thread_statement_locker_noop,
+    refine_statement_noop,
+    start_statement_noop,
+    set_statement_text_noop,
+    set_statement_query_id_noop,
+    set_statement_lock_time_noop,
+    set_statement_rows_sent_noop,
+    set_statement_rows_examined_noop,
+    inc_statement_created_tmp_disk_tables_noop,
+    inc_statement_created_tmp_tables_noop,
+    inc_statement_select_full_join_noop,
+    inc_statement_select_full_range_join_noop,
+    inc_statement_select_range_noop,
+    inc_statement_select_range_check_noop,
+    inc_statement_select_scan_noop,
+    inc_statement_sort_merge_passes_noop,
+    inc_statement_sort_range_noop,
+    inc_statement_sort_rows_noop,
+    inc_statement_sort_scan_noop,
+    set_statement_no_index_used_noop,
+    set_statement_no_good_index_used_noop,
+    end_statement_noop,
+    create_prepared_stmt_noop,
+    destroy_prepared_stmt_noop,
+    reprepare_prepared_stmt_noop,
+    execute_prepared_stmt_noop,
+    set_prepared_stmt_text_noop,
+    digest_start_noop,
+    digest_end_noop,
+    get_sp_share_noop,
+    release_sp_share_noop,
+    start_sp_noop,
+    end_sp_noop,
+    drop_sp_noop};
+
+struct PSI_statement_bootstrap *psi_statement_hook = nullptr;
+PSI_statement_service_t *psi_statement_service = &psi_statement_noop;
+
+void set_psi_statement_service(void *psi) {
+  psi_statement_service = (PSI_statement_service_t *)psi;
 }
 
 // ===========================================================================
 
-static void register_memory_noop(const char *category NNN,
-                                 PSI_memory_info *info NNN,
-                                 int count NNN)
-{
+static PSI_transaction_locker *get_thread_transaction_locker_noop(
+    PSI_transaction_locker_state *, const void *, const ulonglong *, int, bool,
+    bool) {
+  return nullptr;
+}
+
+static void start_transaction_noop(PSI_transaction_locker *, const char *,
+                                   uint) {
   return;
 }
 
-static PSI_memory_key memory_alloc_noop(PSI_memory_key key NNN, size_t size NNN, struct PSI_thread ** owner NNN)
-{
-  *owner= NULL;
+static void set_transaction_xid_noop(PSI_transaction_locker *, const void *,
+                                     int) {
+  return;
+}
+
+static void set_transaction_xa_state_noop(PSI_transaction_locker *, int) {
+  return;
+}
+
+static void set_transaction_gtid_noop(PSI_transaction_locker *, const void *,
+                                      const void *) {
+  return;
+}
+
+static void set_transaction_trxid_noop(PSI_transaction_locker *,
+                                       const ulonglong *) {
+  return;
+}
+
+static void inc_transaction_savepoints_noop(PSI_transaction_locker *, ulong) {
+  return;
+}
+
+static void inc_transaction_rollback_to_savepoint_noop(PSI_transaction_locker *,
+                                                       ulong) {
+  return;
+}
+
+static void inc_transaction_release_savepoint_noop(PSI_transaction_locker *,
+                                                   ulong) {
+  return;
+}
+
+static void end_transaction_noop(PSI_transaction_locker *, bool) { return; }
+
+static PSI_transaction_service_t psi_transaction_noop = {
+    get_thread_transaction_locker_noop,
+    start_transaction_noop,
+    set_transaction_xid_noop,
+    set_transaction_xa_state_noop,
+    set_transaction_gtid_noop,
+    set_transaction_trxid_noop,
+    inc_transaction_savepoints_noop,
+    inc_transaction_rollback_to_savepoint_noop,
+    inc_transaction_release_savepoint_noop,
+    end_transaction_noop};
+
+struct PSI_transaction_bootstrap *psi_transaction_hook = nullptr;
+PSI_transaction_service_t *psi_transaction_service = &psi_transaction_noop;
+
+void set_psi_transaction_service(void *psi) {
+  psi_transaction_service = (PSI_transaction_service_t *)psi;
+}
+
+// ===========================================================================
+
+static void log_error_noop(unsigned int, PSI_error_operation) {}
+
+static PSI_error_service_t psi_error_noop = {log_error_noop};
+
+struct PSI_error_bootstrap *psi_error_hook = nullptr;
+PSI_error_service_t *psi_error_service = &psi_error_noop;
+
+void set_psi_error_service(void *psi) {
+  psi_error_service = (PSI_error_service_t *)psi;
+}
+
+// ===========================================================================
+
+static void register_memory_noop(const char *, PSI_memory_info *, int) {
+  return;
+}
+
+static PSI_memory_key memory_alloc_noop(PSI_memory_key, size_t,
+                                        struct PSI_thread **owner) {
+  *owner = nullptr;
   return PSI_NOT_INSTRUMENTED;
 }
 
-static PSI_memory_key memory_realloc_noop(PSI_memory_key key NNN, size_t old_size NNN, size_t new_size NNN, struct PSI_thread ** owner NNN)
-{
-  *owner= NULL;
+static PSI_memory_key memory_realloc_noop(PSI_memory_key, size_t, size_t,
+                                          struct PSI_thread **owner) {
+  *owner = nullptr;
   return PSI_NOT_INSTRUMENTED;
 }
 
-static PSI_memory_key memory_claim_noop(PSI_memory_key key NNN, size_t size NNN, struct PSI_thread ** owner)
-{
-  *owner= NULL;
+static PSI_memory_key memory_claim_noop(PSI_memory_key, size_t,
+                                        struct PSI_thread **owner, bool) {
+  *owner = nullptr;
   return PSI_NOT_INSTRUMENTED;
 }
 
-static void memory_free_noop(PSI_memory_key key NNN, size_t size NNN, struct PSI_thread * owner NNN)
-{
+static void memory_free_noop(PSI_memory_key, size_t, struct PSI_thread *) {
   return;
 }
 
-static PSI_memory_service_t psi_memory_noop=
-{
-  register_memory_noop,
-  memory_alloc_noop,
-  memory_realloc_noop,
-  memory_claim_noop,
-  memory_free_noop
-};
+static PSI_memory_service_t psi_memory_noop = {
+    register_memory_noop, memory_alloc_noop, memory_realloc_noop,
+    memory_claim_noop, memory_free_noop};
 
-struct PSI_memory_bootstrap *psi_memory_hook= NULL;
-PSI_memory_service_t *psi_memory_service= & psi_memory_noop;
+struct PSI_memory_bootstrap *psi_memory_hook = nullptr;
+PSI_memory_service_t *psi_memory_service = &psi_memory_noop;
 
-void set_psi_memory_service(PSI_memory_service_t *psi)
-{
-  psi_memory_service= psi;
-}
-
-C_MODE_END
-
-// ===========================================================================
-
-static void register_data_lock_noop(PSI_engine_data_lock_inspector *inspector NNN)
-{
-  return;
-}
-
-static void unregister_data_lock_noop(PSI_engine_data_lock_inspector *inspector NNN)
-{
-  return;
-}
-
-static PSI_data_lock_service_t psi_data_lock_noop=
-{
-  register_data_lock_noop,
-  unregister_data_lock_noop
-};
-
-struct PSI_data_lock_bootstrap *psi_data_lock_hook= NULL;
-PSI_data_lock_service_t *psi_data_lock_service= & psi_data_lock_noop;
-
-void set_psi_data_lock_service(PSI_data_lock_service_t *psi)
-{
-  psi_data_lock_service= psi;
+void set_psi_memory_service(void *psi) {
+  psi_memory_service = (PSI_memory_service_t *)psi;
 }
 
 // ===========================================================================
 
+static void register_data_lock_noop(PSI_engine_data_lock_inspector *) {
+  return;
+}
+
+static void unregister_data_lock_noop(PSI_engine_data_lock_inspector *) {
+  return;
+}
+
+static PSI_data_lock_service_t psi_data_lock_noop = {register_data_lock_noop,
+                                                     unregister_data_lock_noop};
+
+struct PSI_data_lock_bootstrap *psi_data_lock_hook = nullptr;
+PSI_data_lock_service_t *psi_data_lock_service = &psi_data_lock_noop;
+
+void set_psi_data_lock_service(void *psi) {
+  psi_data_lock_service = (PSI_data_lock_service_t *)psi;
+}
+
+// ===========================================================================
+
+static void unload_plugin_noop(const char *) { return; }
+
+static PSI_system_service_t psi_system_noop = {unload_plugin_noop};
+
+struct PSI_system_bootstrap *psi_system_hook = nullptr;
+PSI_system_service_t *psi_system_service = &psi_system_noop;
+
+void set_psi_system_service(void *psi) {
+  psi_system_service = (PSI_system_service_t *)psi;
+}
+
+// ===========================================================================
+
+static void register_tls_channel_noop(TLS_channel_property_iterator *) {
+  return;
+}
+
+static void unregister_tls_channel_noop(TLS_channel_property_iterator *) {
+  return;
+}
+static PSI_tls_channel_service_t psi_tls_channel_noop = {
+    register_tls_channel_noop, unregister_tls_channel_noop};
+
+struct PSI_tls_channel_bootstrap *psi_tls_channel_hook = nullptr;
+PSI_tls_channel_service_t *psi_tls_channel_service = &psi_tls_channel_noop;
+
+void set_psi_tls_channel_service(void *psi) {
+  psi_tls_channel_service = (PSI_tls_channel_service_t *)psi;
+}

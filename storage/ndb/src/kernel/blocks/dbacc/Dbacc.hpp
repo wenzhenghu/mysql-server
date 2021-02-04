@@ -1,14 +1,21 @@
 /*
-   Copyright (c) 2003, 2016, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2003, 2020, Oracle and/or its affiliates.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -18,7 +25,7 @@
 #ifndef DBACC_H
 #define DBACC_H
 
-#if defined (VM_TRACE) && !defined(ACC_SAFE_QUEUE)
+#if (defined (VM_TRACE) || defined(ERROR_INSERT)) && !defined(ACC_SAFE_QUEUE)
 #define ACC_SAFE_QUEUE
 #endif
 
@@ -30,44 +37,16 @@
 #include <IntrusiveList.hpp>
 #include "Container.hpp"
 #include "signaldata/AccKeyReq.hpp"
+#include "TransientPool.hpp"
+#include "TransientSlotPool.hpp"
+
+#include <EventLogger.hpp>
+extern EventLogger * g_eventLogger;
 
 #define JAM_FILE_ID 344
 
 
 #ifdef DBACC_C
-// Debug Macros
-#define dbgWord32(ptr, ind, val) 
-
-/*
-#define dbgWord32(ptr, ind, val) \
-if(debug_jan){ \
-tmp_val = val; \
-switch(ind){ \
-case 1: strcpy(tmp_string, "ZPOS_PAGE_TYPE   "); \
-break; \
-case 2: strcpy(tmp_string, "ZPOS_NO_ELEM_IN_PAGE"); \
-break; \
-case 3: strcpy(tmp_string, "ZPOS_CHECKSUM    "); \
-break; \
-case 5: strcpy(tmp_string, "ZPOS_FREE_AREA_IN_PAGE"); \
-break; \
-case 6: strcpy(tmp_string, "ZPOS_LAST_INDEX   "); \
-break; \
-case 7: strcpy(tmp_string, "ZPOS_INSERT_INDEX  "); \
-break; \
-case 8: strcpy(tmp_string, "ZPOS_ARRAY_POS    "); \
-break; \
-case 9: strcpy(tmp_string, "ZPOS_NEXT_FREE_INDEX"); \
-break; \
-case 10: strcpy(tmp_string, "ZPOS_NEXT_PAGE   "); \
-break; \
-case 11: strcpy(tmp_string, "ZPOS_PREV_PAGE   "); \
-break; \
-default: sprintf(tmp_string, "%-20d", ind);\
-} \
-ndbout << "Ptr: " << ptr.p->word32 << " \tIndex: " << tmp_string << " \tValue: " << tmp_val << " \tLINE: " << __LINE__ << endl; \
-}\
-*/
 
 // Constants
 /** ------------------------------------------------------------------------ 
@@ -83,45 +62,15 @@ ndbout << "Ptr: " << ptr.p->word32 << " \tIndex: " << tmp_string << " \tValue: "
 /* ------------------------------------------------------------------------- */
 /*  THESE CONSTANTS DEFINE THE USE OF THE PAGE HEADER IN THE INDEX PAGES.    */
 /* ------------------------------------------------------------------------- */
-#define ZPOS_PAGE_ID Page8::PAGE_ID
-#define ZPOS_PAGE_TYPE 1
 #define ZPOS_PAGE_TYPE_BIT 14
-#define ZPOS_EMPTY_LIST Page8::EMPTY_LIST
-#define ZPOS_ALLOC_CONTAINERS Page8::ALLOC_CONTAINERS
-#define ZPOS_CHECKSUM Page8::CHECKSUM
-#define ZPOS_NO_ELEM_IN_PAGE 2
-#define ZPOS_FREE_AREA_IN_PAGE Page8::FREE_AREA_IN_PAGE
-#define ZPOS_LAST_INDEX Page8::LAST_INDEX
-#define ZPOS_INSERT_INDEX Page8::INSERT_INDEX
-#define ZPOS_ARRAY_POS Page8::ARRAY_POS
-#define ZPOS_NEXT_FREE_INDEX Page8::NEXT_FREE_INDEX
-#define ZPOS_NEXT_PAGE Page8::NEXT_PAGE
-#define ZPOS_PREV_PAGE Page8::PREV_PAGE
 #define ZNORMAL_PAGE_TYPE 0
 #define ZOVERFLOW_PAGE_TYPE 1
-#define ZDEFAULT_LIST 3
-#define ZWORDS_IN_PAGE 2048
 #define ZADDFRAG 0
-//#define ZEMPTY_FRAGMENT 0
 #define ZFRAGMENTSIZE 64
-#define ZFIRSTTIME 1
-#define ZFS_CONNECTSIZE 300
-#define ZFS_OPSIZE 100
-#define ZKEYINKEYREQ 4
 #define ZLEFT 1
-#define ZLOCALLOGFILE 2
-#define ZLOCKED 0
-#define ZMAXSCANSIGNALLEN 20
-#define ZMAINKEYLEN 8
-#define ZNO_OF_DISK_VERSION 3
-#define ZNO_OF_OP_PER_SIGNAL 20
-//#define ZNOT_EMPTY_FRAGMENT 1
-#define ZOP_HEAD_INFO_LN 3
 #define ZOPRECSIZE 740
-#define ZPAGE8_BASE_ADD 1
 #define ZPAGESIZE 128
 #define ZPARALLEL_QUEUE 1
-#define ZPDIRECTORY 1
 #define ZSCAN_MAX_LOCK 4
 #define ZSERIAL_QUEUE 2
 #define ZSPH1 1
@@ -130,18 +79,12 @@ ndbout << "Ptr: " << ptr.p->word32 << " \tIndex: " << tmp_string << " \tValue: "
 #define ZSPH6 6
 #define ZREADLOCK 0
 #define ZRIGHT 2
-#define ZROOTFRAGMENTSIZE 32
-#define ZSCAN_LOCK_ALL 3
 /**
  * Check kernel_types for other operation types
  */
 #define ZSCAN_OP 8
 #define ZSCAN_REC_SIZE 256
-#define ZSTAND_BY 2
 #define ZTABLESIZE 16
-#define ZTABMAXINDEX 3
-#define ZUNDEFINED_OP 6
-#define ZUNLOCKED 1
 
 /* --------------------------------------------------------------------------------- */
 /* CONTINUEB CODES                                                                   */
@@ -150,7 +93,8 @@ ndbout << "Ptr: " << ptr.p->word32 << " \tIndex: " << tmp_string << " \tValue: "
 #define ZREL_ROOT_FRAG 5
 #define ZREL_FRAG 6
 #define ZREL_DIR 7
-
+#define ZACC_SHRINK_TRANSIENT_POOLS 8
+#define ZACC_TRANSIENT_POOL_STAT 9
 /* ------------------------------------------------------------------------- */
 /* ERROR CODES                                                               */
 /* ------------------------------------------------------------------------- */
@@ -177,6 +121,7 @@ ndbout << "Ptr: " << ptr.p->word32 << " \tIndex: " << tmp_string << " \tValue: "
 #define ZDIR_RANGE_FULL_ERROR 633 // on fragment
 
 #define ZLOCAL_KEY_LENGTH_ERROR 634 // From Dbdict via Dblqh
+#define ZNOWAIT_ERROR 635 // Cant lock immediately, and nowait set
 
 #endif
 
@@ -300,6 +245,23 @@ class Dbacc: public SimulatedBlock {
   friend class DbaccProxy;
 
 public:
+  /**
+   * m_is_query_block is set to true for all query threads and false for all
+   * LDM threads.
+   *
+   * m_is_in_query_thread indicates we are executing as a query thread, this
+   * can be false even if m_is_query_block is true during restore operations.
+   * m_ldm_instance_used is set during execution of queries to enable us to
+   * get the operation record from the LDM instance owning the fragment.
+   * This is necessary when finding a locked row and a row that is in the
+   * process of being inserted.
+   */
+  bool m_is_query_block;
+  bool m_is_in_query_thread;
+  Uint32 m_lqh_block;
+  Dbacc *m_ldm_instance_used;
+  void prepare_scan_ctx(Uint32 scanPtrI) override;
+
 // State values
 enum State {
   FREEFRAG = 0,
@@ -337,20 +299,27 @@ enum State {
 struct Page8 {
   Uint32 word32[2048];
   enum Page_variables {
-    PAGE_ID = 0,
-    EMPTY_LIST = 1,
-    ALLOC_CONTAINERS = 2,
-    CHECKSUM = 3,
-    FREE_AREA_IN_PAGE = 5,
-    LAST_INDEX = 6,
-    INSERT_INDEX = 7,
-    ARRAY_POS = 8,
-    NEXT_FREE_INDEX = 9,
-    NEXT_PAGE = 10,
-    PREV_PAGE = 11,
-    SCAN_CON_0_3 = 12,
-    SCAN_CON_4_7 = 13,
-    SCAN_CON_8_11 = 14,
+    /**
+     * First words are for the 32KiB page and must patch with header in Page32.
+     * Words should be zeroed out for second to fourth 8KiB page on 32KiB page
+     */
+    P32_MAGIC = 0,
+    P32_LIST_ID = 1,
+    P32_NEXT_PAGE = 2,
+    P32_PREV_PAGE = 3,
+    P32_WORD_COUNT = 4, // Not an variable index, but count of P32 variables
+    /**
+     * Following words are used for each 8KiB page
+     */
+    PAGE_ID = 4,
+    EMPTY_LIST = 5,
+    ALLOC_CONTAINERS = 6,
+    CHECKSUM = 7,
+    NEXT_PAGE = 8,
+    PREV_PAGE = 9,
+    SCAN_CON_0_3 = 10,
+    SCAN_CON_4_7 = 11,
+    SCAN_CON_8_11 = 12,
   };
   Uint8 getContainerShortIndex(Uint32 pointer) const;
   void setScanContainer(Uint16 scanbit, Uint32 conptr);
@@ -358,34 +327,74 @@ struct Page8 {
   bool checkScanContainer(Uint32 conptr) const;
   Uint16 checkScans(Uint16 scanmask, Uint32 conptr) const;
 }; /* p2c: size = 8192 bytes */
-
   typedef Ptr<Page8> Page8Ptr;
 
-struct Page8SLinkMethods
+struct Page32
 {
-  static Uint32 getNext(Page8 const& item) { return item.word32[Page8::NEXT_PAGE]; }
-  static void setNext(Page8& item, Uint32 next) { item.word32[Page8::NEXT_PAGE] = next; }
-  static void setPrev(Page8& /* item */, Uint32 /* prev */) { /* no op for single linked list */ }
+  enum { MAGIC = 0x17283482 };
+  union {
+    struct {
+      /* fields must match P32-values in Page_variables */
+      Uint32 magic;
+      Uint32 list_id;
+      Uint32 nextList;
+      Uint32 prevList;
+    };
+    Page8 page8[4];
+  };
 };
 
-struct ContainerPageLinkMethods
+typedef Ptr<Page32> Page32Ptr;
+typedef ArrayPool<Page32> Page32_pool;
+typedef DLCFifoList<Page32_pool> Page32_list;
+typedef LocalDLCFifoList<Page32_pool> LocalPage32_list;
+
+  class Page32Lists {
+    Page32_list::Head lists[16];
+    Uint32 sub_page_id_count[4];
+    Uint16 nonempty_lists;
+
+    static Uint16 sub_page_id_to_list_id_set(int sub_page_id);
+    static Uint8 list_id_to_sub_page_id_set(int list_id);
+    static Uint8 sub_page_id_set_to_list_id(int sub_page_id_set);
+
+    Uint8 least_free_list(Uint16 list_id_set);
+public:
+    enum { ANY_SUB_PAGE = -1, LEAST_COMMON_SUB_PAGE = -2 };
+    Page32Lists();
+
+    Uint32 getCount() const;
+    void addPage32(Page32_pool& pool, Page32Ptr p);
+    void dropLastPage32(Page32_pool& pool, Page32Ptr& p, Uint32 keep);
+    void dropPage32(Page32_pool& pool, Page32Ptr p);
+    void seizePage8(Page32_pool& pool, Page8Ptr& /* out */ p, int sub_page_id);
+    void releasePage8(Page32_pool& pool, Page8Ptr p);
+    bool haveFreePage8(int sub_page_id) const;
+  };
+
+class Page8_pool
 {
-  static Uint32 getNext(Page8 const& item) { return item.word32[Page8::NEXT_PAGE]; }
-  static void setNext(Page8& item, Uint32 next) { item.word32[Page8::NEXT_PAGE] = next; }
-  static Uint32 getPrev(Page8 const& item) { return item.word32[Page8::PREV_PAGE]; }
-  static void setPrev(Page8& item, Uint32 prev) { item.word32[Page8::PREV_PAGE] = prev; }
+public:
+  typedef Page8 Type;
+  explicit Page8_pool(Page32_pool& pool): m_page_pool(pool) { }
+  void getPtr(Ptr<Page8>& page) const;
+  void getPtrForce(Ptr<Page8>& page) const;
+private:
+  Page32_pool& m_page_pool;
 };
 
-typedef SLCFifoList<Page8,Dbacc,Page8,Page8SLinkMethods> Page8List;
-typedef LocalSLCFifoList<Page8,Dbacc,Page8,Page8SLinkMethods> LocalPage8List;
-typedef DLCFifoList<Page8,Dbacc,Page8,ContainerPageLinkMethods> ContainerPageList;
-typedef LocalDLCFifoList<Page8,Dbacc,Page8,ContainerPageLinkMethods> LocalContainerPageList;
+typedef SLCFifoList<Page8_pool, IA_Page8> Page8List;
+typedef LocalSLCFifoList<Page8_pool, IA_Page8> LocalPage8List;
+typedef DLCFifoList<Page8_pool, IA_Page8> ContainerPageList;
+typedef LocalDLCFifoList<Page8_pool, IA_Page8> LocalContainerPageList;
 
 /* --------------------------------------------------------------------------------- */
 /* FRAGMENTREC. ALL INFORMATION ABOUT FRAMENT AND HASH TABLE IS SAVED IN FRAGMENT    */
 /*         REC  A POINTER TO FRAGMENT RECORD IS SAVED IN ROOTFRAGMENTREC FRAGMENT    */
 /* --------------------------------------------------------------------------------- */
+#define NUM_ACC_FRAGMENT_MUTEXES 4
 struct Fragmentrec {
+  NdbMutex acc_frag_mutex[NUM_ACC_FRAGMENT_MUTEXES];
   Uint32 scan[MAX_PARALLEL_SCANS_PER_FRAG];
   Uint16 activeScanMask;
   union {
@@ -398,7 +407,6 @@ struct Fragmentrec {
   };
   Uint32 tupFragptr;
   Uint32 roothashcheck;
-  Uint32 noOfElements;
   Uint32 m_commit_count;
   State rootState;
   
@@ -578,7 +586,7 @@ struct Fragmentrec {
 
       m_wait_ok_millis     = 0;
       m_wait_fail_millis   = 0;
-    };
+    }
 
     // req_start_imm_ok
     // A request was immediately granted (No contention)
@@ -677,10 +685,56 @@ public:
   typedef Ptr<Fragmentrec> FragmentrecPtr;
   void set_tup_fragptr(Uint32 fragptr, Uint32 tup_fragptr);
 
-/* --------------------------------------------------------------------------------- */
-/* OPERATIONREC                                                                      */
-/* --------------------------------------------------------------------------------- */
+
 struct Operationrec {
+  STATIC_CONST( TYPE_ID = RT_DBACC_OPERATION);
+  Uint32 m_magic;
+
+  enum OpBits {
+    OP_MASK                 = 0x0000F // 4 bits for operation type
+    ,OP_LOCK_MODE           = 0x00010 // 0 - shared lock, 1 = exclusive lock
+    ,OP_ACC_LOCK_MODE       = 0x00020 // Or:de lock mode of all operation
+                                      // before me
+    ,OP_LOCK_OWNER          = 0x00040
+    ,OP_RUN_QUEUE           = 0x00080 // In parallell queue of lock owner
+    ,OP_DIRTY_READ          = 0x00100
+    ,OP_LOCK_REQ            = 0x00200 // isAccLockReq
+    ,OP_COMMIT_DELETE_CHECK = 0x00400
+    ,OP_INSERT_IS_DONE      = 0x00800
+    ,OP_ELEMENT_DISAPPEARED = 0x01000
+    ,OP_PENDING_ABORT       = 0x02000
+    ,OP_NOWAIT              = 0x04000
+    
+    ,OP_STATE_MASK          = 0xF0000
+    ,OP_STATE_IDLE          = 0xF0000
+    ,OP_STATE_WAITING       = 0x00000
+    ,OP_STATE_RUNNING       = 0x10000
+    ,OP_STATE_EXECUTED      = 0x30000
+    
+    ,OP_EXECUTED_DIRTY_READ = 0x3050F
+    ,OP_INITIAL             = ~(Uint32)0
+  };
+  
+  Operationrec() :
+    m_magic(Magic::make(TYPE_ID)),
+    m_op_bits(OP_INITIAL),
+    prevOp(RNIL)
+  {
+  }
+
+  ~Operationrec()
+  {
+  }
+
+  /**
+   * Next ptr (used in list)
+   */
+  union
+  {
+    Uint32 nextOp;
+    Uint32 nextList;
+  };
+
   Uint32 m_op_bits;
   Local_key localdata;
   Uint32 elementPage;
@@ -689,7 +743,6 @@ struct Operationrec {
   Uint32 fragptr;
   LHBits32 hashValue;
   Uint32 nextLockOwnerOp;
-  Uint32 nextOp;
   Uint32 nextParallelQue;
   union {
     Uint32 nextSerialQue;      
@@ -711,61 +764,65 @@ struct Operationrec {
   Uint32 userptr;
   Uint16 elementContainer;
   Uint16 tupkeylen;
-  Uint32 xfrmtupkeylen;
+  Uint32 m_scanOpDeleteCountOpRef;
   Uint32 userblockref;
   enum { ANY_SCANBITS = Uint16(0xffff) };
   LHBits16 reducedHashValue;
   NDB_TICKS m_lockTime;
 
-  enum OpBits {
-    OP_MASK                 = 0x0000F // 4 bits for operation type
-    ,OP_LOCK_MODE           = 0x00010 // 0 - shared lock, 1 = exclusive lock
-    ,OP_ACC_LOCK_MODE       = 0x00020 // Or:de lock mode of all operation
-                                      // before me
-    ,OP_LOCK_OWNER          = 0x00040
-    ,OP_RUN_QUEUE           = 0x00080 // In parallell queue of lock owner
-    ,OP_DIRTY_READ          = 0x00100
-    ,OP_LOCK_REQ            = 0x00200 // isAccLockReq
-    ,OP_COMMIT_DELETE_CHECK = 0x00400
-    ,OP_INSERT_IS_DONE      = 0x00800
-    ,OP_ELEMENT_DISAPPEARED = 0x01000
-    
-    ,OP_STATE_MASK          = 0xF0000
-    ,OP_STATE_IDLE          = 0xF0000
-    ,OP_STATE_WAITING       = 0x00000
-    ,OP_STATE_RUNNING       = 0x10000
-    ,OP_STATE_EXECUTED      = 0x30000
-    
-    ,OP_EXECUTED_DIRTY_READ = 0x3050F
-    ,OP_INITIAL             = ~(Uint32)0
-  };
-  
-  Operationrec() {}
   bool is_same_trans(const Operationrec* op) const {
     return 
       transId1 == op->transId1 && transId2 == op->transId2;
   }
-  
 }; /* p2c: size = 168 bytes */
 
   typedef Ptr<Operationrec> OperationrecPtr;
+  typedef TransientPool<Operationrec> Operationrec_pool;
+  STATIC_CONST(DBACC_OPERATION_RECORD_TRANSIENT_POOL_INDEX = 1);
+  Operationrec_pool oprec_pool;
+  OperationrecPtr operationRecPtr;
+  OperationrecPtr queOperPtr;
+  Uint32 cfreeopRec;
 
-/* --------------------------------------------------------------------------------- */
-/* SCAN_REC                                                                          */
-/* --------------------------------------------------------------------------------- */
 struct ScanRec {
+  STATIC_CONST( TYPE_ID = RT_DBACC_SCAN );
+  Uint32 m_magic;
+
   enum ScanState {
-    WAIT_NEXT,  
-    SCAN_DISCONNECT
+    WAIT_NEXT = 0,
+    SCAN_DISCONNECT = 1
   };
   enum ScanBucketState {
-    FIRST_LAP,
-    SECOND_LAP,
-    SCAN_COMPLETED
+    FIRST_LAP = 0,
+    SECOND_LAP = 1,
+    SCAN_COMPLETED = 2
   };
+
+  ScanRec() :
+    m_magic(Magic::make(TYPE_ID)),
+    activeLocalFrag(RNIL),
+    nextBucketIndex(0),
+    scanFirstActiveOp(RNIL),
+    scanFirstLockedOp(RNIL),
+    scanLastLockedOp(RNIL),
+    scanFirstQueuedOp(RNIL),
+    scanLastQueuedOp(RNIL),
+    scanOpsAllocated(0),
+    scanLockCount(0),
+    scanLockHeld(0),
+    inPageI(RNIL),
+    inConptr(0),
+    elemScanned(0)
+  {
+  }
+
   Uint32 activeLocalFrag;
   Uint32 nextBucketIndex;
-  Uint32 scanNextfreerec;
+  /**
+   * Next ptr (used in list)
+   */
+  Uint32 nextList;
+
   Uint32 scanFirstActiveOp;
   Uint32 scanFirstLockedOp;
   Uint32 scanLastLockedOp;
@@ -778,9 +835,11 @@ struct ScanRec {
   Uint32 minBucketIndexToRescan;
   Uint32 maxBucketIndexToRescan;
   Uint32 scanOpsAllocated;
+  Uint32 scanLockCount;
   ScanBucketState scanBucketState;
   ScanState scanState;
   Uint16 scanLockHeld;
+  Uint16 scan_lastSeen;
   Uint32 scanUserblockref;
   Uint32 scanMask;
   Uint8 scanLockMode;
@@ -791,7 +850,6 @@ private:
   Uint32 elemScanned;
   enum { ELEM_SCANNED_BITS = sizeof(Uint32) * 8 };
 public:
-  void initContainer();
   bool isInContainer() const;
   bool getContainer(Uint32& pagei, Uint32& conptr) const;
   void enterContainer(Uint32 pagei, Uint32 conptr);
@@ -801,13 +859,13 @@ public:
   void clearScanned(Uint32 elemptr);
   void moveScanBit(Uint32 toptr, Uint32 fromptr);
 };
-
   typedef Ptr<ScanRec> ScanRecPtr;
+  typedef TransientPool<ScanRec> ScanRec_pool;
+  STATIC_CONST(DBACC_SCAN_RECORD_TRANSIENT_POOL_INDEX = 0);
+  ScanRec_pool scanRec_pool;
+  ScanRecPtr scanPtr;
 
 
-/* --------------------------------------------------------------------------------- */
-/* TABREC                                                                            */
-/* --------------------------------------------------------------------------------- */
 struct Tabrec {
   Uint32 fragholder[MAX_FRAG_PER_LQH];
   Uint32 fragptrholder[MAX_FRAG_PER_LQH];
@@ -818,15 +876,15 @@ struct Tabrec {
   typedef Ptr<Tabrec> TabrecPtr;
 
 public:
-  Dbacc(Block_context&, Uint32 instanceNumber = 0);
-  virtual ~Dbacc();
+  Dbacc(Block_context&,
+        Uint32 instanceNumber = 0,
+        Uint32 blockNo = DBACC);
+  ~Dbacc() override;
 
   // pointer to TUP instance in this thread
   class Dbtup* c_tup;
   class Dblqh* c_lqh;
 
-  void execACCMINUPDATE(Signal* signal);
-  void execREAD_PSEUDO_REQ(Signal* signal);
   // Get the size of the logical to physical page map, in bytes.
   Uint32 getL2PMapAllocBytes(Uint32 fragId) const;
   void removerow(Uint32 op, const Local_key*);
@@ -834,9 +892,15 @@ public:
   // Get the size of the linear hash map in bytes.
   Uint64 getLinHashByteSize(Uint32 fragId) const;
 
+  bool checkOpPendingAbort(Uint32 accConnectPtr) const;
+
 private:
   BLOCK_DEFINES(Dbacc);
 
+public:
+  void execACC_LOCKREQ(Signal* signal);
+
+private:
   // Transit signals
   void execDEBUG_SIG(Signal* signal);
   void execCONTINUEB(Signal* signal);
@@ -848,15 +912,11 @@ private:
 
   // Received signals
   void execSTTOR(Signal* signal);
-  void execACCKEYREQ(Signal* signal);
   void execACCSEIZEREQ(Signal* signal);
   void execACCFRAGREQ(Signal* signal);
   void execNEXT_SCANREQ(Signal* signal);
-  void execACC_ABORTREQ(Signal* signal);
   void execACC_SCANREQ(Signal* signal);
-  void execACC_COMMITREQ(Signal* signal);
   void execACC_TO_REQ(Signal* signal);
-  void execACC_LOCKREQ(Signal* signal);
   void execNDB_STTOR(Signal* signal);
   void execDROP_TAB_REQ(Signal* signal);
   void execREAD_CONFIG_REQ(Signal* signal);
@@ -865,12 +925,14 @@ private:
   void execDROP_FRAG_REQ(Signal*);
 
   void execDBINFO_SCANREQ(Signal *signal);
-  void execNODE_STATE_REP(Signal*);
 
   // Statement blocks
-  void commitDeleteCheck() const;
-  void report_dealloc(Signal* signal, const Operationrec* opPtrP);
-  
+  void commitDeleteCheck(Signal* signal);
+  void report_pending_dealloc(Signal* signal,
+                              Operationrec* opPtrP,
+                              const Operationrec* countOpPtrP);
+  void trigger_dealloc(Signal* signal, const Operationrec* opPtrP);
+
   typedef void * RootfragmentrecPtr;
   void initRootFragPageZero(FragmentrecPtr, Page8Ptr) const;
   void initFragAdd(Signal*, FragmentrecPtr) const;
@@ -893,10 +955,8 @@ private:
   void initialiseFragRec();
   void initialiseFsConnectionRec(Signal* signal) const;
   void initialiseFsOpRec(Signal* signal) const;
-  void initialiseOperationRec();
   void initialisePageRec();
   void initialiseRootfragRec(Signal* signal) const;
-  void initialiseScanRec();
   void initialiseTableRec();
   bool addfragtotab(Uint32 rootIndex, Uint32 fragId) const;
   void initOpRec(const AccKeyReq* signal, Uint32 siglen) const;
@@ -904,7 +964,7 @@ private:
   Uint32 getNoParallelTransaction(const Operationrec*) const;
 
 #ifdef VM_TRACE
-  Uint32 getNoParallelTransactionFull(const Operationrec*) const;
+  Uint32 getNoParallelTransactionFull(Operationrec*) const;
 #endif
 #ifdef ACC_SAFE_QUEUE
   bool validate_lock_queue(OperationrecPtr opPtr) const;
@@ -919,7 +979,6 @@ private:
    */
   bool validatePageCount() const;
 public:  
-  void execACCKEY_ORD(Signal* signal, Uint32 opPtrI);
   void startNext(Signal* signal, OperationrecPtr lastOp);
   
 private:
@@ -928,6 +987,7 @@ private:
   void placeSerialQueue(OperationrecPtr lockOwner, OperationrecPtr op) const;
   void abortSerieQueueOperation(Signal* signal, OperationrecPtr op);  
   void abortParallelQueueOperation(Signal* signal, OperationrecPtr op);
+  void mark_pending_abort(OperationrecPtr abortingOp, Uint32 nextParallelOp);
   
   void expandcontainer(Page8Ptr pageptr, Uint32 conidx);
   void shrinkcontainer(Page8Ptr pageptr,
@@ -1004,7 +1064,9 @@ private:
   void increaselistcont(Page8Ptr);
   void seizeLeftlist(Page8Ptr slPageptr, Uint32 conidx);
   void seizeRightlist(Page8Ptr slPageptr, Uint32 conidx);
-  Uint32 readTablePk(Uint32 lkey1, Uint32 lkey2, Uint32 eh, OperationrecPtr);
+  Uint32 find_key_operation(OperationrecPtr, bool);
+  Uint32 readTablePk(Uint32, Uint32, Uint32, OperationrecPtr, Uint32*,
+                     bool xfrm);
   Uint32 getElement(const AccKeyReq* signal,
                     OperationrecPtr& lockOwner,
                     Page8Ptr& bucketPageptr,
@@ -1045,59 +1107,61 @@ private:
                           bool lo) const;
   void check_lock_upgrade(Signal* signal, OperationrecPtr lock_owner,
 			  OperationrecPtr release_op) const;
-  void allocOverflowPage();
+  Uint32 allocOverflowPage();
   bool getfragmentrec(FragmentrecPtr&, Uint32 fragId);
   void insertLockOwnersList(const OperationrecPtr&) const;
   void takeOutLockOwnersList(const OperationrecPtr&) const;
 
   void initFsOpRec(Signal* signal) const;
   void initOverpage(Page8Ptr);
-  void initPage(Page8Ptr);
+  void initPage(Page8Ptr, Uint32);
   void initRootfragrec(Signal* signal) const;
   void putOpInFragWaitQue(Signal* signal) const;
   void releaseFsConnRec(Signal* signal) const;
   void releaseFsOpRec(Signal* signal) const;
   void releaseOpRec();
+  void releaseFreeOpRec();
   void releaseOverpage(Page8Ptr ropPageptr);
-  void releasePage(Page8Ptr rpPageptr);
+  void releasePage(Page8Ptr rpPageptr,
+                   FragmentrecPtr fragPtr,
+                   EmulatedJamBuffer *jamBuf);
+  void releasePage_lock(Page8Ptr rpPageptr);
   void seizeDirectory(Signal* signal) const;
   void seizeFragrec();
   void seizeFsConnectRec(Signal* signal) const;
   void seizeFsOpRec(Signal* signal) const;
-  void seizeOpRec();
-  void seizePage(Page8Ptr& spPageptr);
+  Uint32 seizePage(Page8Ptr& spPageptr,
+                   int sub_page_id,
+                   bool allow_use_of_spare_pages,
+                   FragmentrecPtr fragPtr,
+                   EmulatedJamBuffer *jamBuf);
+  Uint32 seizePage_lock(Page8Ptr& spPageptr, int sub_page_id);
+  bool get_lock_information(Dbacc **acc_block, Dblqh** lqh_block);
   void seizeRootfragrec(Signal* signal) const;
   void seizeScanRec();
   void sendSystemerror(int line) const;
 
   void addFragRefuse(Signal* signal, Uint32 errorCode) const;
-  void ndbsttorryLab(Signal* signal) const;
   void acckeyref1Lab(Signal* signal, Uint32 result_code) const;
   void insertelementLab(Signal* signal,
                         Page8Ptr bucketPageptr,
                         Uint32 bucketConidx);
   void checkNextFragmentLab(Signal* signal);
-  void endofexpLab(Signal* signal) const;
+  void endofexpLab(Signal* signal);
   void endofshrinkbucketLab(Signal* signal);
-  void sttorrysignalLab(Signal* signal) const;
   void sendholdconfsignalLab(Signal* signal) const;
-  void accIsLockedLab(Signal* signal, OperationrecPtr lockOwnerPtr) const;
-  void insertExistElemLab(Signal* signal, OperationrecPtr lockOwnerPtr) const;
-  void refaccConnectLab(Signal* signal);
+  void accIsLockedLab(Signal* signal, OperationrecPtr lockOwnerPtr);
+  void insertExistElemLab(Signal* signal, OperationrecPtr lockOwnerPtr);
   void releaseScanLab(Signal* signal);
-  void ndbrestart1Lab();
-  void initialiseRecordsLab(Signal* signal, Uint32 ref, Uint32 data);
+  void initialiseRecordsLab(Signal* signal, Uint32, Uint32, Uint32);
   void checkNextBucketLab(Signal* signal);
   void storeDataPageInDirectoryLab(Signal* signal) const;
 
   void zpagesize_error(const char* where);
 
-  // charsets
-  void xfrmKeyData(AccKeyReq* signal) const;
-
   // Initialisation
   void initData();
-  void initRecords();
+  void initRecords(const ndb_mgm_configuration_iterator *mgm_cfg);
 
 #ifdef VM_TRACE
   void debug_lh_vars(const char* where) const;
@@ -1106,17 +1170,17 @@ private:
 #endif
 
 public:
-  void getPtr(Ptr<Page8>& page) const;
-private:
   // Variables
 /* --------------------------------------------------------------------------------- */
 /* DIRECTORY                                                                         */
 /* --------------------------------------------------------------------------------- */
+  DynArr256Pool*  directoryPoolPtr;
   DynArr256Pool   directoryPool;
 /* --------------------------------------------------------------------------------- */
 /* FRAGMENTREC. ALL INFORMATION ABOUT FRAMENT AND HASH TABLE IS SAVED IN FRAGMENT    */
 /*         REC  A POINTER TO FRAGMENT RECORD IS SAVED IN ROOTFRAGMENTREC FRAGMENT    */
 /* --------------------------------------------------------------------------------- */
+
   Fragmentrec *fragmentrec;
   FragmentrecPtr fragrecptr;
   Uint32 cfirstfreefrag;
@@ -1124,33 +1188,21 @@ private:
   RSS_OP_COUNTER(cnoOfFreeFragrec);
   RSS_OP_SNAPSHOT(cnoOfFreeFragrec);
 
-
-/* --------------------------------------------------------------------------------- */
-/* FS_CONNECTREC                                                                     */
-/* --------------------------------------------------------------------------------- */
-/* OPERATIONREC                                                                      */
-/* --------------------------------------------------------------------------------- */
-  Operationrec *operationrec;
-  OperationrecPtr operationRecPtr;
-  OperationrecPtr queOperPtr;
-  Uint32 cfreeopRec;
-  Uint32 coprecsize;
+private:
 
 /* --------------------------------------------------------------------------------- */
 /* PAGE8                                                                             */
 /* --------------------------------------------------------------------------------- */
-  Page8 *page8;
   /* 8 KB PAGE                       */
-  Page8Ptr expPageptr;
+  Page32Lists pages;
   Page8List::Head cfreepages;
-  Uint32 cpagesize;
   Uint32 cpageCount;
   Uint32 cnoOfAllocatedPages;
   Uint32 cnoOfAllocatedPagesMax;
-  Uint32 m_maxAllocPages; // == cpagesize * (100 - m_free_pct) / 100
-  Uint32 m_free_pct;
-  bool m_oom; // if cnoOfAllocatedPages > m_maxAllocPages
 
+  Page32_pool c_page_pool;
+  Page8_pool c_page8_pool;
+  bool c_allow_use_of_spare_pages;
 /* --------------------------------------------------------------------------------- */
 /* ROOTFRAGMENTREC                                                                   */
 /*          DURING EXPAND FRAGMENT PROCESS, EACH FRAGMEND WILL BE EXPAND INTO TWO    */
@@ -1160,49 +1212,164 @@ private:
 /*          EASY.THE NEW FRAGMENT ID SENDS TO TUP MANAGER FOR ALL OPERATION PROCESS. */
 /* --------------------------------------------------------------------------------- */
 /* --------------------------------------------------------------------------------- */
-/* SCAN_REC                                                                          */
-/* --------------------------------------------------------------------------------- */
-  ScanRec *scanRec;
-  ScanRecPtr scanPtr;
-  Uint32 cscanRecSize;
-  Uint32 cfirstFreeScanRec;
-/* --------------------------------------------------------------------------------- */
 /* TABREC                                                                            */
 /* --------------------------------------------------------------------------------- */
   Tabrec *tabrec;
   TabrecPtr tabptr;
   Uint32 ctablesize;
-  Uint32 tipPageId;
-  Uint32 texpDirInd;
-  Uint32 tdata0;
-  Uint32 tfid;
-  Uint32 tscanFlag;
-  Uint32 tmp;
-  Uint32 tmp2;
-  Uint32 tresult;
-  Uint32 tuserptr;
-  BlockReference tuserblockref;
-  Uint32 tiopIndex;
-  Uint32 tscanTrid1;
-  Uint32 tscanTrid2;
+private:
+  void checkPoolShrinkNeed(Uint32 pool_index,
+                           const TransientFastSlotPool& pool);
+  void sendPoolShrink(Uint32 pool_index);
+  void shrinkTransientPools(Uint32 pool_index);
 
-  Uint32 cminusOne;
-  NodeId cmynodeid;
-  BlockReference cownBlockref;
-  BlockReference cndbcntrRef;
-  Uint16 csignalkey;
-  Uint32 czero;
-  union {
-  Uint32 ckeys[2048 * MAX_XFRM_MULTIPLY];
-  Uint64 ckeys_align;
-  };
-  
-  Uint32 c_errorInsert3000_TableId;
-  Uint32 c_memusage_report_frequency;
+  bool getNextScanRec(Uint32 &next, ScanRecPtr &loc_scanptr);
+  bool getNextOpRec(Uint32 &next,
+                    OperationrecPtr &loc_opptr,
+                    Uint32 max_loops);
+
+  static const Uint32 c_transient_pool_count = 2;
+  TransientFastSlotPool* c_transient_pools[c_transient_pool_count];
+  Bitmask<1> c_transient_pools_shrinking;
+  Uint32 c_copy_frag_oprec;
+
+public:
+  static Uint64 getTransactionMemoryNeed(
+    const Uint32 ldm_instance_count,
+    const ndb_mgm_configuration_iterator * mgm_cfg,
+    const bool use_reserved);
+  bool seize_op_rec(Uint32 userptr,
+                    BlockReference ref,
+                    Uint32 &i_val,
+                    Operationrec **opPtrP);
+  void release_op_rec(Uint32 opPtrI,
+                      Operationrec *opPtrP);
+  Operationrec* get_operation_ptr(Uint32 i);
+  void execACCKEYREQ(Signal *signal,
+                     Uint32 opPtrI,
+                     Operationrec *opPtrP);
+  void execACC_COMMITREQ(Signal *signal,
+                         Uint32 opPtrI,
+                         Operationrec *opPtrP);
+  void execACC_ABORTREQ(Signal *signal,
+                         Uint32 opPtrI,
+                         Operationrec *opPtrP,
+                         Uint32 sendConf);
+  void execACCMINUPDATE(Signal *signal,
+                        Uint32 opPtrI,
+                        Operationrec *opPtrP,
+                        Uint32 page_no,
+                        Uint32 page_idx);
+  void execACCKEY_ORD(Signal* signal,
+                      Uint32 opPtrI,
+                      Operationrec *opPtrP);
+  void execACCKEY_ORD_no_ptr(Signal* signal,
+                             Uint32 opPtrI);
+  Uint32 getDBLQH()
+  {
+    return m_lqh_block;
+  }
+
+  bool check_expand_shrink_ongoing(Uint32 fragPtrI);
+  Operationrec* getOperationPtrP(Uint32 opPtrI);
+
+  bool acquire_frag_mutex_get(Fragmentrec *fragPtrP,
+                              OperationrecPtr opPtr)
+  {
+    if (unlikely(m_is_in_query_thread))
+    {
+      LHBits32 hashVal = getElementHash(opPtr);
+      Uint32 inx = hashVal.get_bits(NUM_ACC_FRAGMENT_MUTEXES - 1);
+      NdbMutex_Lock(&fragPtrP->acc_frag_mutex[inx]);
+      return true;
+    }
+    return false;
+  }
+  void release_frag_mutex_get(Fragmentrec *fragPtrP,
+                              OperationrecPtr opPtr)
+  {
+    if (unlikely(m_is_in_query_thread))
+    {
+      LHBits32 hashVal = getElementHash(opPtr);
+      Uint32 inx = hashVal.get_bits(NUM_ACC_FRAGMENT_MUTEXES - 1);
+      NdbMutex_Unlock(&fragPtrP->acc_frag_mutex[inx]);
+    }
+  }
+  bool acquire_frag_mutex_hash(Fragmentrec *fragPtrP,
+                               OperationrecPtr opPtr)
+  {
+    if (qt_likely(globalData.ndbMtQueryThreads > 0))
+    {
+      LHBits32 hashVal = getElementHash(opPtr);
+      Uint32 inx = hashVal.get_bits(NUM_ACC_FRAGMENT_MUTEXES - 1);
+      NdbMutex_Lock(&fragPtrP->acc_frag_mutex[inx]);
+      return true;
+    }
+    return false;
+  }
+  void release_frag_mutex_hash(Fragmentrec *fragPtrP,
+                               OperationrecPtr opPtr)
+  {
+    if (qt_likely(globalData.ndbMtQueryThreads > 0))
+    {
+      LHBits32 hashVal = getElementHash(opPtr);
+      Uint32 inx = hashVal.get_bits(NUM_ACC_FRAGMENT_MUTEXES - 1);
+      NdbMutex_Unlock(&fragPtrP->acc_frag_mutex[inx]);
+    }
+  }
+  void acquire_frag_mutex_bucket(Fragmentrec *fragPtrP,
+                                 Uint32 bucket)
+  {
+    if (qt_likely(globalData.ndbMtQueryThreads > 0))
+    {
+      Uint32 inx = bucket & (NUM_ACC_FRAGMENT_MUTEXES - 1);
+      NdbMutex_Lock(&fragPtrP->acc_frag_mutex[inx]);
+    }
+  }
+  void release_frag_mutex_bucket(Fragmentrec *fragPtrP, Uint32 bucket)
+  {
+    if (qt_likely(globalData.ndbMtQueryThreads > 0))
+    {
+      Uint32 inx = bucket & (NUM_ACC_FRAGMENT_MUTEXES - 1);
+      NdbMutex_Unlock(&fragPtrP->acc_frag_mutex[inx]);
+    }
+  }
 };
 
-#ifdef DBACC_C
+inline bool
+Dbacc::check_expand_shrink_ongoing(Uint32 fragPtrI)
+{
+  fragrecptr.i = fragPtrI;
+  ndbrequire(fragrecptr.i < cfragmentsize);
+  ptrAss(fragrecptr, fragmentrec);
+  return fragrecptr.p->expandOrShrinkQueued;
+}
 
+inline void
+Dbacc::release_op_rec(Uint32 opPtrI,
+                      Dbacc::Operationrec *opPtrP)
+{
+  OperationrecPtr opPtr;
+  opPtr.i = opPtrI;
+  opPtr.p = opPtrP;
+  oprec_pool.release(opPtr);
+  checkPoolShrinkNeed(DBACC_OPERATION_RECORD_TRANSIENT_POOL_INDEX,
+                      oprec_pool);
+}
+
+inline void Dbacc::checkPoolShrinkNeed(const Uint32 pool_index,
+                                       const TransientFastSlotPool& pool)
+{
+#if defined(VM_TRACE) || defined(ERROR_INSERT)
+  ndbrequire(pool_index < c_transient_pool_count);
+  ndbrequire(c_transient_pools[pool_index] == &pool);
+#endif
+  if (pool.may_shrink())
+  {
+    sendPoolShrink(pool_index);
+  }
+}
+#ifdef DBACC_C
 /**
  * Container short index is a third(!) numbering of containers on a Page8.
  *
@@ -1268,7 +1435,7 @@ inline void Dbacc::Page8::setScanContainer(Uint16 scanbit, Uint32 conptr)
 }
 
 #ifdef NDEBUG
-inline void Dbacc::Page8::clearScanContainer(Uint16 scanbit, Uint32 /* conptr */)
+inline void Dbacc::Page8::clearScanContainer(Uint16 scanbit, Uint32)
 #else
 inline void Dbacc::Page8::clearScanContainer(Uint16 scanbit, Uint32 conptr)
 #endif
@@ -1319,13 +1486,6 @@ inline bool Dbacc::Fragmentrec::enough_valid_bits(LHBits16 const& reduced_hash_v
   // Forte C 5.0 needs use of intermediate constant
   int const bits = MIN_HASH_COMPARE_BITS;
   return level.getNeededValidBits(bits) <= reduced_hash_value.valid_bits();
-}
-
-inline void Dbacc::ScanRec::initContainer()
-{
-  inPageI = RNIL;
-  inConptr = 0;
-  elemScanned = 0;
 }
 
 inline bool Dbacc::ScanRec::isInContainer() const
@@ -1437,9 +1597,26 @@ inline void Dbacc::ScanRec::moveScanBit(Uint32 toptr, Uint32 fromptr)
   }
 }
 
-inline void Dbacc::getPtr(Ptr<Page8>& page) const
+inline void Dbacc::Page8_pool::getPtr(Ptr<Page8>& page) const
 {
-  ptrCheckGuard(page, cpagesize, page8);
+  require(page.i != RNIL);
+  Page32Ptr ptr;
+  ptr.i = page.i >> 2;
+  m_page_pool.getPtr(ptr);
+  page.p = &ptr.p->page8[page.i & 3];
+}
+
+inline void Dbacc::Page8_pool::getPtrForce(Ptr<Page8>& page) const
+{
+  if (page.i == RNIL)
+  {
+    page.p = NULL;
+    return;
+  }
+  Page32Ptr ptr;
+  ptr.i = page.i >> 2;
+  m_page_pool.getPtr(ptr);
+  page.p = &ptr.p->page8[page.i & 3];
 }
 
 inline Uint32 Dbacc::getForwardContainerPtr(Uint32 index) const
@@ -1479,8 +1656,191 @@ inline Uint32 Dbacc::getContainerPtr(Uint32 index, bool isforward) const
   }
 }
 
+/**
+ * Implementation of Dbacc::Page32Lists
+ */
+
+inline Dbacc::Page32Lists::Page32Lists()
+: nonempty_lists(0)
+{
+  for (unsigned i = 0; i < NDB_ARRAY_SIZE(lists); i++)
+  {
+    lists[i].init();
+  }
+  for (unsigned i = 0; i < NDB_ARRAY_SIZE(sub_page_id_count); i++)
+  {
+    sub_page_id_count[i] = 0;
+  }
+}
+
+/**
+ * The Dbacc 32KiB pages are arranged in 16 lists depending on which 8KiB
+ * pages are in in use on 32KiB page.
+ *
+ * list#0 - no 8KiB page is in use.
+ *        - all sub pages are free.
+ *
+ * list#1-#4 - one 8KiB page is in use (sub page id 0 - sub page id 3)
+ * list#1 - sub page 0, 1, 2, are free.
+ * list#2 - sub page 0, 1, 3, are free.
+ * list#3 - sub page 0, 2, 3, are free.
+ * list#4 - sub page 1, 2, 3, are free.
+ *
+ * list#5-#10 - two 8KiB pages are in use.
+ * list#5  - sub page 0, 1, are free.
+ * list#6  - sub page 0, 2, are free.
+ * list#7  - sub page 0, 3, are free.
+ * list#8  - sub page 1, 2, are free.
+ * list#9  - sub page 1, 3, are free.
+ * list#10 - sub page 2, 3, are free.
+ *
+ * list#11-14 - three 8KiB pages are in use.
+ * list#11 - sub page 0 is free
+ * list#12 - sub page 1 is free
+ * list#13 - sub page 2 is free
+ * list#14 - sub page 3 is free
+ *
+ * list#15 - all four 8KiB pages are in use.
+ *         - no sub page is free.
+ *
+ * In list_id_set a set bit indicates that the corresponding list is
+ * included.
+ *
+ * List with fewer 8KiB pages free than an other list have higher id.
+ */
+
+/**
+ * sub_page_id_to_list_id
+ *
+ * Find lists of 32KiB pages with requested 8KiB page free, or if
+ * ANY_SUB_PAGE are passed all lists with at least one 8KiB page free.
+ *
+ * @param[in] sub_page_id Index (0-3) of 8KiB page, or ANY_SUB_PAGE.
+ *
+ * @returns A bitmask with one bit set for each matching list.
+ *          For list numbering see comment above.
+ */
+inline Uint16 Dbacc::Page32Lists::sub_page_id_to_list_id_set(int sub_page_id)
+{
+  switch (sub_page_id)
+  {
+  case ANY_SUB_PAGE: /* lists of 32KiB pages with at least one free 8KiB page */
+    return 0x7fff;
+  case 0: /* lists of 32KiB pages with 8KiB page with sub-id 0 free */
+    return 0x08ef; // 0b0'0001'000111'0111'1
+  case 1: /* lists of 32KiB pages with 8KiB page with sub-id 1 free */
+    return 0x1337; // 0b0'0010'011001'1011'1
+  case 2: /* lists of 32KiB pages with 8KiB page with sub-id 2 free */
+    return 0x255b; // 0b0'0100'101010'1101'1
+  case 3: /* lists of 32KiB pages with 8KiB page with sub-id 3 free */
+    return 0x469d; // 0b0'1000'110100'1110'1
+  }
+  require(false);
+  return 0;
+}
+
+/**
+ * least_free_list
+ *
+ * Return one of the lists of 32KiB pages that have least number of 8KiB
+ * pages free.
+ *
+ * Note that the list numbering is such (see comment above) that a list
+ * with fewer free 8KiB pages have a higher id number than one with more
+ * free 8KiB pages.
+ *
+ * @param[in] list_id_set A bitmask with one bit set for each list to
+ *                        consider.
+ *                        Note that at least one list must be given.
+ *
+ * @returns A list id (0-15).
+ */
+inline Uint8 Dbacc::Page32Lists::least_free_list(Uint16 list_id_set)
+{
+  require(list_id_set != 0);
+  return BitmaskImpl::fls(list_id_set);
+}
+
+/**
+ * list_id_to_sub_page_id_set
+ *
+ * Return the 8KiB sub pages that are free for 32KiB pages in a given
+ * list.
+ *
+ * @returns A bitmask of four bits, with bit set for 8KiB page free.
+ */
+inline Uint8 Dbacc::Page32Lists::list_id_to_sub_page_id_set(int list_id)
+{
+  require(0 <= list_id && list_id <= 15);
+  /**
+   * The 64 bit word below should be viewed as an array of 16 entries
+   * with 4 bits each.
+   *
+   * Index is the list_id, and a set bit in the 4 bits indicates that
+   * corresponding 8KiB page is free.
+   *
+   * What 8KiB page that are free for pages in the different lists is
+   * described in comment above.
+   *
+   * Example, list#0 have all 8KiB pages free so all 4 bits set, and
+   * accordingly the least four bits in lid_to_pidset is set, in hex 0xf.
+   */
+  const Uint64 lid_to_pidset = 0x08421ca6953edb7fULL;
+  return (lid_to_pidset >> (list_id * 4)) & 0xf;
+}
+
+/**
+ * sub_page_id_set_to_list_id
+ *
+ * Get the list id for a page with a specific pattern of 8KiB sub pages
+ * free.
+ *
+ * @param[in] sub_page_id_set A four bit bitmask, a bit is set for sub
+ *                            page requested to be free.
+ *
+ * @returns A list id (0-15).
+ */
+inline Uint8 Dbacc::Page32Lists::sub_page_id_set_to_list_id(int sub_page_id_set)
+{
+  require(0 <= sub_page_id_set && sub_page_id_set <= 15);
+  /**
+   * The 64bit value below should be viewed as an array of 16 entries
+   * with a 4 bit unsigned list id.
+   *
+   * There are 16 combinations of free sub pages, use the 4bit bitmask of
+   * sub pages as an 4 bit unsigned int as index into the "array".
+   *
+   * The list numbering is described in comment above.
+   */
+  const Uint64 pidset_to_lid = 0x043a297e186d5cbfULL; // sub-page-id-set -> list-id
+  return (pidset_to_lid >> (sub_page_id_set * 4)) & 0xf;
+}
+
+inline Uint32 Dbacc::Page32Lists::getCount() const
+{
+  Uint32 sum = 0;
+  for (unsigned i = 0; i < NDB_ARRAY_SIZE(sub_page_id_count); i++)
+    sum += sub_page_id_count[i];
+  return sum;
+}
+
+inline bool Dbacc::Page32Lists::haveFreePage8(int sub_page_id) const
+{
+  Uint16 list_id_set = sub_page_id_to_list_id_set(sub_page_id);
+  return (list_id_set & nonempty_lists) != 0;
+}
+
+inline
+Dbacc::Operationrec*
+Dbacc::getOperationPtrP(Uint32 opPtrI)
+{
+  OperationrecPtr opPtr;
+  opPtr.i = opPtrI;
+  ndbrequire(oprec_pool.getValidPtr(opPtr));
+  return (Dbacc::Operationrec*)opPtr.p;
+}
 #endif
 
+#endif
 #undef JAM_FILE_ID
 
-#endif

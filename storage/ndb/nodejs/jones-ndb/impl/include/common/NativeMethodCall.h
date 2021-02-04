@@ -1,21 +1,25 @@
 /*
- Copyright (c) 2013, 2016, Oracle and/or its affiliates. All rights
- reserved.
+ Copyright (c) 2013, 2020 Oracle and/or its affiliates.
 
- This program is free software; you can redistribute it and/or
- modify it under the terms of the GNU General Public License
- as published by the Free Software Foundation; version 2 of
- the License.
+ This program is free software; you can redistribute it and/or modify
+ it under the terms of the GNU General Public License, version 2.0,
+ as published by the Free Software Foundation.
+
+ This program is also distributed with certain software (including
+ but not limited to OpenSSL) that is licensed under separate terms,
+ as designated in a particular file or component or in included license
+ documentation.  The authors of MySQL hereby grant you an additional
+ permission to link the program and your derivative works with the
+ separately licensed software that they have included with MySQL.
 
  This program is distributed in the hope that it will be useful,
  but WITHOUT ANY WARRANTY; without even the implied warranty of
- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- GNU General Public License for more details.
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License, version 2.0, for more details.
 
  You should have received a copy of the GNU General Public License
  along with this program; if not, write to the Free Software
- Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
- 02110-1301  USA
+ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
  */
 
 #include "AsyncMethodCall.h"
@@ -39,7 +43,7 @@ public:
   { }
 
   /* Method */
-  void run() {
+  void run() override {
     DEBUG_PRINT_DETAIL("NativeDestructorCall: Async destructor %p", NativeVoidMethodCall<C>::native_obj);
     delete NativeVoidMethodCall<C>::native_obj;
   }
@@ -64,7 +68,7 @@ public:
   {  } 
   
   /* Methods */
-  void run() {
+  void run() override {
     ((NativeVoidMethodCall<C>::native_obj)->*(method))();
   }
 };
@@ -89,7 +93,7 @@ public:
   {  }
 
   /* Methods */
-  void run() {
+  void run() override {
     NativeMethodCall<R,C>::return_val =
       ((NativeMethodCall<R,C>::native_obj)->*(method))();
   }
@@ -118,7 +122,7 @@ public:
   {  }
 
   /* Methods */
-  void run() {
+  void run() override {
     NativeMethodCall<R,C>::return_val =
       ((NativeMethodCall<R,C>::native_obj)->*(method))(Call_1_<A0>::arg0);
   }
@@ -148,7 +152,7 @@ public:
   {  }
 
   /* Methods */
-  void run() {
+  void run() override {
     ((NativeVoidMethodCall<C>::native_obj)->*(method))(Call_1_<A0>::arg0);
   }
 };
@@ -176,7 +180,7 @@ public:
   {  }
 
   /* Methods */
-  void run() {
+  void run() override {
     NativeMethodCall<R,C>::return_val =
       ((NativeMethodCall<R,C>::native_obj)->*(method))(
         Call_2_<A0, A1>::arg0,
@@ -205,7 +209,7 @@ public:
   {  }
 
   /* Methods */
-  void run() {
+  void run() override {
     ((NativeVoidMethodCall<C>::native_obj)->*(method))
       (Call_2_<A0,A1>::arg0, Call_2_<A0,A1>::arg1);
   }
@@ -234,7 +238,7 @@ public:
   {  }
 
   /* Methods */
-  void run() {
+  void run() override {
     NativeMethodCall<R,C>::return_val =
     ((NativeMethodCall<R,C>::native_obj)->*(method))(
       Call_3_<A0, A1, A2>::arg0,
@@ -267,7 +271,7 @@ public:
   { }
   
   /* Methods */
-  void run() {
+  void run() override {
     ((NativeVoidMethodCall<C>::native_obj)->*(method))(
       Call_3_<A0, A1, A2>::arg0,
       Call_3_<A0, A1, A2>::arg1,
@@ -299,7 +303,7 @@ public:
  {  }
 
   /* Methods */
-  void run() {
+  void run() override {
     NativeMethodCall<R,C>::return_val =
      ((NativeMethodCall<R,C>::native_obj)->*(method))(
       Call_4_<A0, A1, A2, A3>::arg0,
@@ -333,7 +337,7 @@ public:
   { }
   
   /* Methods */
-  void run() {
+  void run() override {
     ((NativeVoidMethodCall<C>::native_obj)->*(method))(
       Call_4_<A0, A1, A2, A3>::arg0,
       Call_4_<A0, A1, A2, A3>::arg1,
@@ -366,7 +370,7 @@ public:
   {  }
 
   /* Methods */
-  void run() {
+  void run() override {
     NativeMethodCall<R,C>::return_val =
      ((NativeMethodCall<R,C>::native_obj)->*(method))(
       Call_5_<A0, A1, A2, A3, A4>::arg0,
@@ -402,7 +406,7 @@ public:
   {  }
 
   /* Methods */
-  void run() {
+  void run() override {
     NativeMethodCall<R,C>::return_val =
      ((NativeMethodCall<R,C>::native_obj)->*(method))(
       Call_6_<A0, A1, A2, A3, A4, A5>::arg0,
@@ -439,7 +443,7 @@ public:
   {  }
 
   /* Methods */
-  void run() {
+  void run() override {
     NativeMethodCall<R,C>::return_val =
      ((NativeMethodCall<R,C>::native_obj)->*(method))(
       Call_7_<A0, A1, A2, A3, A4, A5, A6>::arg0,
@@ -477,7 +481,7 @@ public:
   {  }
 
   /* Methods */
-  void run() {
+  void run() override {
     NativeMethodCall<R,C>::return_val =
      ((NativeMethodCall<R,C>::native_obj)->*(method))(
       Call_8_<A0, A1, A2, A3, A4, A5, A6, A7>::arg0,
@@ -512,7 +516,7 @@ public:
   {  }
   
   /* Methods */
-  void run() {
+  void run() override {
     NativeMethodCall<R,C>::return_val =
       ((NativeMethodCall<R,C>::native_obj)->*(method))();
   }
@@ -540,7 +544,7 @@ public:
   {  }
 
   /* Methods */
-  void run() {
+  void run() override {
     NativeMethodCall<R,C>::return_val =
       ((NativeMethodCall<R,C>::native_obj)->*(method))(Call_1_<A0>::arg0);
   }
@@ -567,7 +571,7 @@ public:
   {  }
 
   /* Methods */
-  void run() {
+  void run() override {
     ((NativeVoidMethodCall<C>::native_obj)->*(method))
       (Call_2_<A0,A1>::arg0, Call_2_<A0,A1>::arg1);
   }
@@ -593,7 +597,7 @@ public:
   {  }
 
   /* Methods */
-  void run() {
+  void run() override {
     NativeMethodCall<R,C>::return_val =
       ((NativeMethodCall<R,C>::native_obj)->*(method))(
         Call_2_<A0, A1>::arg0,

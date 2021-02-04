@@ -1,67 +1,152 @@
-/* Copyright (c) 2014, 2017, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2014, 2020, Oracle and/or its affiliates.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software Foundation,
-   51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 #ifndef DD__OBJECT_TABLE_DEFINITION_IMPL_INCLUDED
-#define	DD__OBJECT_TABLE_DEFINITION_IMPL_INCLUDED
+#define DD__OBJECT_TABLE_DEFINITION_IMPL_INCLUDED
 
 #include <map>
+#include <memory>
 #include <vector>
 
-#include "dd/impl/system_registry.h"          // System_tablespaces
-#include "dd/string_type.h"                   // dd::String_type
-#include "dd/types/object_table_definition.h" // dd::Object_table_definition
-#include "dd/types/table.h"                   // dd::Table
-#include "m_string.h"                         // my_stpcpy
 #include "my_dbug.h"
-#include "mysqld.h"                           // lower_case_table_names
-#include "table.h"                            // MYSQL_TABLESPACE_NAME
+#include "sql/dd/string_type.h"                    // dd::String_type
+#include "sql/dd/types/object_table_definition.h"  // dd::Object_table_definition
+#include "sql/mysqld.h"                            // lower_case_table_names
 
 namespace dd {
 
+class Properties;
+
 ///////////////////////////////////////////////////////////////////////////
 
-class Object_table_definition_impl: public Object_table_definition
-{
-private:
-  typedef std::map<String_type, int> Field_numbers;
-  typedef std::map<int, String_type> Field_definitions;
-  typedef std::vector<String_type> Indexes;
-  typedef std::vector<String_type> Foreign_keys;
-  typedef std::vector<String_type> Options;
+class Object_table_definition_impl : public Object_table_definition {
+ public:
+  typedef std::map<String_type, int> Element_numbers;
+  typedef std::map<int, String_type> Element_definitions;
 
-private:
+ private:
+  enum class Label {
+    NAME,
+    FIELDS,
+    INDEXES,
+    FOREIGN_KEYS,
+    OPTIONS,
+    LABEL,
+    POSITION,
+    DEFINITION,
+    ELEMENT
+  };
+
+  static const char *key(Label label) {
+    switch (label) {
+      case Label::NAME:
+        return "name";
+      case Label::FIELDS:
+        return "fields";
+      case Label::INDEXES:
+        return "indexes";
+      case Label::FOREIGN_KEYS:
+        return "foreign_keys";
+      case Label::OPTIONS:
+        return "options";
+      case Label::LABEL:
+        return "lbl";
+      case Label::POSITION:
+        return "pos";
+      case Label::DEFINITION:
+        return "def";
+      case Label::ELEMENT:
+        return "elem";
+      default:
+        DBUG_ASSERT(false);
+        return "";
+    }
+  }
+
+  static bool s_dd_tablespace_encrypted;
+
+  String_type m_schema_name;
   String_type m_table_name;
-  String_type m_type_name;
 
-  Field_numbers m_field_numbers;
-  Field_definitions m_field_definitions;
-  Indexes m_indexes;
-  Foreign_keys m_foreign_keys;
-  Foreign_keys m_cyclic_foreign_keys;
-  Options m_options;
-  std::vector<String_type> m_populate_statements;
+  String_type m_ddl_statement;
 
-  uint m_dd_version;
+  Element_numbers m_field_numbers;
+  Element_definitions m_field_definitions;
 
-public:
-  Object_table_definition_impl(): m_dd_version(0)
-  { }
+  Element_numbers m_index_numbers;
+  Element_definitions m_index_definitions;
 
-  virtual ~Object_table_definition_impl()
-  { }
+  Element_numbers m_foreign_key_numbers;
+  Element_definitions m_foreign_key_definitions;
 
+  Element_numbers m_option_numbers;
+  Element_definitions m_option_definitions;
+
+  std::vector<String_type> m_dml_statements;
+
+  void add_element(int element_number, const String_type &element_name,
+                   const String_type &element_definition,
+                   Element_numbers *element_numbers,
+                   Element_definitions *element_definitions) {
+    DBUG_ASSERT(element_numbers != nullptr && element_definitions != nullptr &&
+                element_numbers->find(element_name) == element_numbers->end() &&
+                element_definitions->find(element_number) ==
+                    element_definitions->end());
+
+    (*element_numbers)[element_name] = element_number;
+    (*element_definitions)[element_number] = element_definition;
+  }
+
+  int element_number(const String_type &element_name,
+                     const Element_numbers &element_numbers) const {
+    DBUG_ASSERT(element_numbers.find(element_name) != element_numbers.end());
+    return element_numbers.find(element_name)->second;
+  }
+
+  void get_element_properties(dd::Properties *properties,
+                              const Element_numbers &element_numbers,
+                              const Element_definitions &element_defs) const;
+
+  bool set_element_properties(const String_type &prop_str,
+                              Element_numbers *element_numbers,
+                              Element_definitions *element_defs);
+
+ public:
+  Object_table_definition_impl() {}
+
+  Object_table_definition_impl(const String_type &schema_name,
+                               const String_type &table_name,
+                               const String_type &ddl_statement)
+      : m_schema_name(schema_name),
+        m_table_name(table_name),
+        m_ddl_statement(ddl_statement) {}
+
+  ~Object_table_definition_impl() override {}
+
+  static void set_dd_tablespace_encrypted(bool is_encrypted) {
+    s_dd_tablespace_encrypted = is_encrypted;
+  }
+
+  static bool is_dd_tablespace_encrypted() { return s_dd_tablespace_encrypted; }
 
   /**
     Get the collation which is used for names related to the file
@@ -72,13 +157,25 @@ public:
     @return Pointer to CHARSET_INFO.
    */
 
-  static const CHARSET_INFO *fs_name_collation()
-  {
-     if (lower_case_table_names == 0)
-       return &my_charset_utf8_bin;
-     return &my_charset_utf8_tolower_ci;
+  static const CHARSET_INFO *fs_name_collation() {
+    if (lower_case_table_names == 0) return &my_charset_utf8_bin;
+    return &my_charset_utf8_tolower_ci;
   }
 
+  /**
+    Get the collation which is used for the name field in the table.
+    Table collation UTF8_BIN is used when collation for the name field
+    is not specified. Tables using different collation must override this
+    method.
+
+    TODO: Changing table collation is not supporting during upgrade as of now.
+          To support this, static definition of this method should be avoided
+          and should provide a possibility to have different collations for
+          actual and target table definition.
+
+    @return Pointer to CHARSET_INFO.
+  */
+  static const CHARSET_INFO *name_collation() { return &my_charset_utf8_bin; }
 
   /**
     Convert to lowercase if lower_case_table_names == 2. This is needed
@@ -89,140 +186,91 @@ public:
     @param [in,out] buf  Buffer for storing lowercase'd string. Supplied
                          by the caller.
 
-    @retval  A pointer to the src string if l_c_t_n != 2
-    @retval  A pointer to the buf supplied by the caller, into which
+    @returns  A pointer to the src string if l_c_t_n != 2
+    @returns  A pointer to the buf supplied by the caller, into which
              the src string has been copied and lowercase'd, if l_c_t_n == 2
    */
 
-  static const char *fs_name_case(const String_type &src, char *buf)
-  {
-    const char *tmp_name= src.c_str();
-    if (lower_case_table_names == 2)
-    {
+  static const char *fs_name_case(const String_type &src, char *buf) {
+    const char *tmp_name = src.c_str();
+    if (lower_case_table_names == 2) {
       // Lower case table names == 2 is tested on OSX.
       /* purecov: begin tested */
       my_stpcpy(buf, tmp_name);
       my_casedn_str(fs_name_collation(), buf);
-      tmp_name= buf;
+      tmp_name = buf;
       /* purecov: end */
     }
     return tmp_name;
   }
 
-  virtual uint dd_version() const
-  { return m_dd_version; }
+  const String_type &get_table_name() const { return m_table_name; }
 
-  virtual void dd_version(uint version)
-  { m_dd_version= version; }
+  void set_table_name(const String_type &name) override { m_table_name = name; }
 
-  virtual const String_type &table_name() const
-  { return m_table_name; }
+  void set_schema_name(const String_type &name) { m_schema_name = name; }
 
-  virtual const String_type &type_name() const
-  { return m_type_name; }
-
-  virtual void table_name(const String_type &name)
-  { m_table_name= name; }
-
-  virtual void type_name(const String_type &type)
-  { m_type_name= type; }
-
-  virtual void add_field(int field_number, const String_type &field_name,
-                         const String_type field_definition)
-  {
-    DBUG_ASSERT(
-      m_field_numbers.find(field_name) == m_field_numbers.end() &&
-      m_field_definitions.find(field_number) == m_field_definitions.end());
-
-    m_field_numbers[field_name]= field_number;
-    m_field_definitions[field_number]= field_definition;
+  void add_field(int field_number, const String_type &field_name,
+                 const String_type field_definition) override {
+    add_element(field_number, field_name, field_definition, &m_field_numbers,
+                &m_field_definitions);
   }
 
-  virtual void add_index(const String_type &index)
-  { m_indexes.push_back(index); }
+  void add_sql_mode_field(int field_number, const String_type &field_name);
 
-  virtual void add_foreign_key(const String_type &foreign_key)
-  { m_foreign_keys.push_back(foreign_key); }
-
-  virtual void add_cyclic_foreign_key(const String_type &foreign_key)
-  { m_cyclic_foreign_keys.push_back(foreign_key); }
-
-  virtual void add_option(const String_type &option)
-  { m_options.push_back(option); }
-
-  virtual void add_populate_statement(const String_type &statement)
-  { m_populate_statements.push_back(statement); }
-
-  virtual int field_number(const String_type &field_name) const
-  {
-    DBUG_ASSERT(m_field_numbers.find(field_name) != m_field_numbers.end());
-    return m_field_numbers.find(field_name)->second;
+  void add_index(int index_number, const String_type &index_name,
+                 const String_type &index_definition) override {
+    add_element(index_number, index_name, index_definition, &m_index_numbers,
+                &m_index_definitions);
   }
 
-  virtual String_type build_ddl_create_table() const
-  {
-    Stringstream_type ss;
-    ss << "CREATE TABLE " + m_table_name + "(\n";
-
-    // Output fields
-    for (Field_definitions::const_iterator field= m_field_definitions.begin();
-         field != m_field_definitions.end(); ++field)
-    {
-      if (field != m_field_definitions.begin())
-        ss << ",\n";
-      ss << "  " << field->second;
-    }
-
-    // Output indexes
-    for (Indexes::const_iterator index= m_indexes.begin();
-         index != m_indexes.end(); ++index)
-      ss << ",\n  " << *index;
-
-    // Output foreign keys
-    for (Foreign_keys::const_iterator key= m_foreign_keys.begin();
-         key != m_foreign_keys.end(); ++key)
-      ss << ",\n  " << *key;
-
-    ss << "\n)";
-
-    // Output options
-    for (Options::const_iterator option= m_options.begin();
-         option != m_options.end(); ++option)
-      ss << " " << *option;
-
-    // Optionally output tablespace clause
-    if (System_tablespaces::instance()->find(MYSQL_TABLESPACE_NAME.str))
-      ss << " " << "TABLESPACE=" << MYSQL_TABLESPACE_NAME.str;
-
-    return ss.str();
+  virtual void add_foreign_key(int foreign_key_number,
+                               const String_type &foreign_key_name,
+                               const String_type &foreign_key_definition) {
+    add_element(foreign_key_number, foreign_key_name, foreign_key_definition,
+                &m_foreign_key_numbers, &m_foreign_key_definitions);
   }
 
-  virtual String_type build_ddl_add_cyclic_foreign_keys() const
-  {
-    Stringstream_type ss;
-    ss << "ALTER TABLE " + m_table_name + "\n";
-
-    // Output cyclic foreign keys
-    for (Foreign_keys::const_iterator key= m_cyclic_foreign_keys.begin();
-         key != m_cyclic_foreign_keys.end(); ++key)
-    {
-      if (key != m_cyclic_foreign_keys.begin())
-        ss << ",\n";
-      ss << "  ADD " << *key;
-    }
-
-    ss << "\n";
-
-    return ss.str();
+  virtual void add_option(int option_number, const String_type &option_name,
+                          const String_type &option_definition) {
+    add_element(option_number, option_name, option_definition,
+                &m_option_numbers, &m_option_definitions);
   }
 
-  virtual const std::vector<String_type> &dml_populate_statements() const
-  { return m_populate_statements; }
+  virtual void add_populate_statement(const String_type &statement) {
+    m_dml_statements.push_back(statement);
+  }
+
+  virtual int field_number(const String_type &field_name) const {
+    return element_number(field_name, m_field_numbers);
+  }
+
+  virtual int index_number(const String_type &index_name) const {
+    return element_number(index_name, m_index_numbers);
+  }
+
+  virtual int option_number(const String_type &option_name) const {
+    return element_number(option_name, m_option_numbers);
+  }
+
+  String_type get_ddl() const override;
+
+  const std::vector<String_type> &get_dml() const override {
+    return m_dml_statements;
+  }
+
+  void store_into_properties(Properties *table_def_properties) const override;
+
+  virtual bool restore_from_string(const String_type &ddl_statement) {
+    m_ddl_statement = ddl_statement;
+    return false;
+  }
+
+  bool restore_from_properties(const Properties &table_def_properties) override;
 };
 
 ///////////////////////////////////////////////////////////////////////////
 
-}
+}  // namespace dd
 
-#endif	// DD__OBJECT_TABLE_DEFINITION_IMPL_INCLUDED
-
+#endif  // DD__OBJECT_TABLE_DEFINITION_IMPL_INCLUDED

@@ -1,14 +1,21 @@
 /*
- *  Copyright (c) 2015, Oracle and/or its affiliates. All rights reserved.
+ *  Copyright (c) 2015, 2018, Oracle and/or its affiliates. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; version 2 of the License.
+ *  it under the terms of the GNU General Public License, version 2.0,
+ *  as published by the Free Software Foundation.
+ *
+ *  This program is also distributed with certain software (including
+ *  but not limited to OpenSSL) that is licensed under separate terms,
+ *  as designated in a particular file or component or in included license
+ *  documentation.  The authors of MySQL hereby grant you an additional
+ *  permission to link the program and your derivative works with the
+ *  separately licensed software that they have included with MySQL.
  *
  *  This program is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
+ *  GNU General Public License, version 2.0, for more details.
  *
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, write to the Free Software
@@ -19,17 +26,15 @@ package com.mysql.clusterj.tie;
 
 import java.nio.ByteBuffer;
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
-import com.mysql.clusterj.ClusterJUserException;
 import com.mysql.clusterj.core.util.I18NHelper;
 import com.mysql.clusterj.core.util.Logger;
 import com.mysql.clusterj.core.util.LoggerFactoryService;
-
-import sun.misc.Cleaner;
 
 /**
  * This class implements a pool consisting of several size-based monotonically-growing queues of ByteBuffer.
@@ -53,18 +58,42 @@ class VariableByteBufferPoolImpl {
     int biggest = 0;
 
     /** The cleaner method for non-pooled buffers */
+    static Class<?> cleanerClass = null;
+    static Method cleanMethod = null;
     static Field cleanerField = null;
     static {
+        // find the package containing Cleaner class
         try {
-            ByteBuffer buffer = ByteBuffer.allocateDirect(1);
-            cleanerField = buffer.getClass().getDeclaredField("cleaner");
-            cleanerField.setAccessible(true);
-            clean(buffer);
-        } catch (Throwable t) {
-            String message = local.message("WARN_Buffer_Cleaning_Unusable", t.getClass().getName(), t.getMessage());
-            logger.warn(message);
-            // cannot use cleaner
-            cleanerField = null;
+            // try loading from sun.misc - java versions 1.8 and lower
+            cleanerClass = Class.forName("sun.misc.Cleaner");
+        } catch( ClassNotFoundException e1 ) {
+            // Cleaner not in sun.misc
+            try {
+                // check in java.internal.ref - java versions 1.9 and above
+                cleanerClass = Class.forName("java.internal.ref.Cleaner");
+            } catch( ClassNotFoundException e2 ) {
+                // Cleaner class not found - Cannot use cleaner
+                // only possible reason is Cleaner class has been removed completely
+                String message = local.message("WARN_Buffer_Cleaning_Unusable", e2.getClass().getName(), e2.getMessage());
+                logger.warn(message);
+            }
+        }
+        if (cleanerClass != null)
+        {
+            try {
+                // fetch the cleaner's clean method
+                cleanMethod = cleanerClass.getMethod("clean");
+                // test if cleaner is usable
+                ByteBuffer buffer = ByteBuffer.allocateDirect(1);
+                cleanerField = buffer.getClass().getDeclaredField("cleaner");
+                cleanerField.setAccessible(true);
+                clean(buffer);
+            } catch (Throwable t) {
+                String message = local.message("WARN_Buffer_Cleaning_Unusable", t.getClass().getName(), t.getMessage());
+                logger.warn(message);
+                // cannot use cleaner
+                cleanerField = null;
+            }
         }
     }
 
@@ -74,7 +103,8 @@ class VariableByteBufferPoolImpl {
     static void clean(ByteBuffer buffer) {
         if (cleanerField != null) {
             try {
-                ((Cleaner)cleanerField.get(buffer)).clean();
+                // invoke Cleaner's clean method
+                cleanMethod.invoke(cleanerClass.cast(cleanerField.get(buffer)));
             } catch (Throwable t) {
                 // oh well
             }

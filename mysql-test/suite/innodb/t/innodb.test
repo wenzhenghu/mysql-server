@@ -1,6 +1,3 @@
-# Performance Schema is partially supported by embedded server. Hence skip when test runs with embedded mode.
--- source include/not_embedded.inc
-
 #Want to skip this test from daily Valgrind execution
 --source include/no_valgrind_without_big.inc
 
@@ -32,17 +29,19 @@ let $MYSQLD_DATADIR= `select @@datadir`;
 # See Bug#43309 Test main.innodb can't be run twice
 -- disable_query_log
 call mtr.add_suppression("Cannot add field .* in table .* because after adding it, the row size is");
-call mtr.add_suppression("\\[ERROR\\] InnoDB: in ALTER TABLE `test`.`t1`");
-call mtr.add_suppression("\\[ERROR\\] InnoDB: in RENAME TABLE table `test`.`t1`");
+call mtr.add_suppression("\\[ERROR\\] .*MY-\\d+.* in ALTER TABLE `test`.`t1`");
+call mtr.add_suppression("\\[ERROR\\] .*MY-\\d+.* in RENAME TABLE table `test`.`t1`");
+call mtr.add_suppression("Cannot delete/update rows with cascading foreign key constraints that exceed max depth of 15. Please drop excessive foreign constraints and try again");
+
 
 SET @innodb_thread_sleep_delay_orig = @@innodb_thread_sleep_delay;
 
 SET @innodb_thread_concurrency_orig = @@innodb_thread_concurrency;
 
 --disable_warnings
-SET @innodb_rows_deleted_orig = (SELECT variable_value FROM performance_schema.global_status WHERE LOWER(variable_name) = 'innodb_rows_deleted');
-SET @innodb_rows_inserted_orig = (SELECT variable_value FROM performance_schema.global_status WHERE LOWER(variable_name) = 'innodb_rows_inserted');
-SET @innodb_rows_updated_orig = (SELECT variable_value FROM performance_schema.global_status WHERE LOWER(variable_name) = 'innodb_rows_updated');
+SET @innodb_rows_deleted_orig = (SELECT sum(variable_value) FROM performance_schema.global_status WHERE LOWER(variable_name) like 'innodb%_rows_deleted');
+SET @innodb_rows_inserted_orig = (SELECT sum(variable_value) FROM performance_schema.global_status WHERE LOWER(variable_name) like 'innodb%_rows_inserted');
+SET @innodb_rows_updated_orig = (SELECT sum(variable_value) FROM performance_schema.global_status WHERE LOWER(variable_name) like 'innodb%_rows_updated');
 SET @innodb_row_lock_waits_orig = (SELECT variable_value FROM performance_schema.global_status WHERE LOWER(variable_name) = 'innodb_row_lock_waits');
 SET @innodb_row_lock_current_waits_orig = (SELECT variable_value FROM performance_schema.global_status WHERE LOWER(variable_name) = 'innodb_row_lock_current_waits');
 SET @innodb_row_lock_time_orig = (SELECT variable_value FROM performance_schema.global_status WHERE LOWER(variable_name) = 'innodb_row_lock_time');
@@ -101,8 +100,10 @@ select * from t1 where parent_id=102;
 update t1 set id=id+1000;
 -- error ER_DUP_ENTRY,1022
 update t1 set id=1024 where id=1009;
+--sorted_result
 select * from t1;
 update ignore t1 set id=id+1; # This will change all rows
+--sorted_result
 select * from t1;
 update ignore t1 set id=1023 where id=1010;
 select * from t1 where parent_id=102;
@@ -132,6 +133,7 @@ CREATE TABLE t1 (
 replace into t1 (gesuchnr,benutzer_id) values (2,1);
 replace into t1 (gesuchnr,benutzer_id) values (1,1);
 replace into t1 (gesuchnr,benutzer_id) values (1,1);
+--sorted_result
 select * from t1;
 drop table t1;
 
@@ -143,6 +145,7 @@ create table t1 (a int) engine=innodb;
 insert into t1 values (1), (2);
 optimize table t1;
 delete from t1 where a = 1;
+--sorted_result
 select * from t1;
 check table t1;
 drop table t1;
@@ -150,6 +153,7 @@ drop table t1;
 create table t1 (a int,b varchar(20)) engine=innodb;
 insert into t1 values (1,""), (2,"testing");
 delete from t1 where a = 1;
+--sorted_result
 select * from t1;
 create index skr on t1 (a);
 insert into t1 values (3,""), (4,"testing");
@@ -233,6 +237,7 @@ flush tables with read lock;
 commit;
 unlock tables;
 commit;
+--sorted_result
 select * from t1;
 drop table t1;
 
@@ -264,15 +269,18 @@ insert into t1 values ('pippo', 12);
 insert into t1 values ('pippo', 12); # Gives error
 delete from t1;
 delete from t1 where id = 'pippo';
+--sorted_result
 select * from t1;
 
 insert into t1 values ('pippo', 12);
 set autocommit=0;
 delete from t1;
 rollback;
+--sorted_result
 select * from t1;
 delete from t1;
 commit;
+--sorted_result
 select * from t1;
 drop table t1;
 
@@ -297,6 +305,7 @@ set autocommit=1;
 
 CREATE TABLE t1 (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR(64)) ENGINE=innodb;
 INSERT INTO t1 VALUES (1, 'Jochen');
+--sorted_result
 select * from t1;
 drop table t1;
 
@@ -304,6 +313,7 @@ CREATE TABLE t1 ( _userid VARCHAR(60) NOT NULL PRIMARY KEY) ENGINE=innodb;
 set autocommit=0;
 INSERT INTO t1  SET _userid='marc@anyware.co.uk';
 COMMIT;
+--sorted_result
 SELECT * FROM t1;
 SELECT _userid FROM t1 WHERE _userid='marc@anyware.co.uk';
 drop table t1;
@@ -347,12 +357,16 @@ drop table t1;
 create table t1 (col1 int not null, col2 char(4) not null, primary key(col1));
 alter table t1 engine=innodb;
 insert into t1 values ('1','1'),('5','2'),('2','3'),('3','4'),('4','4');
+--sorted_result
 select * from t1;
 update t1 set col2='7' where col1='4';
+--sorted_result
 select * from t1;
 alter table t1 add co3 int not null;
+--sorted_result
 select * from t1;
 update t1 set col2='9' where col1='2';
+--sorted_result
 select * from t1;
 drop table t1;
 
@@ -363,13 +377,18 @@ drop table t1;
 create table t1 (a int not null , b int, primary key (a)) engine = innodb;
 create table t2 (a int not null , b int, primary key (a)) engine = myisam;
 insert into t1 VALUES (1,3) , (2,3), (3,3);
+--sorted_result
 select * from t1;
 insert into t2 select * from t1;
+--sorted_result
 select * from t2;
 delete from t1 where b = 3;
+--sorted_result
 select * from t1;
 insert into t1 select * from t2;
+--sorted_result
 select * from t1;
+--sorted_result
 select * from t2;
 drop table t1,t2;
 
@@ -416,17 +435,23 @@ update t1 set parent_id=parent_id+100;
 select * from t1 where parent_id=102;
 update t1 set id=id+1000;
 update t1 set id=1024 where id=1009;
+--sorted_result
 select * from t1;
 update ignore t1 set id=id+1; # This will change all rows
+--sorted_result
 select * from t1;
 update ignore t1 set id=1023 where id=1010;
 select * from t1 where parent_id=102;
 --replace_column 10 #
 explain select level from t1 where level=1;
+--sorted_result
 select level,id from t1 where level=1;
+--sorted_result
 select level,id,parent_id from t1 where level=1;
+--sorted_result
 select level,id from t1 where level=1 order by id;
 delete from t1 where level=1;
+--sorted_result
 select * from t1;
 drop table t1;
 
@@ -564,8 +589,10 @@ create temporary table t1 (a int not null auto_increment, primary key(a)) engine
 insert into t1 values (NULL),(NULL),(NULL);
 delete from t1 where a=3;
 insert into t1 values (NULL);
+--sorted_result
 select * from t1;
 alter table t1 add b int;
+--sorted_result
 select * from t1;
 drop table t1;
 
@@ -587,6 +614,7 @@ set insert_id=5;
 replace into t1 (value,name,uid) values ('other value','two',102);
 set insert_id=6;
 replace into t1 (value,name,uid) values ('other value','two',102);
+--sorted_result
 select * from t1;
 drop table t1;
 
@@ -618,9 +646,11 @@ truncate table t1;
 commit;
 truncate table t1;
 truncate table t1;
+--sorted_result
 select * from t1;
 insert into t1 values(1),(2);
 delete from t1;
+--sorted_result
 select * from t1;
 commit;
 drop table t1;
@@ -630,10 +660,12 @@ create table t1 (a int not null) engine= innodb;
 insert into t1 values(1),(2);
 truncate table t1;
 insert into t1 values(1),(2);
+--sorted_result
 select * from t1;
 truncate table t1;
 insert into t1 values(1),(2);
 delete from t1;
+--sorted_result
 select * from t1;
 drop table t1;
 
@@ -713,11 +745,15 @@ INSERT INTO t2 VALUES (4077711111,'SeanWheeler',0,2,20020111112853,500,000000000
 INSERT INTO t2 VALUES (9197722223,'berry',90,3,20020111112818,500,20020102114532,501,4,10,0);
 INSERT INTO t2 VALUES (650,'San Francisco',90,0,20020109113158,342,00000000000000,-1,1,24,1);
 INSERT INTO t2 VALUES (333,'tubs',99,2,20020109113453,501,20020109113453,500,3,10,0);
+--sorted_result
 select * from t1;
+--sorted_result
 select * from t2;
 delete t1, t2 from t1 left join t2 on t1.number=t2.number where (t1.carrier_id=90 and t1.number=t2.number) or (t2.carrier_id=90 and t1.number=t2.number) or  (t1.carrier_id=90 and t2.number is null);
 select * from t1;
+--sorted_result
 select * from t2;
+--sorted_result
 select * from t2;
 drop table t1,t2;
 SET sql_mode = default;
@@ -732,7 +768,7 @@ create table t1 (id int unsigned not null auto_increment, code tinyint unsigned 
 
 BEGIN;
 SET SESSION TRANSACTION ISOLATION LEVEL SERIALIZABLE;
-SELECT @@tx_isolation,@@global.tx_isolation;
+SELECT @@transaction_isolation,@@global.transaction_isolation;
 insert into t1 (code, name) values (1, 'Tim'), (1, 'Monty'), (2, 'David');
 select id, code, name from t1 order by id;
 COMMIT;
@@ -759,7 +795,9 @@ create table t2 (n int(10), d int(10)) engine=innodb;
 insert into t1 values(1,1),(1,2);
 insert into t2 values(1,10),(2,20);
 UPDATE t1,t2 SET t1.d=t2.d,t2.d=30 WHERE t1.n=t2.n;
+--sorted_result
 select * from t1;
+--sorted_result
 select * from t2;
 drop table t1,t2;
 
@@ -865,17 +903,22 @@ CREATE TABLE t2 (id INT PRIMARY KEY, t1_id INT, INDEX par_ind (t1_id), FOREIGN K
 insert into t1 set id=1;
 insert into t2 set id=1, t1_id=1;
 delete t1,t2 from t1,t2 where t1.id=t2.t1_id;
+--sorted_result
 select * from t1;
+--sorted_result
 select * from t2;
 drop table t2,t1;
 CREATE TABLE t1(id INT NOT NULL,  PRIMARY KEY (id)) ENGINE=INNODB;
 CREATE TABLE t2(id  INT PRIMARY KEY, t1_id INT, INDEX par_ind (t1_id)  ) ENGINE=INNODB;
 INSERT INTO t1 VALUES(1);
 INSERT INTO t2 VALUES(1, 1);
+--sorted_result
 SELECT * from t1;
 UPDATE t1,t2 SET t1.id=t1.id+1, t2.t1_id=t1.id+1;
+--sorted_result
 SELECT * from t1;
 UPDATE t1,t2 SET t1.id=t1.id+1 where t1.id!=t2.id;
+--sorted_result
 SELECT * from t1;
 DROP TABLE t1,t2;
 
@@ -898,14 +941,21 @@ INSERT INTO t1 VALUES("this-key", "will disappear");
 INSERT INTO t2 VALUES("this-key", "will also disappear");
 DELETE FROM t3 WHERE id1="my-test-1";
 
+--sorted_result
 SELECT * FROM t1;
+--sorted_result
 SELECT * FROM t2;
+--sorted_result
 SELECT * FROM t3;
 ROLLBACK;
 
+--sorted_result
 SELECT * FROM t1;
+--sorted_result
 SELECT * FROM t2;
+--sorted_result
 SELECT * FROM t3;
+--sorted_result
 SELECT * FROM t3 WHERE id1="my-test-1" LOCK IN SHARE MODE;
 COMMIT;
 set autocommit=1;
@@ -919,6 +969,7 @@ CREATE TABLE t1 (a int not null primary key, b int not null, unique (b)) engine=
 INSERT INTO t1 values (1,1),(2,2),(3,3),(4,4),(5,5),(6,6),(7,7),(8,8),(9,9);
 # We need the a < 1000 test here to quard against the halloween problems
 UPDATE t1 set a=a+100 where b between 2 and 3 and a < 1000;
+--sorted_result
 SELECT * from t1;
 drop table t1;
 
@@ -967,6 +1018,7 @@ create table t1 (id int primary key auto_increment, fk int, index index_fk (fk))
 
 insert into t1 (id) values (null),(null),(null),(null),(null);
 update t1 set fk=69 where fk is null order by id limit 1;
+--sorted_result
 SELECT * from t1;
 drop table t1;
 
@@ -1059,81 +1111,18 @@ DROP TABLE t2,t1;
 #
 # test for FK cascade depth limit
 #
-call mtr.add_suppression("Cannot delete/update rows with cascading foreign key constraints that exceed max depth of 255. Please drop excessive foreign constraints and try again");
 
 create table t1(
 	id int primary key,
 	pid int,
 	index(pid),
 	foreign key(pid) references t1(id) on delete cascade) engine=innodb;
-insert into t1 values
-(  0,   0), (  1,   0), (  2,   1), (  3,   2),
-(  4,   3), (  5,   4), (  6,   5), (  7,   6),
-(  8,   7), (  9,   8), ( 10,   9), ( 11,  10),
-( 12,  11), ( 13,  12), ( 14,  13), ( 15,  14),
-( 16,  15), ( 17,  16), ( 18,  17), ( 19,  18),
-( 20,  19), ( 21,  20), ( 22,  21), ( 23,  22),
-( 24,  23), ( 25,  24), ( 26,  25), ( 27,  26),
-( 28,  27), ( 29,  28), ( 30,  29), ( 31,  30),
-( 32,  31), ( 33,  32), ( 34,  33), ( 35,  34),
-( 36,  35), ( 37,  36), ( 38,  37), ( 39,  38),
-( 40,  39), ( 41,  40), ( 42,  41), ( 43,  42),
-( 44,  43), ( 45,  44), ( 46,  45), ( 47,  46),
-( 48,  47), ( 49,  48), ( 50,  49), ( 51,  50),
-( 52,  51), ( 53,  52), ( 54,  53), ( 55,  54),
-( 56,  55), ( 57,  56), ( 58,  57), ( 59,  58),
-( 60,  59), ( 61,  60), ( 62,  61), ( 63,  62),
-( 64,  63), ( 65,  64), ( 66,  65), ( 67,  66),
-( 68,  67), ( 69,  68), ( 70,  69), ( 71,  70),
-( 72,  71), ( 73,  72), ( 74,  73), ( 75,  74),
-( 76,  75), ( 77,  76), ( 78,  77), ( 79,  78),
-( 80,  79), ( 81,  80), ( 82,  81), ( 83,  82),
-( 84,  83), ( 85,  84), ( 86,  85), ( 87,  86),
-( 88,  87), ( 89,  88), ( 90,  89), ( 91,  90),
-( 92,  91), ( 93,  92), ( 94,  93), ( 95,  94),
-( 96,  95), ( 97,  96), ( 98,  97), ( 99,  98),
-(100,  99), (101, 100), (102, 101), (103, 102),
-(104, 103), (105, 104), (106, 105), (107, 106),
-(108, 107), (109, 108), (110, 109), (111, 110),
-(112, 111), (113, 112), (114, 113), (115, 114),
-(116, 115), (117, 116), (118, 117), (119, 118),
-(120, 119), (121, 120), (122, 121), (123, 122),
-(124, 123), (125, 124), (126, 125), (127, 126),
-(128, 127), (129, 128), (130, 129), (131, 130),
-(132, 131), (133, 132), (134, 133), (135, 134),
-(136, 135), (137, 136), (138, 137), (139, 138),
-(140, 139), (141, 140), (142, 141), (143, 142),
-(144, 143), (145, 144), (146, 145), (147, 146),
-(148, 147), (149, 148), (150, 149), (151, 150),
-(152, 151), (153, 152), (154, 153), (155, 154),
-(156, 155), (157, 156), (158, 157), (159, 158),
-(160, 159), (161, 160), (162, 161), (163, 162),
-(164, 163), (165, 164), (166, 165), (167, 166),
-(168, 167), (169, 168), (170, 169), (171, 170),
-(172, 171), (173, 172), (174, 173), (175, 174),
-(176, 175), (177, 176), (178, 177), (179, 178),
-(180, 179), (181, 180), (182, 181), (183, 182),
-(184, 183), (185, 184), (186, 185), (187, 186),
-(188, 187), (189, 188), (190, 189), (191, 190),
-(192, 191), (193, 192), (194, 193), (195, 194),
-(196, 195), (197, 196), (198, 197), (199, 198),
-(200, 199), (201, 200), (202, 201), (203, 202),
-(204, 203), (205, 204), (206, 205), (207, 206),
-(208, 207), (209, 208), (210, 209), (211, 210),
-(212, 211), (213, 212), (214, 213), (215, 214),
-(216, 215), (217, 216), (218, 217), (219, 218),
-(220, 219), (221, 220), (222, 221), (223, 222),
-(224, 223), (225, 224), (226, 225), (227, 226),
-(228, 227), (229, 228), (230, 229), (231, 230),
-(232, 231), (233, 232), (234, 233), (235, 234),
-(236, 235), (237, 236), (238, 237), (239, 238),
-(240, 239), (241, 240), (242, 241), (243, 242),
-(244, 243), (245, 244), (246, 245), (247, 246),
-(248, 247), (249, 248), (250, 249), (251, 250),
-(252, 251), (253, 252), (254, 253), (255, 254);
+insert into t1 values(0,0),(1,0),(2,1),(3,2),(4,3),(5,4),(6,5),(7,6),
+(8,7),(9,8),(10,9),(11,10),(12,11),(13,12),(14,13),(15,14);
+
 --error ER_FK_DEPTH_EXCEEDED
 delete from t1 where id=0;
-delete from t1 where id=255;
+delete from t1 where id=15;
 delete from t1 where id=0;
 
 drop table t1;
@@ -1260,8 +1249,6 @@ drop table t2;
 
 # Test error handling
 
-# Embedded server doesn't chdir to data directory
---replace_result $MYSQLTEST_VARDIR . master-data/ ''
 --error ER_WRONG_FK_DEF
 create table t2 (id int(11) not null, id2 int(11) not null, constraint t1_id_fk foreign key (id2,id) references t1 (id)) engine = innodb;
 
@@ -1327,6 +1314,7 @@ CREATE TABLE t2 (b_id tinyint(4) NOT NULL default '0',b_a tinyint(4) NOT NULL de
                 CONSTRAINT fk_b_a FOREIGN KEY (b_a) REFERENCES t1 (a_id) ON DELETE CASCADE ON UPDATE NO ACTION) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 --enable_warnings
 INSERT INTO t2 VALUES (1,1),(2,1),(3,1),(4,2),(5,2);
+--replace_result 3,2,1 1,2,3 5,4 4,5
 SELECT * FROM (SELECT t1.*,GROUP_CONCAT(t2.b_id SEPARATOR ',') as b_list FROM (t1 LEFT JOIN (t2) on t1.a_id = t2.b_a) GROUP BY t1.a_id ) AS xyz;
 DROP TABLE t2;
 DROP TABLE t1;
@@ -1400,9 +1388,9 @@ drop table t1;
 SELECT variable_value FROM performance_schema.global_status WHERE LOWER(variable_name) = 'innodb_buffer_pool_pages_total';
 --replace_result 4096 {checked_valid} 8192 {checked_valid} 16384 {checked_valid}
 SELECT variable_value FROM performance_schema.global_status WHERE LOWER(variable_name) = 'innodb_page_size';
-SELECT variable_value - @innodb_rows_deleted_orig FROM performance_schema.global_status WHERE LOWER(variable_name) = 'innodb_rows_deleted';
-SELECT variable_value - @innodb_rows_inserted_orig FROM performance_schema.global_status WHERE LOWER(variable_name) = 'innodb_rows_inserted';
-SELECT variable_value - @innodb_rows_updated_orig FROM performance_schema.global_status WHERE LOWER(variable_name) = 'innodb_rows_updated';
+SELECT sum(variable_value) - @innodb_rows_deleted_orig FROM performance_schema.global_status WHERE LOWER(variable_name) like 'innodb%_rows_deleted';
+SELECT sum(variable_value) - @innodb_rows_inserted_orig FROM performance_schema.global_status WHERE LOWER(variable_name) like 'innodb%_rows_inserted';
+SELECT sum(variable_value) - @innodb_rows_updated_orig FROM performance_schema.global_status WHERE LOWER(variable_name) like 'innodb%_rows_updated';
 --enable_warnings
 
 # Test for row locks InnoDB status variables.
@@ -1466,11 +1454,14 @@ set session old_alter_table=0;
 #
 # Some errors/warnings on create
 #
-SET sql_mode = 'NO_ENGINE_SUBSTITUTION';
-# Embedded server doesn't chdir to data directory
---replace_result $MYSQLTEST_VARDIR . master-data/ ''
+
+# Enabling the default 'strict' mode since as part of fix for bug#26848813, an
+# error is reported when index> 767 bytes and in non-strict mode only a warning
+# is reported.
+SET sql_mode = 'NO_ENGINE_SUBSTITUTION,STRICT_TRANS_TABLES';
 --error ER_TOO_LONG_KEY,ER_INDEX_COLUMN_TOO_LONG
 create table t1 (v varchar(65530), key(v)) charset latin1 ROW_FORMAT=COMPACT;
+SET sql_mode = 'NO_ENGINE_SUBSTITUTION';
 create table t1 (v varchar(65536));
 show create table t1;
 drop table t1;
@@ -1501,12 +1492,14 @@ drop table t1;
 CREATE TABLE t1 ( `a` int(11) NOT NULL auto_increment, `b` int(11) default NULL,PRIMARY KEY  (`a`),UNIQUE KEY `b` (`b`)) ENGINE=innodb;
 insert into t1 (b) values (1);
 replace into t1 (b) values (2), (1), (3);
+--sorted_result
 select * from t1;
 truncate table t1;
 insert into t1 (b) values (1);
 replace into t1 (b) values (2);
 replace into t1 (b) values (1);
 replace into t1 (b) values (3);
+--sorted_result
 select * from t1;
 drop table t1;
 
@@ -1647,7 +1640,7 @@ INSERT INTO t2 VALUES(1);
 --error 1451
 DELETE FROM t1 WHERE id = 1;
 
---error 1217
+--error ER_FK_CANNOT_DROP_PARENT
 DROP TABLE t1;
 
 SET FOREIGN_KEY_CHECKS=0;
@@ -1705,10 +1698,9 @@ disconnect b;
 # tests for bugs #9802 and #13778
 
 # test that FKs between invalid types are not accepted
-
 set foreign_key_checks=0;
 create table t2 (a int primary key, b int, foreign key (b) references t1(a)) engine = innodb;
--- error ER_CANNOT_ADD_FOREIGN
+--error ER_FK_INCOMPATIBLE_COLUMNS
 create table t1(a char(10) primary key, b varchar(20)) engine = innodb;
 set foreign_key_checks=1;
 drop table t2;
@@ -1718,7 +1710,7 @@ drop table t2;
 
 set foreign_key_checks=0;
 create table t1(a varchar(10) primary key) engine = innodb DEFAULT CHARSET=latin1;
--- error ER_CANNOT_ADD_FOREIGN
+--error ER_FK_INCOMPATIBLE_COLUMNS
 create table t2 (a varchar(10), foreign key (a) references t1(a)) engine = innodb DEFAULT CHARSET=utf8;
 set foreign_key_checks=1;
 drop table t1;
@@ -1728,7 +1720,7 @@ drop table t1;
 set foreign_key_checks=0;
 create table t2 (a varchar(10), foreign key (a) references t1(a)) engine = innodb;
 create table t1(a varchar(10) primary key) engine = innodb;
--- error 1025,1025
+--error ER_FK_INCOMPATIBLE_COLUMNS
 alter table t1 modify column a int;
 set foreign_key_checks=1;
 drop table t2,t1;
@@ -1747,9 +1739,7 @@ drop table t2,t1;
 set foreign_key_checks=0;
 create table t2 (a varchar(10), foreign key (a) references t1(a)) engine = innodb DEFAULT CHARSET=latin1;
 create table t3(a varchar(10) primary key) engine = innodb DEFAULT CHARSET=utf8;
-# Embedded server doesn't chdir to data directory
---replace_result $MYSQLD_DATADIR ./ master-data/ ''
--- error 1025
+--error ER_FK_INCOMPATIBLE_COLUMNS
 rename table t3 to t1;
 set foreign_key_checks=1;
 drop table t2,t3;
@@ -2454,53 +2444,6 @@ SELECT * FROM t1;
 DROP TABLE t1;
 
 #
-# Bug #21409 Incorrect result returned when in READ-COMMITTED with
-# query_cache ON
-#
-CONNECT (c1,localhost,root,,);
-CONNECT (c2,localhost,root,,);
-CONNECTION c1;
-SET binlog_format='MIXED';
-SET TX_ISOLATION='read-committed';
-SET AUTOCOMMIT=0;
-DROP TABLE IF EXISTS t1, t2;
-CREATE TABLE t1 ( a int ) ENGINE=InnoDB;
-CREATE TABLE t2 LIKE t1;
-SELECT * FROM t2;
-CONNECTION c2;
-SET binlog_format='MIXED';
-SET TX_ISOLATION='read-committed';
-SET AUTOCOMMIT=0;
-INSERT INTO t1 VALUES (1);
-COMMIT;
-CONNECTION c1;
-SELECT * FROM t1 WHERE a=1;
-DISCONNECT c1;
-DISCONNECT c2;
-CONNECT (c1,localhost,root,,);
-CONNECT (c2,localhost,root,,);
-CONNECTION c1;
-SET binlog_format='MIXED';
-SET TX_ISOLATION='read-committed';
-SET AUTOCOMMIT=0;
-SELECT * FROM t2;
-CONNECTION c2;
-SET binlog_format='MIXED';
-SET TX_ISOLATION='read-committed';
-SET AUTOCOMMIT=0;
-INSERT INTO t1 VALUES (2);
-COMMIT;
-CONNECTION c1;
-# The result set below should be the same for both selects
-SELECT * FROM t1 WHERE a=2;
-SELECT * FROM t1 WHERE a=2;
-DROP TABLE t1;
-DROP TABLE t2;
-DISCONNECT c1;
-DISCONNECT c2;
-CONNECTION default;
-
-#
 # Bug #29157 UPDATE, changed rows incorrect
 #
 create table t1 (i int, j int) engine=innodb;
@@ -2612,8 +2555,10 @@ show create table t1;
 --enable_result_log
 --enable_query_log
 flush status;
+--skip_if_hypergraph  # Depends on the query plan.
 show status like "handler_read_key";
 select f1 from t1;
+--skip_if_hypergraph  # Depends on the query plan.
 show status like "handler_read_key";
 drop table t1;
 
@@ -2630,7 +2575,9 @@ INSERT INTO t2 VALUES(0);
 INSERT INTO t1 VALUES(0);
 ROLLBACK;
 
+--sorted_result
 SELECT * FROM t1;
+--sorted_result
 SELECT * FROM t2;
 
 START TRANSACTION READ ONLY;
@@ -2646,7 +2593,9 @@ INSERT INTO t2 VALUES(3);
 INSERT INTO t1 VALUES(0);
 COMMIT;
 
+--sorted_result
 SELECT * FROM t1;
+--sorted_result
 SELECT * FROM t2;
 
 DROP TABLE t2;
@@ -2665,7 +2614,9 @@ INSERT INTO t2 VALUES(NULL,1),(NULL,2),(NULL,3);
 INSERT INTO t1 VALUES(0);
 ROLLBACK;
 
+--sorted_result
 SELECT * FROM t1;
+--sorted_result
 SELECT * FROM t2;
 
 START TRANSACTION READ ONLY;
@@ -2682,7 +2633,9 @@ INSERT INTO t1 VALUES(0);
 COMMIT;
 
 SHOW CREATE TABLE t2;
+--sorted_result
 SELECT * FROM t1;
+--sorted_result
 SELECT * FROM t2;
 
 DROP TABLE t1;
@@ -2704,3 +2657,44 @@ DROP TABLE t2;
 # (otherwise your changes may be erased).                             #
 #                                                                     #
 #######################################################################
+
+SET @old_log_bin_trust_function_creators= @@global.log_bin_trust_function_creators;
+connect (a,localhost,root,,);
+connect (b,localhost,root,,);
+
+#
+# BUG#11238 - in prelocking mode SELECT .. FOR UPDATE is changed to
+# non-blocking SELECT
+#
+SET GLOBAL log_bin_trust_function_creators = 1;
+create table t1 (col1 integer primary key, col2 integer) engine=innodb;
+insert t1 values (1,100);
+delimiter |;
+create function f1 () returns integer begin
+declare var1 int;
+select col2 into var1 from t1 where col1=1 for update;
+return var1;
+end|
+delimiter ;|
+start transaction;
+select f1();
+connection b;
+send update t1 set col2=0 where col1=1;
+connection a;
+select * from t1;
+rollback;
+connection b;
+reap;
+rollback;
+
+# Cleanup
+connection a;
+disconnect a;
+--source include/wait_until_disconnected.inc
+connection b;
+disconnect b;
+--source include/wait_until_disconnected.inc
+connection default;
+drop table t1;
+drop function f1;
+SET @@global.log_bin_trust_function_creators= @old_log_bin_trust_function_creators;

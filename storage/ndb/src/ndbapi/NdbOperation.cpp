@@ -1,14 +1,21 @@
 /*
-   Copyright (c) 2003, 2016, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2003, 2019, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -83,6 +90,7 @@ NdbOperation::NdbOperation(Ndb* aNdb, NdbOperation::Type aType) :
  *****************************************************************************/
 NdbOperation::~NdbOperation( )
 {
+  assert(theRequest == NULL);  // The same as theTCREQ
 }
 /******************************************************************************
  *void setErrorCode(int anErrorCode);
@@ -135,7 +143,6 @@ NdbOperation::setErrorCodeAbort(int anErrorCode) const
 int
 NdbOperation::init(const NdbTableImpl* tab, NdbTransaction* myConnection)
 {
-  NdbApiSignal* tSignal;
   theStatus		= Init;
   theError.code		= 0;
   theErrorLine		= 1;
@@ -175,8 +182,15 @@ NdbOperation::init(const NdbTableImpl* tab, NdbTransaction* myConnection)
   m_interpreted_code = NULL;
   m_extraSetValues = NULL;
   m_numExtraSetValues = 0;
+  m_customData = NULL;
 
-  tSignal = theNdb->getSignal();
+  if (theReceiver.init(NdbReceiver::NDB_OPERATION, this))
+  {
+    // theReceiver sets the error code of its owner
+    return -1;
+  }
+
+  NdbApiSignal* tSignal = theNdb->getSignal();
   if (tSignal == NULL)
   {
     setErrorCode(4000);
@@ -190,12 +204,6 @@ NdbOperation::init(const NdbTableImpl* tab, NdbTransaction* myConnection)
   tcKeyReq->scanInfo = 0;
   theKEYINFOptr = &tcKeyReq->keyInfo[0];
   theATTRINFOptr = &tcKeyReq->attrInfo[0];
-  if (theReceiver.init(NdbReceiver::NDB_OPERATION, this))
-  {
-    // theReceiver sets the error code of its owner
-    return -1;
-  }
-  m_customData = NULL;
 
   if (theNdb->theImpl->get_ndbapi_config_parameters().m_default_queue_option)
     m_flags |= OF_QUEUEABLE;
@@ -230,6 +238,13 @@ NdbOperation::release()
 
   theLockHandle = NULL;
   m_blob_lock_upgraded = false;
+
+#ifndef NDEBUG
+  // Poison members to detect late usage
+  m_accessTable = m_currentTable = (NdbTableImpl*) 0x1;
+  theNdbCon = (NdbTransaction*) 0x1;
+  m_key_record = m_attribute_record = (NdbRecord*) 0x1;
+#endif
 }
 
 void
@@ -554,13 +569,6 @@ NdbOperation::getLockHandleImpl()
 {
   assert(! theLockHandle);
   
-  if (unlikely(theNdb->getMinDbNodeVersion() < 
-               NDBD_UNLOCK_OP_SUPPORTED))
-  {
-    /* Function not implemented yet */
-    return 4003;
-  }
-
   if (likely(((theOperationType == ReadRequest) ||
               (theOperationType == ReadExclusive)) &&
              (m_type == PrimaryKeyAccess) &&

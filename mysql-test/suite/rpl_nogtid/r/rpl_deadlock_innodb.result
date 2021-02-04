@@ -10,20 +10,20 @@ CREATE TABLE t3 (a INT NOT NULL, KEY(a)) ENGINE=innodb;
 SHOW CREATE TABLE t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
-  `a` int(11) NOT NULL,
+  `a` int NOT NULL,
   KEY `a` (`a`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
 SHOW CREATE TABLE t2;
 Table	Create Table
 t2	CREATE TABLE `t2` (
-  `a` int(11) DEFAULT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  `a` int DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
 SHOW CREATE TABLE t3;
 Table	Create Table
 t3	CREATE TABLE `t3` (
-  `a` int(11) NOT NULL,
+  `a` int NOT NULL,
   KEY `a` (`a`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
 SELECT @@GLOBAL.slave_transaction_retries;
 @@GLOBAL.slave_transaction_retries
 2
@@ -62,12 +62,14 @@ a
 include/stop_slave.inc
 DELETE FROM t2;
 RESET MASTER;
-CHANGE MASTER TO MASTER_LOG_POS=MASTER_POS_BEGIN;
+CHANGE REPLICATION SOURCE TO SOURCE_LOG_POS=MASTER_POS_BEGIN;
 BEGIN;
 SELECT * FROM t1 FOR UPDATE;
 a
 1
 START SLAVE;
+Warnings:
+Warning	1287	'START SLAVE' is deprecated and will be removed in a future release. Please use START REPLICA instead
 include/wait_for_slave_sql_error.inc [errno=1205]
 SELECT COUNT(*) FROM t2;
 COUNT(*)
@@ -90,13 +92,15 @@ SET global max_relay_log_size=0;
 include/stop_slave.inc
 DELETE FROM t2;
 RESET MASTER;
-CHANGE MASTER TO MASTER_LOG_POS=MASTER_POS_BEGIN;
+CHANGE REPLICATION SOURCE TO SOURCE_LOG_POS=MASTER_POS_BEGIN;
 BEGIN;
 SELECT * FROM t1 FOR UPDATE;
 a
 1
 1
 START SLAVE;
+Warnings:
+Warning	1287	'START SLAVE' is deprecated and will be removed in a future release. Please use START REPLICA instead
 include/wait_for_slave_sql_error.inc [errno=1205]
 SELECT COUNT(*) FROM t2;
 COUNT(*)
@@ -135,6 +139,8 @@ SELECT count(*) as zero FROM t1 FOR UPDATE;
 zero
 0
 START SLAVE;
+Warnings:
+Warning	1287	'START SLAVE' is deprecated and will be removed in a future release. Please use START REPLICA instead
 *** Now the slave must be stopped due to timeout ***
 include/wait_for_slave_sql_error.inc [errno=1205]
 rollback;

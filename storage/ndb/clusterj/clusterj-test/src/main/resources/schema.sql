@@ -1,20 +1,25 @@
--- Copyright (c) 2009, 2016, Oracle and/or its affiliates. All rights
+-- Copyright (c) 2009, 2018, Oracle and/or its affiliates. All rights
 -- reserved.
 --
--- This program is free software; you can redistribute it and/or
--- modify it under the terms of the GNU General Public License
--- as published by the Free Software Foundation; version 2 of
--- the License.
+-- This program is free software; you can redistribute it and/or modify
+-- it under the terms of the GNU General Public License, version 2.0,
+-- as published by the Free Software Foundation.
+--
+-- This program is also distributed with certain software (including
+-- but not limited to OpenSSL) that is licensed under separate terms,
+-- as designated in a particular file or component or in included license
+-- documentation.  The authors of MySQL hereby grant you an additional
+-- permission to link the program and your derivative works with the
+-- separately licensed software that they have included with MySQL.
 --
 -- This program is distributed in the hope that it will be useful,
 -- but WITHOUT ANY WARRANTY; without even the implied warranty of
--- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
--- GNU General Public License for more details.
+-- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+-- GNU General Public License, version 2.0, for more details.
 --
 -- You should have received a copy of the GNU General Public License
 -- along with this program; if not, write to the Free Software
--- Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
--- 02110-1301  USA
+-- Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
 --
 # the first statement is a drop table for the test table
 drop table if exists t_basic;
@@ -278,9 +283,12 @@ CREATE TABLE b0 (
 drop table if exists blobtypes;
 create table blobtypes (
  id int not null primary key,
+ id_null_none int,
+ id_null_hash int,
 
  blobbytes blob,
- blobstream blob
+
+ unique key idx_id_null_hash (id_null_hash) using hash
 
 ) ENGINE=ndbcluster DEFAULT CHARSET=latin1;
 
@@ -647,6 +655,53 @@ create table bigintegertypes (
 
 ) ENGINE=ndbcluster DEFAULT CHARSET=latin1;
 
+drop table if exists mediumintegertypes;
+create table mediumintegertypes (
+ id int not null primary key,
+
+ medium_null_hash mediumint,
+ medium_null_btree mediumint,
+ medium_null_both mediumint,
+ medium_null_none mediumint,
+
+ medium_not_null_hash mediumint not null,
+ medium_not_null_btree mediumint not null,
+ medium_not_null_both mediumint not null,
+ medium_not_null_none mediumint not null,
+
+ unique key idx_medium_null_hash (medium_null_hash) using hash,
+ key idx_medium_null_btree (medium_null_btree),
+ unique key idx_medium_null_both (medium_null_both),
+
+ unique key idx_medium_not_null_hash (medium_not_null_hash) using hash,
+ key idx_medium_not_null_btree (medium_not_null_btree),
+ unique key idx_medium_not_null_both (medium_not_null_both)
+
+) ENGINE=ndbcluster DEFAULT CHARSET=latin1;
+
+drop table if exists mediumunsignedtypes;
+create table mediumunsignedtypes (
+ id int not null primary key,
+
+ medium_unsigned_null_hash mediumint unsigned,
+ medium_unsigned_null_btree mediumint unsigned,
+ medium_unsigned_null_both mediumint unsigned,
+ medium_unsigned_null_none mediumint unsigned,
+
+ medium_unsigned_not_null_hash mediumint unsigned not null,
+ medium_unsigned_not_null_btree mediumint unsigned not null,
+ medium_unsigned_not_null_both mediumint unsigned not null,
+ medium_unsigned_not_null_none mediumint unsigned not null,
+
+ unique key idx_medium_unsigned_null_hash (medium_unsigned_null_hash) using hash,
+ key idx_medium_unsigned_null_btree (medium_unsigned_null_btree),
+ unique key idx_medium_unsigned_null_both (medium_unsigned_null_both),
+
+ unique key idx_medium_unsigned_not_null_hash (medium_unsigned_not_null_hash) using hash,
+ key idx_medium_unsigned_not_null_btree (medium_unsigned_not_null_btree),
+ unique key idx_medium_unsigned_not_null_both (medium_unsigned_not_null_both)
+
+) ENGINE=ndbcluster DEFAULT CHARSET=latin1;
 drop table if exists timestamptypes;
 create table timestamptypes (
  id int not null primary key,
@@ -794,6 +849,12 @@ create table autopkbigint (
   val bigint
 ) ENGINE=ndb;
 
+drop table if exists autopkmediumint;
+create table autopkmediumint (
+  id mediumint primary key auto_increment,
+  val mediumint
+) ENGINE=ndb;
+
 drop table if exists autopkint;
 create table autopkint (
   id int primary key auto_increment,
@@ -938,7 +999,7 @@ create table `hope` (
   str_col2 varchar(3000),
   str_col3 varchar(3000),
   PRIMARY KEY (partition_id, id)
-  ) ENGINE=ndbcluster partition by key (partition_id);
+  ) ENGINE=ndbcluster DEFAULT CHARSET=latin1 partition by key (partition_id);
 
 create database if not exists test2;
 use test2;

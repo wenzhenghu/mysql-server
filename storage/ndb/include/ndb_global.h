@@ -1,14 +1,21 @@
 /*
-   Copyright (c) 2004, 2017, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2004, 2020, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -18,21 +25,12 @@
 #ifndef NDB_GLOBAL_H
 #define NDB_GLOBAL_H
 
-#ifdef _WIN32
-/* Workaround for Bug#32082: VOID refdefinition results in compile errors */
-#ifndef DONT_DEFINE_VOID
-#define DONT_DEFINE_VOID
-#endif
-#endif
-
 #include <errno.h>
 #include <math.h>
 #include <stddef.h>
 #include <stdio.h>
 #include "my_dbug.h"
 #include "my_inttypes.h"
-#include "my_systime.h"
-#include <mysql/service_my_snprintf.h>
 #include <mysql/service_mysql_alloc.h>
 #ifdef HAVE_UNISTD_H
 #include <unistd.h>
@@ -40,8 +38,11 @@
 #ifdef HAVE_SYS_TIME_H
 #include <sys/time.h>
 #endif
-#ifdef _WIN32
-#include <process.h>
+
+/* Legacy definitions. */
+#ifndef TRUE
+#define TRUE true
+#define FALSE false
 #endif
 
 /*
@@ -77,20 +78,20 @@
 #define NDB_PORT 1186
 #endif
 
-#if defined(_WIN32)
-#define NDB_WIN32 1
-#define NDB_WIN 1
-#define PATH_MAX 256
+#ifdef _WIN32
 #define DIR_SEPARATOR "\\"
+#include <my_systime.h>
+#else
+#define DIR_SEPARATOR "/"
+#endif
+
+#if defined(_WIN32)
+#define PATH_MAX 256
 
 /* Disable a few compiler warnings on Windows */
 /* 4355: 'this': used in base member initializer list */
 #pragma warning(disable: 4355)
 
-#else
-#undef NDB_WIN32
-#undef NDB_WIN
-#define DIR_SEPARATOR "/"
 #endif
 
 #if ! (NDB_SIZEOF_CHAR == SIZEOF_CHAR)
@@ -110,7 +111,7 @@
 #ifdef _AIX
 #undef _H_STRINGS
 #endif
-#include <m_string.h>
+#include "m_string.h"
 
 #ifndef NDB_REMOVE_BZERO
 /*
@@ -129,9 +130,6 @@
 #define bzero(A,B) memset((A),0,(B))
 #endif
 #endif
-
-#include <m_ctype.h>
-#include <ctype.h>
 
 #ifdef HAVE_STDARG_H
 #include <stdarg.h>
@@ -161,10 +159,6 @@
 
 #ifdef HAVE_SYS_MMAN_H
 #include <sys/mman.h>
-#endif
-
-#ifndef HAVE_STRDUP
-extern char * strdup(const char *s);
 #endif
 
 static const char table_name_separator =  '/';
@@ -217,6 +211,7 @@ extern "C" {
 #endif
 
 #define NDB_O_DIRECT_WRITE_ALIGNMENT 512
+#define NDB_O_DIRECT_WRITE_BLOCKSIZE 4096
 
 #ifndef STATIC_ASSERT
 #if defined VM_TRACE
@@ -269,21 +264,21 @@ extern "C" {
 #endif
 
 /**
- *  MY_ATTRIBUTE((noreturn)) was introduce in gcc 2.5
- */
-#ifdef __GNUC__
-#define ATTRIBUTE_NORETURN MY_ATTRIBUTE((noreturn))
-#else
-#define ATTRIBUTE_NORETURN
-#endif
-
-/**
  *  MY_ATTRIBUTE((noinline)) was introduce in gcc 3.1
  */
 #ifdef __GNUC__
 #define ATTRIBUTE_NOINLINE MY_ATTRIBUTE((noinline))
 #else
 #define ATTRIBUTE_NOINLINE
+#endif
+
+/**
+ *  Attribute used for unused function arguments
+ */
+#if defined(__GNUC__) || defined(__clang__)
+#define ATTRIBUTE_UNUSED __attribute__((unused))
+#else
+#define ATTRIBUTE_UNUSED
 #endif
 
 /**
@@ -301,15 +296,15 @@ extern "C" {
 /*
  * require is like a normal assert, only it's always on (eg. in release)
  */
-C_MODE_START
 typedef int(*RequirePrinter)(const char *fmt, ...)
   ATTRIBUTE_FORMAT(printf, 1, 2);
-void require_failed(int exitcode, RequirePrinter p,
-                    const char* expr, const char* file, int line)
-                    ATTRIBUTE_NORETURN;
+[[noreturn]] void require_failed(int exitcode,
+                                 RequirePrinter p,
+                                 const char* expr,
+                                 const char* file,
+                                 int line);
 int ndbout_printer(const char * fmt, ...)
   ATTRIBUTE_FORMAT(printf, 1, 2);
-C_MODE_END
 /*
  *  this allows for an exit() call if exitcode is not zero
  *  and takes a Printer to print the error
@@ -388,7 +383,7 @@ SegmentedSectionPtrPOD::assign(struct SegmentedSectionPtr& src)
 #ifdef __cplusplus
 struct GenericSectionIterator
 {
-  virtual ~GenericSectionIterator() {};
+  virtual ~GenericSectionIterator() {}
   virtual void reset()=0;
   virtual const Uint32* getNextWords(Uint32& sz)=0;
 };

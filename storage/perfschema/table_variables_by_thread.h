@@ -1,13 +1,20 @@
-/* Copyright (c) 2015, 2017, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2015, 2020, Oracle and/or its affiliates.
 
   This program is free software; you can redistribute it and/or modify
-  it under the terms of the GNU General Public License as published by
-  the Free Software Foundation; version 2 of the License.
+  it under the terms of the GNU General Public License, version 2.0,
+  as published by the Free Software Foundation.
+
+  This program is also distributed with certain software (including
+  but not limited to OpenSSL) that is licensed under separate terms,
+  as designated in a particular file or component or in included license
+  documentation.  The authors of MySQL hereby grant you an additional
+  permission to link the program and your derivative works with the
+  separately licensed software that they have included with MySQL.
 
   This program is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  GNU General Public License for more details.
+  GNU General Public License, version 2.0, for more details.
 
   You should have received a copy of the GNU General Public License
   along with this program; if not, write to the Free Software
@@ -23,14 +30,19 @@
 
 #include <sys/types.h>
 
+#include "my_base.h"
 #include "my_inttypes.h"
-#include "pfs_buffer_container.h"
-#include "pfs_column_types.h"
-#include "pfs_engine_table.h"
-#include "pfs_instr.h"
-#include "pfs_instr_class.h"
-#include "pfs_variable.h"
-#include "table_helper.h"
+#include "storage/perfschema/pfs.h"
+#include "storage/perfschema/pfs_buffer_container.h"
+#include "storage/perfschema/pfs_engine_table.h"
+#include "storage/perfschema/pfs_variable.h"
+#include "storage/perfschema/table_helper.h"
+
+class Field;
+class Plugin_table;
+struct PFS_thread;
+struct TABLE;
+struct THR_LOCK;
 
 /**
   @addtogroup performance_schema_tables
@@ -41,8 +53,7 @@
   A row of table
   PERFORMANCE_SCHEMA.VARIABLES_BY_THREAD.
 */
-struct row_variables_by_thread
-{
+struct row_variables_by_thread {
   /** Column THREAD_ID. */
   ulonglong m_thread_internal_id;
   /** Column VARIABLE_NAME. */
@@ -57,51 +68,37 @@ struct row_variables_by_thread
   Index 1 on thread (0 based)
   Index 2 on system variable (0 based)
 */
-struct pos_variables_by_thread : public PFS_double_index
-{
-  pos_variables_by_thread() : PFS_double_index(0, 0)
-  {
-  }
+struct pos_variables_by_thread : public PFS_double_index {
+  pos_variables_by_thread() : PFS_double_index(0, 0) {}
 
-  inline void
-  reset(void)
-  {
+  inline void reset(void) {
     m_index_1 = 0;
     m_index_2 = 0;
   }
 
-  inline bool
-  has_more_thread(void)
-  {
+  inline bool has_more_thread(void) {
     return (m_index_1 < global_thread_container.get_row_count());
   }
 
-  inline void
-  next_thread(void)
-  {
+  inline void next_thread(void) {
     m_index_1++;
     m_index_2 = 0;
   }
 };
 
-class PFS_index_variables_by_thread : public PFS_engine_index
-{
-public:
+class PFS_index_variables_by_thread : public PFS_engine_index {
+ public:
   PFS_index_variables_by_thread()
-    : PFS_engine_index(&m_key_1, &m_key_2),
-      m_key_1("THREAD_ID"),
-      m_key_2("VARIABLE_NAME")
-  {
-  }
+      : PFS_engine_index(&m_key_1, &m_key_2),
+        m_key_1("THREAD_ID"),
+        m_key_2("VARIABLE_NAME") {}
 
-  ~PFS_index_variables_by_thread()
-  {
-  }
+  ~PFS_index_variables_by_thread() override {}
 
   virtual bool match(PFS_thread *pfs);
   virtual bool match(const System_variable *pfs);
 
-private:
+ private:
   PFS_key_thread_id m_key_1;
   PFS_key_variable_name m_key_2;
 };
@@ -110,58 +107,48 @@ private:
   Store and retrieve table state information during queries that reinstantiate
   the table object.
 */
-class table_variables_by_thread_context : public PFS_table_context
-{
-public:
+class table_variables_by_thread_context : public PFS_table_context {
+ public:
   table_variables_by_thread_context(ulonglong hash_version, bool restore)
-    : PFS_table_context(hash_version,
-                        global_thread_container.get_row_count(),
-                        restore,
-                        THR_PFS_VBT)
-  {
-  }
+      : PFS_table_context(hash_version, global_thread_container.get_row_count(),
+                          restore, THR_PFS_VBT) {}
 };
 
 /** Table PERFORMANCE_SCHEMA.VARIABLES_BY_THREAD. */
-class table_variables_by_thread : public PFS_engine_table
-{
+class table_variables_by_thread : public PFS_engine_table {
   typedef pos_variables_by_thread pos_t;
 
-public:
+ public:
   /** Table share */
   static PFS_engine_table_share m_share;
-  static PFS_engine_table *create();
+  static PFS_engine_table *create(PFS_engine_table_share *);
   static ha_rows get_row_count();
 
-  virtual void reset_position(void);
+  void reset_position(void) override;
 
-  virtual int rnd_init(bool scan);
-  virtual int rnd_next();
-  virtual int rnd_pos(const void *pos);
+  int rnd_init(bool scan) override;
+  int rnd_next() override;
+  int rnd_pos(const void *pos) override;
 
-  virtual int index_init(uint idx, bool sorted);
-  virtual int index_next();
+  int index_init(uint idx, bool sorted) override;
+  int index_next() override;
 
-protected:
-  virtual int read_row_values(TABLE *table,
-                              unsigned char *buf,
-                              Field **fields,
-                              bool read_all);
+ protected:
+  int read_row_values(TABLE *table, unsigned char *buf, Field **fields,
+                      bool read_all) override;
   table_variables_by_thread();
 
-public:
-  ~table_variables_by_thread()
-  {
-  }
+ public:
+  ~table_variables_by_thread() override {}
 
-protected:
+ protected:
   int make_row(PFS_thread *thread, const System_variable *system_var);
 
-private:
+ private:
   /** Table share lock. */
   static THR_LOCK m_table_lock;
-  /** Fields definition. */
-  static TABLE_FIELD_DEF m_field_def;
+  /** Table definition. */
+  static Plugin_table m_table_def;
 
   /** Current THD variables. */
   PFS_system_variable_cache m_sysvar_cache;

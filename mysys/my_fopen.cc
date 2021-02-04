@@ -1,17 +1,29 @@
-/* Copyright (c) 2000, 2016, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2000, 2020, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
+
+   Without limiting anything contained in the foregoing, this file,
+   which is part of C Driver for MySQL (Connector/C), is also subject to the
+   Universal FOSS Exception, version 1.0, a copy of which can be found at
+   http://oss.oracle.com/licenses/universal-foss-exception.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA */
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 /**
   @file mysys/my_fopen.cc
@@ -29,141 +41,105 @@
 #include "my_thread_local.h"
 #include "mysql/psi/mysql_mutex.h"
 #include "mysql/service_mysql_alloc.h"
+#include "mysys/mysys_priv.h"
 #include "mysys_err.h"
-#include "mysys_priv.h"
 
+namespace {
+constexpr FILE *nullstream = nullptr;
 
-static void make_ftype(char * to,int flag);
+/**
+   Make a fopen() typestring from a open() type bitmap.
+   This routine attempts to find the best possible match
+   between  a numeric option and a string option that could be
+   fed to fopen. There is not a 1 to 1 mapping between the two.
 
-/*
-  Open a file as stream
+   MAPPING
+   r  == O_RDONLY
+   w  == O_WRONLY|O_TRUNC|O_CREAT
+   a  == O_WRONLY|O_APPEND|O_CREAT
+   r+ == O_RDWR
+   w+ == O_RDWR|O_TRUNC|O_CREAT
+   a+ == O_RDWR|O_APPEND|O_CREAT
 
-  SYNOPSIS
-    my_fopen()
-    FileName	Path-name of file
-    Flags	Read | write | append | trunc (like for open())
-    MyFlags	Flags for handling errors
+   @param to	  String for fopen() is stored here
+   @param flag  Flag used by open()
 
-  RETURN
-    0	Error
-    #	File handler
+   @note On Unix, O_RDONLY is usually 0
 */
 
-FILE *my_fopen(const char *filename, int flags, myf MyFlags)
-{
-  FILE *fd;
+void make_ftype(char *to, int flag) {
+  /* check some possible invalid combinations */
+  DBUG_ASSERT((flag & (O_TRUNC | O_APPEND)) != (O_TRUNC | O_APPEND));
+  DBUG_ASSERT((flag & (O_WRONLY | O_RDWR)) != (O_WRONLY | O_RDWR));
+
+  if ((flag & (O_RDONLY | O_WRONLY)) == O_WRONLY)
+    *to++ = (flag & O_APPEND) ? 'a' : 'w';
+  else if (flag & O_RDWR) {
+    /* Add '+' after these */
+    if (flag & (O_TRUNC | O_CREAT))
+      *to++ = 'w';
+    else if (flag & O_APPEND)
+      *to++ = 'a';
+    else
+      *to++ = 'r';
+    *to++ = '+';
+  } else
+    *to++ = 'r';
+
+  if (flag & MY_FOPEN_BINARY) *to++ = 'b';
+
+  *to = '\0';
+}
+}  // namespace
+
+/**
+  Open a file as stream.
+
+  @param filename   Path-name of file
+  @param flags	    Read | write | append | trunc (like for open())
+  @param MyFlags    Flags for handling errors
+
+  @retval nullptr in case of errors
+  @retval FILE pointer otherwise
+*/
+
+FILE *my_fopen(const char *filename, int flags, myf MyFlags) {
+  DBUG_TRACE;
+
   char type[5];
-  char *dup_filename= NULL;
-  DBUG_ENTER("my_fopen");
-  DBUG_PRINT("my",("Name: '%s'  flags: %d  MyFlags: %d",
-		   filename, flags, MyFlags));
+  make_ftype(type, flags);
 
-  make_ftype(type,flags);
-
+  FILE *stream = nullptr;
 #ifdef _WIN32
-  fd= my_win_fopen(filename, type);
+  stream = my_win_fopen(filename, type);
 #else
-  fd= fopen(filename, type);
+  stream = mysys_priv::RetryOnEintr([&]() { return fopen(filename, type); },
+                                    nullstream);
 #endif
-  if (fd != 0)
-  {
-    /*
-      The test works if MY_NFILE < 128. The problem is that fileno() is char
-      on some OS (SUNOS). Actually the filename save isn't that important
-      so we can ignore if this doesn't work.
-    */
 
-    int filedesc= my_fileno(fd);
-    if ((uint)filedesc >= my_file_limit)
-    {
-      mysql_mutex_lock(&THR_LOCK_open);
-      my_stream_opened++;
-      mysql_mutex_unlock(&THR_LOCK_open);
-      DBUG_RETURN(fd);				/* safeguard */
-    }
-    dup_filename= my_strdup(key_memory_my_file_info, filename, MyFlags);
-    if (dup_filename != NULL)
-    {
-      mysql_mutex_lock(&THR_LOCK_open);
-      my_file_info[filedesc].name= dup_filename;
-      my_stream_opened++;
-      my_file_total_opened++;
-      my_file_info[filedesc].type= STREAM_BY_FOPEN;
-      mysql_mutex_unlock(&THR_LOCK_open);
-      DBUG_PRINT("exit",("stream: %p", fd));
-      DBUG_RETURN(fd);
-    }
-    (void) my_fclose(fd,MyFlags);
-    set_my_errno(ENOMEM);
-  }
-  else
+  if (stream == nullptr) {
     set_my_errno(errno);
-  DBUG_PRINT("error",("Got error %d on open",my_errno()));
-  if (MyFlags & (MY_FFNF | MY_FAE | MY_WME))
-  {
-    char errbuf[MYSYS_STRERROR_SIZE];
-    my_error((flags & O_RDONLY) || (flags == O_RDONLY ) ? EE_FILENOTFOUND :
-             EE_CANTCREATEFILE,
-             MYF(0), filename,
-             my_errno(), my_strerror(errbuf, sizeof(errbuf), my_errno()));
-  }
-  DBUG_RETURN((FILE*) 0);
-} /* my_fopen */
-
-
-#if defined(_WIN32)
-
-static FILE *my_win_freopen(const char *path, const char *mode, FILE *stream)
-{
-  int handle_fd, fd= _fileno(stream);
-  HANDLE osfh;
-
-  DBUG_ASSERT(path && stream);
-
-  /* Services don't have stdout/stderr on Windows, so _fileno returns -1. */
-  if (fd < 0)
-  {
-    if (!freopen(path, mode, stream))
-      return NULL;
-
-    fd= _fileno(stream);
+    DBUG_PRINT("error", ("Got error %d on open", my_errno()));
+    if (MyFlags & (MY_FAE | MY_WME)) {
+      MyOsError(my_errno(),
+                ((flags & O_RDONLY) || (flags == O_RDONLY) ? EE_FILENOTFOUND
+                                                           : EE_CANTCREATEFILE),
+                MYF(0), filename);
+    }
+    return nullptr;
   }
 
-  if ((osfh= CreateFile(path, GENERIC_READ | GENERIC_WRITE,
-                        FILE_SHARE_READ | FILE_SHARE_WRITE |
-                        FILE_SHARE_DELETE, NULL,
-                        OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL,
-                        NULL)) == INVALID_HANDLE_VALUE)
-  {
-    _close(fd);
-    return NULL;
-  }
-
-  if ((handle_fd= _open_osfhandle((intptr_t)osfh,
-                                  _O_APPEND | _O_TEXT)) == -1)
-  {
-    CloseHandle(osfh);
-    return NULL;
-  }
-
-  if (_dup2(handle_fd, fd) < 0)
-  {
-    CloseHandle(osfh);
-    return NULL;
-  }
-
-  _close(handle_fd);
+  File fd = my_fileno(stream);
+  file_info::RegisterFilename(fd, filename,
+                              file_info::OpenType::STREAM_BY_FOPEN);
 
   return stream;
 }
 
-#endif
-
-
 /**
   Change the file associated with a file stream.
 
-  @param path   Path to file.
+  @param filename   Path to file.
   @param mode   Mode of the stream.
   @param stream File stream.
 
@@ -174,157 +150,90 @@ static FILE *my_win_freopen(const char *path, const char *mode, FILE *stream)
   @retval A FILE pointer on success. Otherwise, NULL.
 */
 
-FILE *my_freopen(const char *path, const char *mode, FILE *stream)
-{
-  FILE *result;
-
+FILE *my_freopen(const char *filename, const char *mode, FILE *stream) {
 #if defined(_WIN32)
-  result= my_win_freopen(path, mode, stream);
+  return my_win_freopen(filename, mode, stream);
 #else
-  result= freopen(path, mode, stream);
+  return mysys_priv::RetryOnEintr(
+      [&]() { return freopen(filename, mode, stream); }, nullstream);
 #endif
-
-  return result;
 }
 
+/**
+   Close a stream.
 
-/* Close a stream */
-int my_fclose(FILE *fd, myf MyFlags)
-{
-  int err,file;
-  DBUG_ENTER("my_fclose");
-  DBUG_PRINT("my",("stream: %p  MyFlags: %d", fd, MyFlags));
+   @param stream   FILE stream to close.
+   @param MyFlags  Flags controlling error reporting.
 
-  mysql_mutex_lock(&THR_LOCK_open);
-  file= my_fileno(fd);
-#ifndef _WIN32
-  err= fclose(fd);
-#else
-  err= my_win_fclose(fd);
-#endif
-  if(err < 0)
-  {
-    set_my_errno(errno);
-    if (MyFlags & (MY_FAE | MY_WME))
-    {
-      char errbuf[MYSYS_STRERROR_SIZE];
-      my_error(EE_BADCLOSE, MYF(0), my_filename(file),
-               my_errno(), my_strerror(errbuf, sizeof(errbuf), my_errno()));
-    }
-  }
-  else
-    my_stream_opened--;
-  if ((uint) file < my_file_limit && my_file_info[file].type != UNOPEN)
-  {
-    my_file_info[file].type = UNOPEN;
-    my_free(my_file_info[file].name);
-  }
-  mysql_mutex_unlock(&THR_LOCK_open);
-  DBUG_RETURN(err);
-} /* my_fclose */
-
-
-	/* Make a stream out of a file handle */
-	/* Name may be 0 */
-
-FILE *my_fdopen(File Filedes, const char *name, int Flags, myf MyFlags)
-{
-  FILE *fd;
-  char type[5];
-  DBUG_ENTER("my_fdopen");
-  DBUG_PRINT("my",("Fd: %d  Flags: %d  MyFlags: %d",
-		   Filedes, Flags, MyFlags));
-
-  make_ftype(type,Flags);
-#ifdef _WIN32
-  fd= my_win_fdopen(Filedes, type);
-#else
-  fd= fdopen(Filedes, type);
-#endif
-  if (!fd)
-  {
-    set_my_errno(errno);
-    if (MyFlags & (MY_FAE | MY_WME))
-    {
-      char errbuf[MYSYS_STRERROR_SIZE];
-      my_error(EE_CANT_OPEN_STREAM, MYF(0),
-               my_errno(), my_strerror(errbuf, sizeof(errbuf), my_errno()));
-    }
-  }
-  else
-  {
-    mysql_mutex_lock(&THR_LOCK_open);
-    my_stream_opened++;
-    if ((uint) Filedes < (uint) my_file_limit)
-    {
-      if (my_file_info[Filedes].type != UNOPEN)
-      {
-        my_file_opened--;		/* File is opened with my_open ! */
-      }
-      else
-      {
-        my_file_info[Filedes].name= my_strdup(key_memory_my_file_info,
-                                              name,MyFlags);
-      }
-      my_file_info[Filedes].type = STREAM_BY_FDOPEN;
-    }
-    mysql_mutex_unlock(&THR_LOCK_open);
-  }
-
-  DBUG_PRINT("exit",("stream: %p", fd));
-  DBUG_RETURN(fd);
-} /* my_fdopen */
-
-
-/*   
-  Make a fopen() typestring from a open() type bitmap
-
-  SYNOPSIS
-    make_ftype()
-    to		String for fopen() is stored here
-    flag	Flag used by open()
-
-  IMPLEMENTATION
-    This routine attempts to find the best possible match 
-    between  a numeric option and a string option that could be 
-    fed to fopen.  There is not a 1 to 1 mapping between the two.  
-  
-  NOTE
-    On Unix, O_RDONLY is usually 0
-
-  MAPPING
-    r  == O_RDONLY   
-    w  == O_WRONLY|O_TRUNC|O_CREAT  
-    a  == O_WRONLY|O_APPEND|O_CREAT  
-    r+ == O_RDWR  
-    w+ == O_RDWR|O_TRUNC|O_CREAT  
-    a+ == O_RDWR|O_APPEND|O_CREAT
+   @retval 0 on success
+   @retval -1 on error
 */
 
-static void make_ftype(char * to, int flag)
-{
-  /* check some possible invalid combinations */
-  DBUG_ASSERT((flag & (O_TRUNC | O_APPEND)) != (O_TRUNC | O_APPEND));
-  DBUG_ASSERT((flag & (O_WRONLY | O_RDWR)) != (O_WRONLY | O_RDWR));
+int my_fclose(FILE *stream, myf MyFlags) {
+  DBUG_TRACE;
 
-  if ((flag & (O_RDONLY|O_WRONLY)) == O_WRONLY)
-    *to++= (flag & O_APPEND) ? 'a' : 'w';
-  else if (flag & O_RDWR)
-  {
-    /* Add '+' after theese */
-    if (flag & (O_TRUNC | O_CREAT))
-      *to++= 'w';
-    else if (flag & O_APPEND)
-      *to++= 'a';
-    else
-      *to++= 'r';
-    *to++= '+';
+  File fd = my_fileno(stream);
+
+  // Store the filename before unregistering, so that it can be
+  // reported if close() fails.
+  std::string fname = my_filename(fd);
+
+  // Need to remove file_info entry first to avoid race with another
+  // thread reusing this fd after it has been closed.
+  file_info::UnregisterFilename(fd);
+
+  int err = -1;
+#ifndef _WIN32
+  err = mysys_priv::RetryOnEintr([&]() { return fclose(stream); }, -1);
+#else
+  err = my_win_fclose(stream);
+#endif
+  if (err < 0) {
+    set_my_errno(errno);
+    if (MyFlags & (MY_FAE | MY_WME)) {
+      MyOsError(my_errno(), EE_BADCLOSE, MYF(0), fname.c_str());
+    }
   }
-  else
-    *to++= 'r';
 
-  if (flag & MY_FOPEN_BINARY)
-    *to++='b';
+  return err;
+}
 
-  *to='\0';
-} /* make_ftype */
+/**
+   Make a stream out of a file handle.
+
+   @param fd       File descriptor to open a stream to.
+   @param filename Name of file to which the fd refers. May be nullptr.
+   @param flags    Numeric open mode flags (will be converted to string and
+                   passed to fdopen)
+   @param MyFlags  Flags for error handling
+
+   @retval nullptr in case of errors
+   @retval FILE stream if successful
+*/
+
+FILE *my_fdopen(File fd, const char *filename, int flags, myf MyFlags) {
+  DBUG_TRACE;
+
+  char type[5];
+  make_ftype(type, flags);
+
+  FILE *stream = nullptr;
+#ifdef _WIN32
+  stream = my_win_fdopen(fd, type);
+#else
+  stream =
+      mysys_priv::RetryOnEintr([&]() { return fdopen(fd, type); }, nullstream);
+#endif
+
+  if (stream == nullptr) {
+    set_my_errno(errno);
+    if (MyFlags & (MY_FAE | MY_WME)) {
+      MyOsError(my_errno(), EE_CANT_OPEN_STREAM, MYF(0));
+    }
+    return nullptr;
+  }
+
+  file_info::RegisterFilename(fd, filename,
+                              file_info::OpenType::STREAM_BY_FDOPEN);
+  return stream;
+}

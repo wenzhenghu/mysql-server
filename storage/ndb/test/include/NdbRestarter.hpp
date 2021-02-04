@@ -1,14 +1,21 @@
 /*
-   Copyright (c) 2003, 2016, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2003, 2019, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -21,6 +28,8 @@
 #include <mgmapi.h>
 #include <Vector.hpp>
 #include <BaseString.hpp>
+
+#define NDBT_NO_NODE_GROUP_ID (int(-256))
 
 class NdbRestarter {
 public:
@@ -89,6 +98,8 @@ public:
   int waitNodesNoStart(const int * _nodes, int _num_nodes,
 		       unsigned int _timeout = 120); 
 
+  bool checkClusterState(const int * deadnodes, int num_nodes);
+
   int checkClusterAlive(const int * deadnodes, int num_nodes);
 
   int getNumDbNodes();
@@ -109,8 +120,15 @@ public:
   int getMasterNodeId();
   int getNextMasterNodeId(int nodeId);
   int getNodeGroup(int nodeId);
+  int getNodeGroups(Vector<int>& node_groups,
+                    int * max_alive_replicas_ptr = nullptr);
+  int getNumNodeGroups();
+  int getNumReplicas();
+  int getMaxConcurrentNodeFailures();
+  int getMaxFailedNodes();
   int getRandomNodeSameNodeGroup(int nodeId, int randomNumber);
   int getRandomNodeOtherNodeGroup(int nodeId, int randomNumber);
+  int getRandomNodePreferOtherNodeGroup(int nodeId, int randomNumber);
   int getRandomNotMasterNodeId(int randomNumber);
 
   int getMasterNodeVersion(int& version);
@@ -138,6 +156,8 @@ public:
   void setReconnect(bool);
 
   int rollingRestart(Uint32 flags = 0);
+
+  int getNodeConnectCount(int nodeId);
 protected:
 
   int waitClusterState(ndb_mgm_node_status _status,

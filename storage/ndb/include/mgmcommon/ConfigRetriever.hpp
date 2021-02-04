@@ -1,14 +1,21 @@
 /*
-   Copyright (c) 2003, 2010, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2003, 2019, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -28,6 +35,12 @@
  */
 class ConfigRetriever {
 public:
+  // Deleter usable in std::unique for pointer from getConfig().
+  class ConfigDeleter {
+  public:
+    void operator()(ndb_mgm_configuration* p);
+  };
+
   ConfigRetriever(const char * _connect_string, int force_nodeid,
                   Uint32 version, ndb_mgm_node_type nodeType,
 		  const char * _bind_address = 0,
@@ -63,6 +76,7 @@ public:
                      int verbose, int& error);
 
   int setNodeId(Uint32 nodeid);
+  Uint32 getNodeId();
 
   /**
    * Get config using socket
@@ -82,9 +96,9 @@ public:
   Uint32 get_mgmd_port() const;
   const char *get_mgmd_host() const;
   const char *get_connectstring(char *buf, int buf_sz) const;
-  NdbMgmHandle get_mgmHandle() { return m_handle; };
-  NdbMgmHandle* get_mgmHandlePtr() { return &m_handle; };
-  void end_session(bool end) { m_end_session= end; };
+  NdbMgmHandle get_mgmHandle() { return m_handle; }
+  NdbMgmHandle* get_mgmHandlePtr() { return &m_handle; }
+  void end_session(bool end) { m_end_session= end; }
 
   Uint32 get_configuration_nodeid() const;
 private:

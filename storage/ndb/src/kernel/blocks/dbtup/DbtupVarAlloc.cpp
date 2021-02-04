@@ -1,14 +1,21 @@
 /*
-   Copyright (c) 2005, 2016, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2005, 2020, Oracle and/or its affiliates.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -18,6 +25,7 @@
 #define DBTUP_C
 #define DBTUP_VAR_ALLOC_CPP
 #include "Dbtup.hpp"
+#include "../dblqh/Dblqh.hpp"
 
 #define JAM_FILE_ID 405
 
@@ -34,10 +42,19 @@ void Dbtup::init_list_sizes(void)
   c_max_list_size[2]= 4079;
 
   c_min_list_size[3]= 4080;
-  c_max_list_size[3]= 8159;
+  c_max_list_size[3]= 7783;
 
-  c_min_list_size[4]= 0;
-  c_max_list_size[4]= 199;
+  /* The last free list must guarantee space for biggest possible column
+   * size.
+   * Assume varsize may take up the whole row (a slight exaggeration).
+   */
+  static_assert(MAX_EXPANDED_TUPLE_SIZE_IN_WORDS <= 7784, "");
+  c_min_list_size[4]= 7784;
+  c_max_list_size[4]= 8159;
+
+  static_assert(MAX_FREE_LIST == 5, "");
+  c_min_list_size[5]= 0;
+  c_max_list_size[5]= 199;
 }
 
 /*
@@ -102,6 +119,7 @@ Uint32* Dbtup::alloc_var_rec(Uint32 * err,
   PagePtr pagePtr;
   c_page_pool.getPtr(pagePtr, key->m_page_no);
   free_fix_rec(fragPtr, tabPtr, key, (Fix_page*)pagePtr.p);
+  release_frag_mutex(fragPtr, *out_frag_page_id);
   return 0;
 }
 
@@ -277,7 +295,6 @@ Dbtup::realloc_var_part(Uint32 * err,
   {
     jam();
     new_var_ptr= pageP->get_ptr(oldref.m_page_idx);
-    if(!pageP->is_space_behind_entry(oldref.m_page_idx, add))
     {
       if(0) printf("extra reorg");
       jam();
@@ -331,8 +348,12 @@ Dbtup::realloc_var_part(Uint32 * err,
 }
 
 void
-Dbtup::move_var_part(Fragrecord* fragPtr, Tablerec* tabPtr, PagePtr pagePtr,
-                     Var_part_ref* refptr, Uint32 size)
+Dbtup::move_var_part(Fragrecord* fragPtr,
+                     Tablerec* tabPtr,
+                     PagePtr pagePtr,
+                     Var_part_ref* refptr,
+                     Uint32 size,
+                     Tuple_header *org)
 {
   jam();
 
@@ -395,12 +416,23 @@ Dbtup::move_var_part(Fragrecord* fragPtr, Tablerec* tabPtr, PagePtr pagePtr,
    */
   memcpy(dst, src, 4*size);
 
+  /**
+   * At his point we need to upgrade to exclusive fragment access.
+   * The variable sized part might be used for reading in query
+   * thread at this point in time. To avoid having to use a mutex
+   * to protect reads of rows we ensure that all places where we
+   * reorganize pages and rows are done with exclusive fragment
+   * access.
+   *
+   * Since we change the reference to the variable part we also
+   * need to recalculate while being in exclusive mode.
+   */
+  c_lqh->upgrade_to_exclusive_frag_access();
   fragPtr->m_varElemCount++;
   /**
    * remove old var part of tuple (and decrement m_varElemCount).
    */
   free_var_part(fragPtr, pagePtr, oldref.m_page_idx);
-
   /**
    * update var part ref of fix part tuple to newref
    */
@@ -408,6 +440,8 @@ Dbtup::move_var_part(Fragrecord* fragPtr, Tablerec* tabPtr, PagePtr pagePtr,
   newref.m_page_no = new_pagePtr.i;
   newref.m_page_idx = idx;
   refptr->assign(&newref);
+  setChecksum(org, tabPtr);
+  c_lqh->downgrade_from_exclusive_frag_access();
 }
 
 /* ------------------------------------------------------------------------ */
@@ -417,21 +451,12 @@ Dbtup::move_var_part(Fragrecord* fragPtr, Tablerec* tabPtr, PagePtr pagePtr,
 Uint32
 Dbtup::get_alloc_page(Fragrecord* fragPtr, Uint32 alloc_size)
 {
-  Uint32 i, start_index, loop= 0;
+  Uint32 start_index;
   PagePtr pagePtr;
   
-  start_index= calculate_free_list_impl(alloc_size);
-  if (start_index == (MAX_FREE_LIST - 1)) 
-  {
-    jam();
-  } 
-  else 
-  {
-    jam();
-    ndbrequire(start_index < (MAX_FREE_LIST - 1));
-    start_index++;
-  }
-  for (i= start_index; i < MAX_FREE_LIST; i++) 
+  start_index= calculate_free_list_for_alloc(alloc_size);
+  ndbassert(start_index < MAX_FREE_LIST);
+  for (Uint32 i = start_index; i < MAX_FREE_LIST; i++)
   {
     jam();
     if (!fragPtr->free_var_page_array[i].isEmpty()) 
@@ -440,17 +465,26 @@ Dbtup::get_alloc_page(Fragrecord* fragPtr, Uint32 alloc_size)
       return fragPtr->free_var_page_array[i].getFirst();
     }
   }
-  ndbrequire(start_index > 0);
-  i= start_index - 1;
-  Local_Page_list list(c_page_pool, fragPtr->free_var_page_array[i]);
-  for(list.first(pagePtr); !pagePtr.isNull() && loop < 16; )
+  /* If no list with enough guaranteed size of free space is empty, fallback
+   * checking the first 16 entries in the free list which may have an entry
+   * with enough free space.
+   */
+  if (start_index == 0)
   {
     jam();
-    if (pagePtr.p->free_space >= alloc_size) {
+    return RNIL;
+  }
+  start_index--;
+  Local_Page_list list(c_page_pool, fragPtr->free_var_page_array[start_index]);
+  list.first(pagePtr);
+  for(Uint32 loop = 0; !pagePtr.isNull() && loop < 16; loop++)
+  {
+    jam();
+    if (pagePtr.p->free_space >= alloc_size)
+    {
       jam();
       return pagePtr.i;
     }
-    loop++;
     list.next(pagePtr);
   }
   return RNIL;
@@ -539,8 +573,26 @@ Uint32 Dbtup::calculate_free_list_impl(Uint32 free_space_size) const
       return i;
     }
   }
-  ndbrequire(false);
+  ndbabort();
   return 0;
+}
+
+Uint32 Dbtup::calculate_free_list_for_alloc(Uint32 alloc_size) const
+{
+  ndbassert(alloc_size <= MAX_EXPANDED_TUPLE_SIZE_IN_WORDS);
+  for (Uint32 i = 0; i < MAX_FREE_LIST; i++)
+  {
+    jam();
+    if (alloc_size <= c_min_list_size[i])
+    {
+      jam();
+      return i;
+    }
+  }
+  /* Allocation too big, last free list page should always have space for
+   * biggest possible allocation.
+   */
+  ndbabort();
 }
 
 Uint64 Dbtup::calculate_used_var_words(Fragrecord* fragPtr)
@@ -603,5 +655,6 @@ Dbtup::alloc_var_rowid(Uint32 * err,
   PagePtr pagePtr;
   c_page_pool.getPtr(pagePtr, key->m_page_no);
   free_fix_rec(fragPtr, tabPtr, key, (Fix_page*)pagePtr.p);
+  release_frag_mutex(fragPtr, *out_frag_page_id);
   return 0;
 }

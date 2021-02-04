@@ -2,8 +2,6 @@
 # Bug #17479594 AVOID INTERMEDIATE COMMIT WHILE DOING
 #		ALTER TABLE...ALGORITHM=COPY
 #
-CREATE DATABASE alter_db;
-USE alter_db;
 CREATE TABLE t(a SERIAL, b INT, c INT, d INT) ENGINE=InnoDB;
 INSERT INTO t(a) VALUES(0),(0),(0),(0),(0),(0),(0),(0),(0),(0),(0),(0),(0),(0),(0),(0);
 INSERT INTO t(a) SELECT a+16 FROM t;
@@ -36,15 +34,15 @@ ERROR HY000: Lost connection to MySQL server during query
 SHOW CREATE TABLE t;
 Table	Create Table
 t	CREATE TABLE `t` (
-  `a` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
-  `b` int(11) DEFAULT NULL,
-  `c` int(11) DEFAULT NULL,
-  `d` int(11) DEFAULT NULL,
+  `a` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `b` int DEFAULT NULL,
+  `c` int DEFAULT NULL,
+  `d` int DEFAULT NULL,
   UNIQUE KEY `a` (`a`)
-) ENGINE=InnoDB AUTO_INCREMENT=10384 DEFAULT CHARSET=latin1
+) ENGINE=InnoDB AUTO_INCREMENT=10384 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
 CHECK TABLE t;
 Table	Op	Msg_type	Msg_text
-alter_db.t	check	status	OK
+test.t	check	status	OK
 DROP TABLE t;
 CREATE TABLE t1(a INT, b TEXT, c TEXT,
 FULLTEXT(b), FULLTEXT(c(3)), FULLTEXT(b,c))ENGINE=InnoDB;
@@ -66,13 +64,13 @@ a	b	c
 SHOW CREATE TABLE t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
-  `a` int(11) DEFAULT NULL,
+  `a` int DEFAULT NULL,
   `b` text,
   `c` text,
   FULLTEXT KEY `b` (`b`),
   FULLTEXT KEY `c` (`c`),
   FULLTEXT KEY `b_2` (`b`,`c`)
-) ENGINE=InnoDB DEFAULT CHARSET=latin1
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
 ALTER TABLE t1 FORCE, ALGORITHM=COPY;
 SELECT * FROM t1 WHERE MATCH(b) AGAINST ("first");
 a	b	c
@@ -87,12 +85,11 @@ a	b	c
 SHOW CREATE TABLE t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
-  `a` int(11) DEFAULT NULL,
+  `a` int DEFAULT NULL,
   `b` text,
   `c` text,
   FULLTEXT KEY `b` (`b`),
   FULLTEXT KEY `c` (`c`),
   FULLTEXT KEY `b_2` (`b`,`c`)
-) ENGINE=InnoDB DEFAULT CHARSET=latin1
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
 DROP TABLE t1;
-DROP DATABASE alter_db;

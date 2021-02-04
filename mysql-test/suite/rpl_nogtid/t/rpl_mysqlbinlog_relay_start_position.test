@@ -34,7 +34,7 @@
 #
 # Test is binlog_format-agnostic. STATEMENT is simpler here since we
 # are parsing mysqlbinlog output for BINLOG statements, so if we used
-# binlog_format=ROW we might get confused by row events.
+# binlog_format='ROW' we might get confused by row events.
 --source include/have_binlog_format_statement.inc
 --source include/master-slave.inc
 
@@ -113,5 +113,6 @@ DROP TABLE t1;
 --let $rpl_gtid_mode= $gtid_mode
 --source include/rpl_set_gtid_mode.inc
 --let $include_silent= 0
+--remove_file $mysqlbinlog_out
 
 --source include/rpl_end.inc

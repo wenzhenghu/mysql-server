@@ -1,14 +1,21 @@
 /*
-   Copyright (c) 2003, 2013, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2003, 2020, Oracle and/or its affiliates.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -135,13 +142,23 @@ WatchDog::setKillSwitch(bool kill)
 }
 
 static
-const char *get_action(Uint32 IPValue)
+const char *get_action(char *buf, Uint32 IPValue)
 {
   const char *action;
-  switch (IPValue) {
+  Uint32 place = IPValue & 255;
+  switch (place) {
   case 1:
-    action = "Job Handling";
+  {
+    Uint32 bno = (IPValue >> 8) & 1023;
+    Uint32 gsn = IPValue >> 20;
+    BaseString::snprintf(buf,
+                         128,
+                         "JobHandling in block: %u, gsn: %u",
+                         bno,
+                         gsn);
+    action = buf;
     break;
+  }
   case 2:
     action = "Scanning Timers";
     break;
@@ -168,6 +185,36 @@ const char *get_action(Uint32 IPValue)
     break;
   case 11:
     action = "Packing Send Buffers";
+    break;
+  case 12:
+    action = "Looking for next job to execute";
+    break;
+  case 13:
+    action = "Looking for next non-empty job buffer";
+    break;
+  case 14:
+    action = "Scanning zero time queue";
+    break;
+  case 15:
+    action = "Send packed signals";
+    break;
+  case 16:
+    action = "Update scheduler configuration";
+    break;
+  case 17:
+    action = "Check for input from NDBFS";
+    break;
+  case 18:
+    action = "Yielding to OS";
+    break;
+  case 19:
+    action = "Send thread main loop";
+    break;
+  case 20:
+    action = "Returned from do_send";
+    break;
+  case 21:
+    action = "Initial value in mt_job_thread_main";
     break;
   default:
     action = NULL;
@@ -230,6 +277,7 @@ times(struct tms *buf)
 
 #define JAM_FILE_ID 235
 
+static void dump_memory_info();
 
 void 
 WatchDog::run()
@@ -360,7 +408,8 @@ WatchDog::run()
       */
       if (oldCounterValue[i] != 9 || elapsed[i] >= theIntervalCheck[i])
       {
-        const char *last_stuck_action = get_action(oldCounterValue[i]);
+        char buf[128];
+        const char *last_stuck_action = get_action(buf, oldCounterValue[i]);
         if (last_stuck_action != NULL)
         {
           g_eventLogger->warning("Ndb kernel thread %u is stuck in: %s "
@@ -391,12 +440,54 @@ WatchDog::run()
         }
         if ((elapsed[i] > 3 * theInterval) || killer)
         {
+          if (oldCounterValue[i] == 9)
+          {
+            dump_memory_info();
+          }
           shutdownSystem(last_stuck_action);
         }
       }
     }
   }
   return;
+}
+
+#if defined(VM_TRACE) || defined(ERROR_INSERT)
+
+static int dump_file(const char filename[]);
+
+int dump_file(const char filename[])
+{
+  FILE* f = fopen(filename, "r");
+  if (f != nullptr)
+  {
+    g_eventLogger->info("Watchdog: dump %s\n", filename);
+    char buf[256];
+    while (fgets(buf, sizeof(buf), f) != nullptr)
+    {
+      g_eventLogger->info("%s\n", buf);
+    }
+    fclose(f);
+  }
+  return f == nullptr ? -1 : 0;
+}
+#endif
+
+void dump_memory_info()
+{
+#if defined(VM_TRACE) || defined(ERROR_INSERT)
+  dump_file("/proc/meminfo");
+
+  dump_file("/proc/self/numa_maps");
+
+  char filename[] = "/sys/devices/system/node/node0/meminfo";
+  char* node_number = strchr(filename, '0');
+  for (int node = 0; node < 10; node++)
+  {
+    *node_number = '0' + node;
+    if (dump_file(filename) == -1) break;
+  }
+#endif
 }
 
 void

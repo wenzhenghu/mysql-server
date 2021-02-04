@@ -123,12 +123,14 @@ aa	b
 select char_length(left(@a:='тест',5)), length(@a), @a;
 char_length(left(@a:='тест',5))	length(@a)	@a
 4	8	тест
+Warnings:
+Warning	1287	Setting user variables within expressions is deprecated and will be removed in a future release. Consider alternatives: 'SET variable=expression, ...', or 'SELECT expression(s) INTO variables(s)'.
 create table t1 ENGINE heap select date_format("2004-01-19 10:10:10", "%Y-%m-%d");
 show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
   `date_format("2004-01-19 10:10:10", "%Y-%m-%d")` varchar(10) DEFAULT NULL
-) ENGINE=MEMORY DEFAULT CHARSET=utf8mb4
+) ENGINE=MEMORY DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
 select * from t1;
 date_format("2004-01-19 10:10:10", "%Y-%m-%d")
 2004-01-19
@@ -156,8 +158,6 @@ F0CFCEC5C4C5CCD8CEC9CB	Понедельник
 drop table t1;
 set LC_TIME_NAMES='en_US';
 SET sql_mode = 'NO_ENGINE_SUBSTITUTION';
-Warnings:
-Warning	3090	Changing sql mode 'NO_AUTO_CREATE_USER' is deprecated. It will be removed in a future release.
 set names koi8r;
 create table t1 (s1 char(1) character set utf8mb4) engine heap;
 insert into t1 values (_koi8r'��');
@@ -275,7 +275,7 @@ Table	Create Table
 t1	CREATE TABLE `t1` (
   `s1` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL,
   `s2` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL
-) ENGINE=default_engine DEFAULT CHARSET=utf8mb4
+) ENGINE=default_engine DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
 delete from t1;
 insert into t1 values('aaa','aaa');
 insert into t1 values('aaa|qqq','qqq');
@@ -290,7 +290,6 @@ insert into t1 values('aaa','aba');
 insert into t1 values(null,'abc');
 insert into t1 values('def',null);
 insert into t1 values(null,null);
-insert into t1 values('ghi','ghi[');
 select HIGH_PRIORITY s1 regexp s2 from t1;
 s1 regexp s2
 1
@@ -306,31 +305,32 @@ s1 regexp s2
 NULL
 NULL
 NULL
-NULL
+SELECT 'ghi' REGEXP 'ghi[';
+ERROR HY000: The regular expression contains an unclosed bracket expression.
 drop table t1;
 set names utf8mb4;
 set names utf8mb4;
+# Not supported by ICU
 select  'вася'  rlike '[[:<:]]вася[[:>:]]';
-'вася'  rlike '[[:<:]]вася[[:>:]]'
-1
+ERROR HY000: Illegal argument to a regular expression.
+# Not supported by ICU
 select  'вася ' rlike '[[:<:]]вася[[:>:]]';
-'вася ' rlike '[[:<:]]вася[[:>:]]'
-1
+ERROR HY000: Illegal argument to a regular expression.
+# Not supported by ICU
 select ' вася'  rlike '[[:<:]]вася[[:>:]]';
-' вася'  rlike '[[:<:]]вася[[:>:]]'
-1
+ERROR HY000: Illegal argument to a regular expression.
+# Not supported by ICU
 select ' вася ' rlike '[[:<:]]вася[[:>:]]';
-' вася ' rlike '[[:<:]]вася[[:>:]]'
-1
+ERROR HY000: Illegal argument to a regular expression.
+# Not supported by ICU
 select  'васяz' rlike '[[:<:]]вася[[:>:]]';
-'васяz' rlike '[[:<:]]вася[[:>:]]'
-0
+ERROR HY000: Illegal argument to a regular expression.
+# Not supported by ICU
 select 'zвася'  rlike '[[:<:]]вася[[:>:]]';
-'zвася'  rlike '[[:<:]]вася[[:>:]]'
-0
+ERROR HY000: Illegal argument to a regular expression.
+# Not supported by ICU
 select 'zвасяz' rlike '[[:<:]]вася[[:>:]]';
-'zвасяz' rlike '[[:<:]]вася[[:>:]]'
-0
+ERROR HY000: Illegal argument to a regular expression.
 CREATE TABLE t1 (a enum ('Y', 'N') DEFAULT 'N' COLLATE utf8mb4_unicode_ci) ENGINE heap;
 ALTER TABLE t1 ADD COLUMN b CHAR(20);
 DROP TABLE t1;
@@ -339,8 +339,8 @@ create table t1 (a enum('aaaa','проба') character set utf8mb4) engine heap;
 show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
-  `a` enum('aaaa','проба') DEFAULT NULL
-) ENGINE=MEMORY DEFAULT CHARSET=utf8mb4
+  `a` enum('aaaa','проба') CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci DEFAULT NULL
+) ENGINE=MEMORY DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
 insert into t1 values ('проба');
 select * from t1;
 a
@@ -350,7 +350,7 @@ show create table t2;
 Table	Create Table
 t2	CREATE TABLE `t2` (
   `ifnull(a,a)` varchar(5) DEFAULT NULL
-) ENGINE=MEMORY DEFAULT CHARSET=utf8mb4
+) ENGINE=MEMORY DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
 select * from t2;
 ifnull(a,a)
 проба
@@ -360,9 +360,9 @@ create table t1 (c varchar(30) character set utf8mb4, unique(c(10))) engine heap
 insert into t1 values ('1'),('2'),('3'),('x'),('y'),('z');
 insert into t1 values ('aaaaaaaaaa');
 insert into t1 values ('aaaaaaaaaaa');
-ERROR 23000: Duplicate entry 'aaaaaaaaaa' for key 'c'
+ERROR 23000: Duplicate entry 'aaaaaaaaaa' for key 't1.c'
 insert into t1 values ('aaaaaaaaaaaa');
-ERROR 23000: Duplicate entry 'aaaaaaaaaa' for key 'c'
+ERROR 23000: Duplicate entry 'aaaaaaaaaa' for key 't1.c'
 insert into t1 values (repeat('b',20));
 select c c1 from t1 where c='1';
 c1
@@ -393,9 +393,9 @@ create table t1 (c varchar(30) character set utf8mb4, unique(c(10))) engine=heap
 insert into t1 values ('1'),('2'),('3'),('x'),('y'),('z');
 insert into t1 values ('aaaaaaaaaa');
 insert into t1 values ('aaaaaaaaaaa');
-ERROR 23000: Duplicate entry 'aaaaaaaaaa' for key 'c'
+ERROR 23000: Duplicate entry 'aaaaaaaaaa' for key 't1.c'
 insert into t1 values ('aaaaaaaaaaaa');
-ERROR 23000: Duplicate entry 'aaaaaaaaaa' for key 'c'
+ERROR 23000: Duplicate entry 'aaaaaaaaaa' for key 't1.c'
 insert into t1 values (repeat('b',20));
 select c c1 from t1 where c='1';
 c1
@@ -427,46 +427,46 @@ insert into t1 values ('1'),('2'),('3'),('4'),('x'),('y'),('z');
 insert into t1 values ('a');
 insert into t1 values ('aa');
 insert into t1 values ('aaa');
-ERROR 23000: Duplicate entry 'aa' for key 'c'
+ERROR 23000: Duplicate entry 'aa' for key 't1.c'
 insert into t1 values ('b');
 insert into t1 values ('bb');
 insert into t1 values ('bbb');
-ERROR 23000: Duplicate entry 'bb' for key 'c'
+ERROR 23000: Duplicate entry 'bb' for key 't1.c'
 insert into t1 values ('а');
 insert into t1 values ('аа');
 insert into t1 values ('ааа');
-ERROR 23000: Duplicate entry 'аа' for key 'c'
+ERROR 23000: Duplicate entry 'аа' for key 't1.c'
 insert into t1 values ('б');
 insert into t1 values ('бб');
 insert into t1 values ('ббб');
-ERROR 23000: Duplicate entry 'бб' for key 'c'
+ERROR 23000: Duplicate entry 'бб' for key 't1.c'
 insert into t1 values ('ꪪ');
 insert into t1 values ('ꪪꪪ');
 insert into t1 values ('ꪪꪪꪪ');
-ERROR 23000: Duplicate entry 'ꪪꪪ' for key 'c'
+ERROR 23000: Duplicate entry 'ꪪꪪ' for key 't1.c'
 drop table t1;
 create table t1 (c char(3) character set utf8mb4, unique (c(2))) engine=heap;
 insert into t1 values ('1'),('2'),('3'),('4'),('x'),('y'),('z');
 insert into t1 values ('a');
 insert into t1 values ('aa');
 insert into t1 values ('aaa');
-ERROR 23000: Duplicate entry 'aa' for key 'c'
+ERROR 23000: Duplicate entry 'aa' for key 't1.c'
 insert into t1 values ('b');
 insert into t1 values ('bb');
 insert into t1 values ('bbb');
-ERROR 23000: Duplicate entry 'bb' for key 'c'
+ERROR 23000: Duplicate entry 'bb' for key 't1.c'
 insert into t1 values ('а');
 insert into t1 values ('аа');
 insert into t1 values ('ааа');
-ERROR 23000: Duplicate entry 'аа' for key 'c'
+ERROR 23000: Duplicate entry 'аа' for key 't1.c'
 insert into t1 values ('б');
 insert into t1 values ('бб');
 insert into t1 values ('ббб');
-ERROR 23000: Duplicate entry 'бб' for key 'c'
+ERROR 23000: Duplicate entry 'бб' for key 't1.c'
 insert into t1 values ('ꪪ');
 insert into t1 values ('ꪪꪪ');
 insert into t1 values ('ꪪꪪꪪ');
-ERROR 23000: Duplicate entry 'ꪪꪪ' for key 'c'
+ERROR 23000: Duplicate entry 'ꪪꪪ' for key 't1.c'
 drop table t1;
 create table t1 (
 c char(10) character set utf8mb4,
@@ -475,19 +475,19 @@ unique key a using hash (c(1))
 show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
-  `c` char(10) DEFAULT NULL,
+  `c` char(10) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci DEFAULT NULL,
   UNIQUE KEY `a` (`c`(1)) USING HASH
-) ENGINE=MEMORY DEFAULT CHARSET=utf8mb4
+) ENGINE=MEMORY DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
 insert into t1 values ('a'),('b'),('c'),('d'),('e'),('f');
 insert into t1 values ('aa');
-ERROR 23000: Duplicate entry 'a' for key 'a'
+ERROR 23000: Duplicate entry 'a' for key 't1.a'
 insert into t1 values ('aaa');
-ERROR 23000: Duplicate entry 'a' for key 'a'
+ERROR 23000: Duplicate entry 'a' for key 't1.a'
 insert into t1 values ('б');
 insert into t1 values ('бб');
-ERROR 23000: Duplicate entry 'б' for key 'a'
+ERROR 23000: Duplicate entry 'б' for key 't1.a'
 insert into t1 values ('ббб');
-ERROR 23000: Duplicate entry 'б' for key 'a'
+ERROR 23000: Duplicate entry 'б' for key 't1.a'
 select c as c_all from t1 order by c;
 c_all
 a
@@ -511,19 +511,19 @@ unique key a using btree (c(1))
 show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
-  `c` char(10) DEFAULT NULL,
+  `c` char(10) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci DEFAULT NULL,
   UNIQUE KEY `a` (`c`(1)) USING BTREE
-) ENGINE=MEMORY DEFAULT CHARSET=utf8mb4
+) ENGINE=MEMORY DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
 insert into t1 values ('a'),('b'),('c'),('d'),('e'),('f');
 insert into t1 values ('aa');
-ERROR 23000: Duplicate entry 'a' for key 'a'
+ERROR 23000: Duplicate entry 'a' for key 't1.a'
 insert into t1 values ('aaa');
-ERROR 23000: Duplicate entry 'a' for key 'a'
+ERROR 23000: Duplicate entry 'a' for key 't1.a'
 insert into t1 values ('б');
 insert into t1 values ('бб');
-ERROR 23000: Duplicate entry 'б' for key 'a'
+ERROR 23000: Duplicate entry 'б' for key 't1.a'
 insert into t1 values ('ббб');
-ERROR 23000: Duplicate entry 'б' for key 'a'
+ERROR 23000: Duplicate entry 'б' for key 't1.a'
 select c as c_all from t1 order by c;
 c_all
 a
@@ -546,14 +546,14 @@ unique key a (c(1))
 ) engine=heap;
 insert into t1 values ('a'),('b'),('c'),('d'),('e'),('f');
 insert into t1 values ('aa');
-ERROR 23000: Duplicate entry 'a' for key 'a'
+ERROR 23000: Duplicate entry 'a' for key 't1.a'
 insert into t1 values ('aaa');
-ERROR 23000: Duplicate entry 'a' for key 'a'
+ERROR 23000: Duplicate entry 'a' for key 't1.a'
 insert into t1 values ('б');
 insert into t1 values ('бб');
-ERROR 23000: Duplicate entry 'б' for key 'a'
+ERROR 23000: Duplicate entry 'б' for key 't1.a'
 insert into t1 values ('ббб');
-ERROR 23000: Duplicate entry 'б' for key 'a'
+ERROR 23000: Duplicate entry 'б' for key 't1.a'
 select c as c_all from t1 order by c;
 c_all
 a
@@ -574,9 +574,9 @@ create table t1 (c varchar(30) character set utf8mb4 collate utf8mb4_bin, unique
 insert into t1 values ('1'),('2'),('3'),('x'),('y'),('z');
 insert into t1 values ('aaaaaaaaaa');
 insert into t1 values ('aaaaaaaaaaa');
-ERROR 23000: Duplicate entry 'aaaaaaaaaa' for key 'c'
+ERROR 23000: Duplicate entry 'aaaaaaaaaa' for key 't1.c'
 insert into t1 values ('aaaaaaaaaaaa');
-ERROR 23000: Duplicate entry 'aaaaaaaaaa' for key 'c'
+ERROR 23000: Duplicate entry 'aaaaaaaaaa' for key 't1.c'
 insert into t1 values (repeat('b',20));
 select c c1 from t1 where c='1';
 c1
@@ -608,23 +608,23 @@ insert into t1 values ('1'),('2'),('3'),('4'),('x'),('y'),('z');
 insert into t1 values ('a');
 insert into t1 values ('aa');
 insert into t1 values ('aaa');
-ERROR 23000: Duplicate entry 'aa' for key 'c'
+ERROR 23000: Duplicate entry 'aa' for key 't1.c'
 insert into t1 values ('b');
 insert into t1 values ('bb');
 insert into t1 values ('bbb');
-ERROR 23000: Duplicate entry 'bb' for key 'c'
+ERROR 23000: Duplicate entry 'bb' for key 't1.c'
 insert into t1 values ('а');
 insert into t1 values ('аа');
 insert into t1 values ('ааа');
-ERROR 23000: Duplicate entry 'аа' for key 'c'
+ERROR 23000: Duplicate entry 'аа' for key 't1.c'
 insert into t1 values ('б');
 insert into t1 values ('бб');
 insert into t1 values ('ббб');
-ERROR 23000: Duplicate entry 'бб' for key 'c'
+ERROR 23000: Duplicate entry 'бб' for key 't1.c'
 insert into t1 values ('ꪪ');
 insert into t1 values ('ꪪꪪ');
 insert into t1 values ('ꪪꪪꪪ');
-ERROR 23000: Duplicate entry 'ꪪꪪ' for key 'c'
+ERROR 23000: Duplicate entry 'ꪪꪪ' for key 't1.c'
 drop table t1;
 create table t1 (
 c char(10) character set utf8mb4 collate utf8mb4_bin,
@@ -635,17 +635,17 @@ Table	Create Table
 t1	CREATE TABLE `t1` (
   `c` char(10) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL,
   UNIQUE KEY `a` (`c`(1)) USING HASH
-) ENGINE=MEMORY DEFAULT CHARSET=utf8mb4
+) ENGINE=MEMORY DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
 insert into t1 values ('a'),('b'),('c'),('d'),('e'),('f');
 insert into t1 values ('aa');
-ERROR 23000: Duplicate entry 'a' for key 'a'
+ERROR 23000: Duplicate entry 'a' for key 't1.a'
 insert into t1 values ('aaa');
-ERROR 23000: Duplicate entry 'a' for key 'a'
+ERROR 23000: Duplicate entry 'a' for key 't1.a'
 insert into t1 values ('б');
 insert into t1 values ('бб');
-ERROR 23000: Duplicate entry 'б' for key 'a'
+ERROR 23000: Duplicate entry 'б' for key 't1.a'
 insert into t1 values ('ббб');
-ERROR 23000: Duplicate entry 'б' for key 'a'
+ERROR 23000: Duplicate entry 'б' for key 't1.a'
 select c as c_all from t1 order by c;
 c_all
 a
@@ -671,17 +671,17 @@ Table	Create Table
 t1	CREATE TABLE `t1` (
   `c` char(10) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL,
   UNIQUE KEY `a` (`c`(1)) USING BTREE
-) ENGINE=MEMORY DEFAULT CHARSET=utf8mb4
+) ENGINE=MEMORY DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
 insert into t1 values ('a'),('b'),('c'),('d'),('e'),('f');
 insert into t1 values ('aa');
-ERROR 23000: Duplicate entry 'a' for key 'a'
+ERROR 23000: Duplicate entry 'a' for key 't1.a'
 insert into t1 values ('aaa');
-ERROR 23000: Duplicate entry 'a' for key 'a'
+ERROR 23000: Duplicate entry 'a' for key 't1.a'
 insert into t1 values ('б');
 insert into t1 values ('бб');
-ERROR 23000: Duplicate entry 'б' for key 'a'
+ERROR 23000: Duplicate entry 'б' for key 't1.a'
 insert into t1 values ('ббб');
-ERROR 23000: Duplicate entry 'б' for key 'a'
+ERROR 23000: Duplicate entry 'б' for key 't1.a'
 select c as c_all from t1 order by c;
 c_all
 a
@@ -704,14 +704,14 @@ unique key a (c(1))
 ) engine=heap;
 insert into t1 values ('a'),('b'),('c'),('d'),('e'),('f');
 insert into t1 values ('aa');
-ERROR 23000: Duplicate entry 'a' for key 'a'
+ERROR 23000: Duplicate entry 'a' for key 't1.a'
 insert into t1 values ('aaa');
-ERROR 23000: Duplicate entry 'a' for key 'a'
+ERROR 23000: Duplicate entry 'a' for key 't1.a'
 insert into t1 values ('б');
 insert into t1 values ('бб');
-ERROR 23000: Duplicate entry 'б' for key 'a'
+ERROR 23000: Duplicate entry 'б' for key 't1.a'
 insert into t1 values ('ббб');
-ERROR 23000: Duplicate entry 'б' for key 'a'
+ERROR 23000: Duplicate entry 'б' for key 't1.a'
 select c as c_all from t1 order by c;
 c_all
 a
@@ -779,6 +779,8 @@ str
 str
 drop table t1;
 CREATE TABLE t1 (a varchar(32) BINARY) CHARACTER SET utf8mb4 ENGINE heap;
+Warnings:
+Warning	1287	'BINARY as attribute of a type' is deprecated and will be removed in a future release. Please use a CHARACTER SET clause with _bin collation instead
 INSERT INTO t1 VALUES ('test');
 SELECT a FROM t1 WHERE a LIKE '%te';
 a
@@ -824,7 +826,7 @@ Table	Create Table
 t2	CREATE TABLE `t2` (
   `a` varchar(5) DEFAULT NULL,
   `b` varchar(15) DEFAULT NULL
-) ENGINE=MEMORY DEFAULT CHARSET=utf8mb4
+) ENGINE=MEMORY DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
 drop table t2;
 drop table t1;
 select 'c' like '\_' as want0;
@@ -1092,9 +1094,9 @@ ERROR 42000: Invalid default value for 'x'
 create table t1 (x enum('A', 'B') default 0) character set utf8mb4 engine heap;
 ERROR 42000: Invalid default value for 'x'
 SET sql_mode = 'NO_ENGINE_SUBSTITUTION';
-Warnings:
-Warning	3090	Changing sql mode 'NO_AUTO_CREATE_USER' is deprecated. It will be removed in a future release.
 SET NAMES UTF8;
+Warnings:
+Warning	3719	'utf8' is currently an alias for the character set UTF8MB3, but will be an alias for UTF8MB4 in a future release. Please consider using UTF8MB4 in order to be unambiguous.
 CREATE TABLE t1 (
 `id` int(20) NOT NULL auto_increment,
 `country` varchar(100) NOT NULL default '',
@@ -1113,6 +1115,9 @@ KEY `IX_mobile_originated_message_keyword` (`keyword`),
 KEY `IX_mobile_originated_message_created` (`created`),
 KEY `IX_mobile_originated_message_support` (`msisdn`,`momid`,`keyword`,`gateway_id`,`created`)
 ) ENGINE=heap DEFAULT CHARSET=utf8mb4;
+Warnings:
+Warning	1681	Integer display width is deprecated and will be removed in a future release.
+Warning	1681	Integer display width is deprecated and will be removed in a future release.
 INSERT INTO t1 VALUES 
 (1,'blah','464','aaa','fkc1c9ilc20x0hgae7lx6j09','ERR','ERR Имри.Афимим.Аеимимримдмримрмрирор имримримримр имридм ирбднримрфмририримрфмфмим.Ад.Д имдимримрад.Адимримримрмдиримримримр м.Дадимфшьмримд им.Адимимрн имадми','ИМРИ.АФИМИМ.АЕИМИМРИМДМРИМРМРИРОР',3,'2005-06-01 17:30:43','1234567890'),
 (2,'blah','464','aaa','haxpl2ilc20x00bj4tt2m5ti','11','11 g','G',3,'2005-06-02 22:43:10','1234567890');
@@ -1130,8 +1135,6 @@ ERR Имри.Афимим.Аеимимримдмримрмрирор имрим�
 DROP TABLE t1,t2;
 SET sql_mode = default;
 SET sql_mode = 'NO_ENGINE_SUBSTITUTION';
-Warnings:
-Warning	3090	Changing sql mode 'NO_AUTO_CREATE_USER' is deprecated. It will be removed in a future release.
 create table t1 (a char(20) character set utf8mb4) engine heap;
 insert into t1 values ('123456'),('андрей');
 alter table t1 modify a char(2) character set utf8mb4;
@@ -1188,8 +1191,6 @@ a
 abcd
 drop table t1;
 SET sql_mode = 'NO_ENGINE_SUBSTITUTION';
-Warnings:
-Warning	3090	Changing sql mode 'NO_AUTO_CREATE_USER' is deprecated. It will be removed in a future release.
 CREATE TABLE t1 (
 a varchar(255) NOT NULL default '',
 KEY a (a)
@@ -1219,8 +1220,12 @@ char(a)
 drop table t1;
 CREATE TABLE t1 (item varchar(255)) default character set utf8mb4 ENGINE heap;
 INSERT INTO t1 VALUES (N'\\');
+Warnings:
+Warning	3720	NATIONAL/NCHAR/NVARCHAR implies the character set UTF8MB3, which will be replaced by UTF8MB4 in a future release. Please consider using CHAR(x) CHARACTER SET UTF8MB4 in order to be unambiguous.
 INSERT INTO t1 VALUES (_utf8mb4'\\');
 INSERT INTO t1 VALUES (N'Cote d\'Ivoire');
+Warnings:
+Warning	3720	NATIONAL/NCHAR/NVARCHAR implies the character set UTF8MB3, which will be replaced by UTF8MB4 in a future release. Please consider using CHAR(x) CHARACTER SET UTF8MB4 in order to be unambiguous.
 INSERT INTO t1 VALUES (_utf8mb4'Cote d\'Ivoire');
 SELECT item FROM t1 ORDER BY item;
 item
@@ -1230,8 +1235,6 @@ Cote d'Ivoire
 Cote d'Ivoire
 DROP TABLE t1;
 SET sql_mode = 'NO_ENGINE_SUBSTITUTION';
-Warnings:
-Warning	3090	Changing sql mode 'NO_AUTO_CREATE_USER' is deprecated. It will be removed in a future release.
 SET NAMES utf8mb4;
 CREATE TABLE t1(a VARCHAR(255), KEY(a)) ENGINE=heap ROW_FORMAT=DYNAMIC DEFAULT CHARSET=utf8mb4;
 INSERT INTO t1 VALUES('uuABCDEFGHIGKLMNOPRSTUVWXYZ̈bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb');
@@ -1499,7 +1502,7 @@ explain
 select substr(z.a,-1), z.a from t1 as y join t1 as z on y.a=z.a order by 1;
 id	select_type	table	partitions	type	possible_keys	key	key_len	ref	rows	filtered	Extra
 1	SIMPLE	y	NULL	ALL	NULL	NULL	NULL	NULL	2	100.00	Using temporary; Using filesort
-1	SIMPLE	z	NULL	ALL	NULL	NULL	NULL	NULL	2	50.00	Using where; Using join buffer (Block Nested Loop)
+1	SIMPLE	z	NULL	ALL	NULL	NULL	NULL	NULL	2	50.00	Using where; Using join buffer (hash join)
 Warnings:
 Note	1003	/* select#1 */ select substr(`test`.`z`.`a`,-(1)) AS `substr(z.a,-1)`,`test`.`z`.`a` AS `a` from `test`.`t1` `y` join `test`.`t1` `z` where (`test`.`z`.`a` = `test`.`y`.`a`) order by substr(`test`.`z`.`a`,-(1))
 select substr(z.a,-1), z.a from t1 as y join t1 as z on y.a=z.a order by 1;
@@ -1555,8 +1558,6 @@ xxx
 yyy
 DROP TABLE t1;
 SET sql_mode = 'NO_ENGINE_SUBSTITUTION';
-Warnings:
-Warning	3090	Changing sql mode 'NO_AUTO_CREATE_USER' is deprecated. It will be removed in a future release.
 create table t1 (
 a varchar(26) not null
 ) default character set utf8mb4 ENGINE heap;
@@ -1723,6 +1724,9 @@ insert into t1 values ('a',1);
 select concat(a, if(b>10, N'x', N'y')) from t1;
 concat(a, if(b>10, N'x', N'y'))
 ay
+Warnings:
+Warning	3720	NATIONAL/NCHAR/NVARCHAR implies the character set UTF8MB3, which will be replaced by UTF8MB4 in a future release. Please consider using CHAR(x) CHARACTER SET UTF8MB4 in order to be unambiguous.
+Warning	3720	NATIONAL/NCHAR/NVARCHAR implies the character set UTF8MB3, which will be replaced by UTF8MB4 in a future release. Please consider using CHAR(x) CHARACTER SET UTF8MB4 in order to be unambiguous.
 select concat(a, if(b>10, N'æ', N'ß')) from t1;
 ERROR HY000: Illegal mix of collations (latin1_swedish_ci,IMPLICIT) and (utf8_general_ci,COERCIBLE) for operation 'concat'
 drop table t1;
@@ -2052,8 +2056,6 @@ set max_sort_length=default;
 # Bug#26180: Can't add columns to tables created with utf8mb4 text indexes
 #
 SET sql_mode = 'NO_ENGINE_SUBSTITUTION';
-Warnings:
-Warning	3090	Changing sql mode 'NO_AUTO_CREATE_USER' is deprecated. It will be removed in a future release.
 SET sql_mode = default;
 #
 # Testing 4-byte values.
@@ -2108,6 +2110,8 @@ CREATE TABLE t2 (
 u_decimal int NOT NULL,
 utf8mb3_encoding VARCHAR(10) NOT NULL
 ) CHARACTER SET utf8mb3 ENGINE heap;
+Warnings:
+Warning	1287	'utf8mb3' is deprecated and will be removed in a future release. Please use utf8mb4 instead
 INSERT INTO t2 VALUES (42856, x'ea9da8');
 INSERT INTO t2 VALUES (65131, x'efb9ab');
 INSERT IGNORE INTO t2 VALUES (1114111, x'f48fbfbf');
@@ -2135,6 +2139,8 @@ F09D9C9FEA9DA8
 F09D9E9FEA9DA8
 F3A087AFEA9DA8
 F48FBFBFEA9DA8
+Warning	3719	'utf8' is currently an alias for the character set UTF8MB3, but will be an alias for UTF8MB4 in a future release. Please consider using UTF8MB4 in order to be unambiguous.
+Warnings:
 SELECT HEX(CONCAT(utf8mb4_encoding, utf8mb3_encoding)) FROM t1,t2;
 HEX(CONCAT(utf8mb4_encoding, utf8mb3_encoding))
 
@@ -2178,13 +2184,11 @@ WHERE t1.utf8mb4_encoding > t2.utf8mb3_encoding;
 count(*)
 23
 SET sql_mode = 'NO_ENGINE_SUBSTITUTION';
-Warnings:
-Warning	3090	Changing sql mode 'NO_AUTO_CREATE_USER' is deprecated. It will be removed in a future release.
 ALTER TABLE t1 CONVERT TO CHARACTER SET utf8;
 SHOW CREATE TABLE t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
-  `u_decimal` int(11) NOT NULL,
+  `u_decimal` int NOT NULL,
   `utf8mb4_encoding` varchar(10) NOT NULL
 ) ENGINE=MEMORY DEFAULT CHARSET=utf8
 SELECT u_decimal,hex(utf8mb4_encoding),utf8mb4_encoding FROM t1;
@@ -2206,19 +2210,21 @@ ALTER TABLE t2 CONVERT TO CHARACTER SET utf8mb4;
 SHOW CREATE TABLE t2;
 Table	Create Table
 t2	CREATE TABLE `t2` (
-  `u_decimal` int(11) NOT NULL,
+  `u_decimal` int NOT NULL,
   `utf8mb3_encoding` varchar(10) NOT NULL
-) ENGINE=MEMORY DEFAULT CHARSET=utf8mb4
+) ENGINE=MEMORY DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
 SELECT u_decimal,hex(utf8mb3_encoding) FROM t2;
 u_decimal	hex(utf8mb3_encoding)
 1114111	
 42856	EA9DA8
 65131	EFB9AB
 ALTER TABLE t2 CONVERT TO CHARACTER SET utf8mb3;
+Warnings:
+Warning	1287	'utf8mb3' is deprecated and will be removed in a future release. Please use utf8mb4 instead
 SHOW CREATE TABLE t2;
 Table	Create Table
 t2	CREATE TABLE `t2` (
-  `u_decimal` int(11) NOT NULL,
+  `u_decimal` int NOT NULL,
   `utf8mb3_encoding` varchar(10) NOT NULL
 ) ENGINE=MEMORY DEFAULT CHARSET=utf8
 SELECT u_decimal,hex(utf8mb3_encoding) FROM t2;
@@ -2230,8 +2236,8 @@ ALTER TABLE t1 MODIFY utf8mb4_encoding VARCHAR(10) CHARACTER SET utf8mb3;
 SHOW CREATE TABLE t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
-  `u_decimal` int(11) NOT NULL,
-  `utf8mb4_encoding` varchar(10) DEFAULT NULL
+  `u_decimal` int NOT NULL,
+  `utf8mb4_encoding` varchar(10) CHARACTER SET utf8 COLLATE utf8_general_ci DEFAULT NULL
 ) ENGINE=MEMORY DEFAULT CHARSET=utf8
 SELECT u_decimal,hex(utf8mb4_encoding) FROM t1;
 u_decimal	hex(utf8mb4_encoding)
@@ -2251,8 +2257,8 @@ ALTER TABLE t1 MODIFY utf8mb4_encoding VARCHAR(10) CHARACTER SET utf8mb4;
 SHOW CREATE TABLE t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
-  `u_decimal` int(11) NOT NULL,
-  `utf8mb4_encoding` varchar(10) CHARACTER SET utf8mb4 DEFAULT NULL
+  `u_decimal` int NOT NULL,
+  `utf8mb4_encoding` varchar(10) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci DEFAULT NULL
 ) ENGINE=MEMORY DEFAULT CHARSET=utf8
 SELECT u_decimal,hex(utf8mb4_encoding) FROM t1;
 u_decimal	hex(utf8mb4_encoding)
@@ -2272,8 +2278,8 @@ ALTER TABLE t2 MODIFY utf8mb3_encoding VARCHAR(10) CHARACTER SET utf8mb4;
 SHOW CREATE TABLE t2;
 Table	Create Table
 t2	CREATE TABLE `t2` (
-  `u_decimal` int(11) NOT NULL,
-  `utf8mb3_encoding` varchar(10) CHARACTER SET utf8mb4 DEFAULT NULL
+  `u_decimal` int NOT NULL,
+  `utf8mb3_encoding` varchar(10) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci DEFAULT NULL
 ) ENGINE=MEMORY DEFAULT CHARSET=utf8
 SELECT u_decimal,hex(utf8mb3_encoding) FROM t2;
 u_decimal	hex(utf8mb3_encoding)
@@ -2285,6 +2291,8 @@ CREATE TABLE t3 (
 u_decimal int NOT NULL,
 utf8mb3_encoding VARCHAR(10) NOT NULL
 ) CHARACTER SET utf8 ENGINE heap;
+Warnings:
+Warning	3719	'utf8' is currently an alias for the character set UTF8MB3, but will be an alias for UTF8MB4 in a future release. Please consider using UTF8MB4 in order to be unambiguous.
 INSERT INTO t3 SELECT * FROM t1;
 DROP TABLE IF EXISTS t4;
 CREATE TABLE t4 (
@@ -2302,11 +2310,17 @@ DROP TABLE t4;
 SELECT CHARSET(CONCAT(_utf8mb4'a',_utf8'b'));
 CHARSET(CONCAT(_utf8mb4'a',_utf8'b'))
 utf8mb4
+Warnings:
+Warning	3719	'utf8' is currently an alias for the character set UTF8MB3, but will be an alias for UTF8MB4 in a future release. Please consider using UTF8MB4 in order to be unambiguous.
 CREATE TABLE t1 (utf8mb4 VARCHAR(10) CHARACTER SET utf8mb4 NOT NULL) ENGINE heap;
 INSERT INTO t1 VALUES (x'ea9da8'),(x'f48fbfbf');
 SELECT CONCAT(utf8mb4, _utf8 x'ea9da8') FROM t1 LIMIT 0;
 CONCAT(utf8mb4, _utf8 x'ea9da8')
+Warnings:
+Warning	3719	'utf8' is currently an alias for the character set UTF8MB3, but will be an alias for UTF8MB4 in a future release. Please consider using UTF8MB4 in order to be unambiguous.
 CREATE TABLE t2 (utf8mb3 VARCHAR(10) CHARACTER SET utf8mb3 NOT NULL) ENGINE heap;
+Warnings:
+Warning	1287	'utf8mb3' is deprecated and will be removed in a future release. Please use utf8mb4 instead
 INSERT INTO t2 VALUES (x'ea9da8');
 SELECT HEX(CONCAT(utf8mb4, utf8mb3)) FROM t1,t2 ORDER BY 1;
 HEX(CONCAT(utf8mb4, utf8mb3))
@@ -2319,10 +2333,10 @@ CREATE TEMPORARY TABLE t3 ENGINE heap AS SELECT *, concat(utf8mb4,utf8mb3) FROM 
 SHOW CREATE TABLE t3;
 Table	Create Table
 t3	CREATE TEMPORARY TABLE `t3` (
-  `utf8mb4` varchar(10) NOT NULL,
-  `utf8mb3` varchar(10) CHARACTER SET utf8 NOT NULL,
+  `utf8mb4` varchar(10) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL,
+  `utf8mb3` varchar(10) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
   `concat(utf8mb4,utf8mb3)` varchar(20) DEFAULT NULL
-) ENGINE=MEMORY DEFAULT CHARSET=utf8mb4
+) ENGINE=MEMORY DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
 DROP TEMPORARY TABLE t3;
 SELECT * FROM t1, t2 WHERE t1.utf8mb4 > t2.utf8mb3;
 utf8mb4	utf8mb3

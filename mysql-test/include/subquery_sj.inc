@@ -21,12 +21,15 @@ create table t3 (a int not null, b int, primary key (a));
 insert into t1 values (1,10), (2,20), (3,30),  (4,40);
 insert into t2 values (2), (3), (4), (5);
 insert into t3 values (10,3), (20,4), (30,5);
+--sorted_result
 select * from t2 where t2.a in (select a from t1);
-explain extended select * from t2 where t2.a in (select a from t1);
+explain select * from t2 where t2.a in (select a from t1);
+--sorted_result
 select * from t2 where t2.a in (select a from t1 where t1.b <> 30);
-explain extended select * from t2 where t2.a in (select a from t1 where t1.b <> 30);
+explain select * from t2 where t2.a in (select a from t1 where t1.b <> 30);
+--sorted_result
 select * from t2 where t2.a in (select t1.a from t1,t3 where t1.b=t3.a);
-explain extended select * from t2 where t2.a in (select t1.a from t1,t3 where t1.b=t3.a);
+explain select * from t2 where t2.a in (select t1.a from t1,t3 where t1.b=t3.a);
 drop table t1, t2, t3;
 create table t1 (a int, b int, index a (a,b));
 create table t2 (a int, index a (a));
@@ -40,16 +43,21 @@ select rand()*100000+200,rand()*100000 from t0 A, t0 B, t0 C, t0 D;
 
 insert into t2 values (2), (3), (4), (5);
 insert into t3 values (10,3), (20,4), (30,5);
+--sorted_result
 select * from t2 where t2.a in (select a from t1);
-explain extended select * from t2 where t2.a in (select a from t1);
+explain select * from t2 where t2.a in (select a from t1);
+--sorted_result
 select * from t2 where t2.a in (select a from t1 where t1.b <> 30);
-explain extended select * from t2 where t2.a in (select a from t1 where t1.b <> 30);
+explain select * from t2 where t2.a in (select a from t1 where t1.b <> 30);
+--sorted_result
 select * from t2 where t2.a in (select t1.a from t1,t3 where t1.b=t3.a);
-explain extended select * from t2 where t2.a in (select t1.a from t1,t3 where t1.b=t3.a);
+explain select * from t2 where t2.a in (select t1.a from t1,t3 where t1.b=t3.a);
 insert into t1 values (3,31);
+--sorted_result
 select * from t2 where t2.a in (select a from t1 where t1.b <> 30);
+--sorted_result
 select * from t2 where t2.a in (select a from t1 where t1.b <> 30 and t1.b <> 31);
-explain extended select * from t2 where t2.a in (select a from t1 where t1.b <> 30);
+explain select * from t2 where t2.a in (select a from t1 where t1.b <> 30);
 drop table t0, t1, t2, t3;
 
 
@@ -94,18 +102,18 @@ explain select * from t1 where a in (select pk from t10 where t10.a in (select p
 select * from t1 where a in (select pk from t10 where t10.a in (select pk from t12));
 
 --echo flattening subquery w/ several tables
-explain extended select * from t1 where a in (select t10.pk from t10, t12 where t12.pk=t10.a);
+explain select * from t1 where a in (select t10.pk from t10, t12 where t12.pk=t10.a);
 
 --echo subqueries within outer joins go into ON expr.
 # TODO: psergey: check if case conversions like those are ok (it broke on  windows)
---replace_result a A b B
-explain extended
+--replace_regex /\ba\b/A/ /\bb\b/B/
+explain
 select * from t1 left join (t2 a, t2 b) on ( a.a= t1.a and b.a in (select pk from t10));
 
 # TODO: psergey: check if case conversions like those are ok (it broke on  windows)
 --echo t2 should be wrapped into OJ-nest, so we have "t1 LJ (t2 J t10)"
---replace_result a A b B
-explain extended
+--replace_regex /\ba\b/A/ /\bb\b/B/
+explain
 select * from t1 left join t2 on (t2.a= t1.a and t2.a in (select pk from t10));
 
 --echo we shouldn't flatten if we're going to get a join of > MAX_TABLES.
@@ -138,7 +146,7 @@ execute s1;
 
 # Try I2O orders
 insert into t1 select (A.a + 10 * B.a),1 from t0 A, t0 B;
-explain extended select * from t1 where a in (select pk from t10 where pk<3);
+explain select * from t1 where a in (select pk from t10 where pk<3);
 
 drop table t0, t1, t2;
 drop table t10, t11, t12;
@@ -173,9 +181,18 @@ while ($i)
          eval PREPARE stmt FROM "$query";
          --sorted_result
          EXECUTE stmt;
+	 --echo
          --sorted_result
          EXECUTE stmt;
          DEALLOCATE PREPARE stmt;
+
+         let $query=
+         SELECT * FROM t1 WHERE EXISTS 
+           (SELECT * FROM t2 LEFT JOIN t3 ON t2.i=t3.i
+            WHERE t1.i = t3.i);
+         eval EXPLAIN $query;
+         --sorted_result
+         eval $query;
 
          let $query=
          SELECT * FROM t1 WHERE (t1.i) IN 
@@ -187,6 +204,7 @@ while ($i)
          eval PREPARE stmt FROM "$query";
          --sorted_result
          EXECUTE stmt;
+	 --echo
          --sorted_result
          EXECUTE stmt;
          DEALLOCATE PREPARE stmt;
@@ -214,7 +232,7 @@ while ($i)
 
          let $query=
          SELECT * FROM t1 WHERE (11) IN 
-           (SELECT t3.i FROM t2 LEFT JOIN t3 ON t2.i=t3.i WHERE t1.i);
+           (SELECT t3.i FROM t2 LEFT JOIN t3 ON t2.i=t3.i WHERE t1.i <> 0);
          eval EXPLAIN $query;
          --sorted_result
          eval $query;
@@ -429,16 +447,25 @@ create table t3 (a int);
 insert into t3 select A.a + 10*B.a from t0 A, t0 B;
 
 explain select * from t3 where a in (select kp1 from t1 where kp1<20);
+--sorted_result
 select * from t3 where a in (select kp1 from t1 where kp1<20);
 
 explain select * from t3 where a in (select kp1 from t1 where kp1<20) and a<20;
+--sorted_result
 select * from t3 where a in (select kp1 from t1 where kp1<20) and a<20;
 
 create table t4 (pk int primary key);
 insert into t4 select a from t3;
 
-explain select * from t3 where a in 
+explain select * from t3 where a in
           (select t1.kp1 from t1,t4 where kp1<20 and t4.pk=t1.c);
+
+# In subquery_sj_loosescan_bka_nobnl (ie., with loose scan), demonstrates
+# how NestedLoopSemiJoinWithDuplicateRemovalIterator is used.
+--skip_if_hypergraph  # Depends on query plan.
+explain format=tree select * from t3 where a in
+          (select t1.kp1 from t1,t4 where kp1<20 and t4.pk=t1.c);
+--sorted_result
 select * from t3 where a in 
   (select t1.kp1 from t1,t4 where kp1<20 and t4.pk=t1.c);
 
@@ -450,6 +477,7 @@ drop table t1, t3, t4;
 create table t1 (a int);
 insert into t1 values (0),(0),(0),(1),(1),(1),(2),(2),(2),(3),(3),(3);
 
+set session internal_tmp_mem_storage_engine='memory';
 set @save_max_heap_table_size=@@max_heap_table_size;
 set @@max_heap_table_size= 16384;
 
@@ -465,12 +493,15 @@ where c.a in (select a from t1 d);
 flush status;
 select count(*) from t0 a, t0 b, t0 c
 where c.a in (select a from t1 d);
+--skip_if_hypergraph  # Depends on the query plan.
 show status like 'Created_tmp_disk_tables';
 
 set @@max_heap_table_size= @save_max_heap_table_size;
+set session internal_tmp_mem_storage_engine=default;
 flush status;
 select count(*) from t0 a, t0 b, t0 c
 where c.a in (select a from t1 d);
+--skip_if_hypergraph  # Depends on the query plan.
 show status like 'Created_tmp_disk_tables';
 
 drop table t0, t1;
@@ -485,6 +516,7 @@ insert into t2 values (1),(2);
 create table t3 ( a int , filler char(100), key(a)); 
 insert into t3 select A.a + 10*B.a, 'filler' from t0 A, t0 B;
 explain select * from t3 where a in (select a from t2) and (a > 5 or a < 10); 
+--sorted_result
 select * from t3 where a in (select a from t2); 
 
 drop table t0, t2, t3;
@@ -756,7 +788,7 @@ insert into t3_16 values
  (concat('1 - 04', repeat('x', @suffix_len)), concat('2 - 04', repeat('x', @suffix_len)));
 
 # single value transformer
-explain extended select left(a1,7), left(a2,7)
+explain select left(a1,7), left(a2,7)
 from t1_16
 where a1 in (select b1 from t2_16 where b1 > '0');
 
@@ -765,7 +797,7 @@ from t1_16
 where a1 in (select b1 from t2_16 where b1 > '0');
 
 # row value transformer
-explain extended select left(a1,7), left(a2,7)
+explain select left(a1,7), left(a2,7)
 from t1_16
 where (a1,a2) in (select b1, b2 from t2_16 where b1 > '0');
 
@@ -774,7 +806,7 @@ from t1_16
 where (a1,a2) in (select b1, b2 from t2_16 where b1 > '0');
 
 # string function with a blob argument, the return type may be != blob
-explain extended select left(a1,7), left(a2,7)
+explain select left(a1,7), left(a2,7)
 from t1_16
 where a1 in (select substring(b1,1,16) from t2_16 where b1 > '0');
 
@@ -785,7 +817,7 @@ where a1 in (select substring(b1,1,16) from t2_16 where b1 > '0');
 # group_concat with a blob argument - depends on
 # the variable group_concat_max_len, and
 # convert_blob_length == max_len*collation->mbmaxlen > CONVERT_IF_BIGGER_TO_BLOB
-explain extended select left(a1,7), left(a2,7)
+explain select left(a1,7), left(a2,7)
 from t1_16
 where a1 in (select group_concat(b1) from t2_16 group by b2);
 
@@ -795,7 +827,7 @@ where a1 in (select group_concat(b1) from t2_16 group by b2);
 
 set @@group_concat_max_len = 256; # anything < (CONVERT_IF_BIGGER_TO_BLOB = 512)
 
-explain extended select left(a1,7), left(a2,7)
+explain select left(a1,7), left(a2,7)
 from t1_16
 where a1 in (select group_concat(b1) from t2_16 group by b2);
 
@@ -824,7 +856,7 @@ insert into t3 values ('1 - 06', '2 - 06');
 insert into t3 values ('1 - 07', '2 - 07');
 insert into t3 values ('1 - 08', '2 - 08');
 
-explain extended
+explain
 select * from t1
 where concat(a1,'x') IN
       (select left(a1,8) from t1_16
@@ -869,7 +901,7 @@ insert into t3_512 values
  (concat('1 - 04', repeat('x', @suffix_len)), concat('2 - 04', repeat('x', @suffix_len)));
 
 # single value transformer
-explain extended select left(a1,7), left(a2,7)
+explain select left(a1,7), left(a2,7)
 from t1_512
 where a1 in (select b1 from t2_512 where b1 > '0');
 
@@ -878,7 +910,7 @@ from t1_512
 where a1 in (select b1 from t2_512 where b1 > '0');
 
 # row value transformer
-explain extended select left(a1,7), left(a2,7)
+explain select left(a1,7), left(a2,7)
 from t1_512
 where (a1,a2) in (select b1, b2 from t2_512 where b1 > '0');
 
@@ -887,7 +919,7 @@ from t1_512
 where (a1,a2) in (select b1, b2 from t2_512 where b1 > '0');
 
 # string function with a blob argument, the return type may be != blob
-explain extended select left(a1,7), left(a2,7)
+explain select left(a1,7), left(a2,7)
 from t1_512
 where a1 in (select substring(b1,1,512) from t2_512 where b1 > '0');
 
@@ -898,20 +930,22 @@ where a1 in (select substring(b1,1,512) from t2_512 where b1 > '0');
 # group_concat with a blob argument - depends on
 # the variable group_concat_max_len, and
 # convert_blob_length == max_len*collation->mbmaxlen > CONVERT_IF_BIGGER_TO_BLOB
-explain extended select left(a1,7), left(a2,7)
+explain select left(a1,7), left(a2,7)
 from t1_512
 where a1 in (select group_concat(b1) from t2_512 group by b2);
 
+--skip_if_hypergraph  # Differing warnings.
 select left(a1,7), left(a2,7)
 from t1_512
 where a1 in (select group_concat(b1) from t2_512 group by b2);
 
 set @@group_concat_max_len = 256; # anything < (CONVERT_IF_BIGGER_TO_BLOB = 512)
 
-explain extended select left(a1,7), left(a2,7)
+explain select left(a1,7), left(a2,7)
 from t1_512
 where a1 in (select group_concat(b1) from t2_512 group by b2);
 
+--skip_if_hypergraph  # Differing warnings.
 select left(a1,7), left(a2,7)
 from t1_512
 where a1 in (select group_concat(b1) from t2_512 group by b2);
@@ -951,7 +985,7 @@ insert into t3_513 values
  (concat('1 - 04', repeat('x', @suffix_len)), concat('2 - 04', repeat('x', @suffix_len)));
 
 # single value transformer
-explain extended select left(a1,7), left(a2,7)
+explain select left(a1,7), left(a2,7)
 from t1_513
 where a1 in (select b1 from t2_513 where b1 > '0');
 
@@ -960,7 +994,7 @@ from t1_513
 where a1 in (select b1 from t2_513 where b1 > '0');
 
 # row value transformer
-explain extended select left(a1,7), left(a2,7)
+explain select left(a1,7), left(a2,7)
 from t1_513
 where (a1,a2) in (select b1, b2 from t2_513 where b1 > '0');
 
@@ -969,7 +1003,7 @@ from t1_513
 where (a1,a2) in (select b1, b2 from t2_513 where b1 > '0');
 
 # string function with a blob argument, the return type may be != blob
-explain extended select left(a1,7), left(a2,7)
+explain select left(a1,7), left(a2,7)
 from t1_513
 where a1 in (select substring(b1,1,513) from t2_513 where b1 > '0');
 
@@ -980,10 +1014,11 @@ where a1 in (select substring(b1,1,513) from t2_513 where b1 > '0');
 # group_concat with a blob argument - depends on
 # the variable group_concat_max_len, and
 # convert_blob_length == max_len*collation->mbmaxlen > CONVERT_IF_BIGGER_TO_BLOB
-explain extended select left(a1,7), left(a2,7)
+explain select left(a1,7), left(a2,7)
 from t1_513
 where a1 in (select group_concat(b1) from t2_513 group by b2);
 
+--skip_if_hypergraph  # Differing warnings.
 select left(a1,7), left(a2,7)
 from t1_513
 where a1 in (select group_concat(b1) from t2_513 group by b2);
@@ -1023,7 +1058,7 @@ insert into t3_1024 values
  (concat('1 - 04', repeat('x', @suffix_len)), concat('2 - 04', repeat('x', @suffix_len)));
 
 # single value transformer
-explain extended select left(a1,7), left(a2,7)
+explain select left(a1,7), left(a2,7)
 from t1_1024
 where a1 in (select b1 from t2_1024 where b1 > '0');
 
@@ -1032,7 +1067,7 @@ from t1_1024
 where a1 in (select b1 from t2_1024 where b1 > '0');
 
 # row value transformer
-explain extended select left(a1,7), left(a2,7)
+explain select left(a1,7), left(a2,7)
 from t1_1024
 where (a1,a2) in (select b1, b2 from t2_1024 where b1 > '0');
 
@@ -1041,7 +1076,7 @@ from t1_1024
 where (a1,a2) in (select b1, b2 from t2_1024 where b1 > '0');
 
 # string function with a blob argument, the return type may be != blob
-explain extended select left(a1,7), left(a2,7)
+explain select left(a1,7), left(a2,7)
 from t1_1024
 where a1 in (select substring(b1,1,1024) from t2_1024 where b1 > '0');
 
@@ -1052,20 +1087,22 @@ where a1 in (select substring(b1,1,1024) from t2_1024 where b1 > '0');
 # group_concat with a blob argument - depends on
 # the variable group_concat_max_len, and
 # convert_blob_length == max_len*collation->mbmaxlen > CONVERT_IF_BIGGER_TO_BLOB
-explain extended select left(a1,7), left(a2,7)
+explain select left(a1,7), left(a2,7)
 from t1_1024
 where a1 in (select group_concat(b1) from t2_1024 group by b2);
 
+--skip_if_hypergraph  # Differing warnings.
 select left(a1,7), left(a2,7)
 from t1_1024
 where a1 in (select group_concat(b1) from t2_1024 group by b2);
 
 set @@group_concat_max_len = 256; # anything < (CONVERT_IF_BIGGER_TO_BLOB = 1024)
 
-explain extended select left(a1,7), left(a2,7)
+explain select left(a1,7), left(a2,7)
 from t1_1024
 where a1 in (select group_concat(b1) from t2_1024 group by b2);
 
+--skip_if_hypergraph  # Differing warnings.
 select left(a1,7), left(a2,7)
 from t1_1024
 where a1 in (select group_concat(b1) from t2_1024 group by b2);
@@ -1105,7 +1142,7 @@ insert into t3_1025 values
  (concat('1 - 04', repeat('x', @suffix_len)), concat('2 - 04', repeat('x', @suffix_len)));
 
 # single value transformer
-explain extended select left(a1,7), left(a2,7)
+explain select left(a1,7), left(a2,7)
 from t1_1025
 where a1 in (select b1 from t2_1025 where b1 > '0');
 
@@ -1114,7 +1151,7 @@ from t1_1025
 where a1 in (select b1 from t2_1025 where b1 > '0');
 
 # row value transformer
-explain extended select left(a1,7), left(a2,7)
+explain select left(a1,7), left(a2,7)
 from t1_1025
 where (a1,a2) in (select b1, b2 from t2_1025 where b1 > '0');
 
@@ -1123,7 +1160,7 @@ from t1_1025
 where (a1,a2) in (select b1, b2 from t2_1025 where b1 > '0');
 
 # string function with a blob argument, the return type may be != blob
-explain extended select left(a1,7), left(a2,7)
+explain select left(a1,7), left(a2,7)
 from t1_1025
 where a1 in (select substring(b1,1,1025) from t2_1025 where b1 > '0');
 
@@ -1134,20 +1171,22 @@ where a1 in (select substring(b1,1,1025) from t2_1025 where b1 > '0');
 # group_concat with a blob argument - depends on
 # the variable group_concat_max_len, and
 # convert_blob_length == max_len*collation->mbmaxlen > CONVERT_IF_BIGGER_TO_BLOB
-explain extended select left(a1,7), left(a2,7)
+explain select left(a1,7), left(a2,7)
 from t1_1025
 where a1 in (select group_concat(b1) from t2_1025 group by b2);
 
+--skip_if_hypergraph  # Differing warnings.
 select left(a1,7), left(a2,7)
 from t1_1025
 where a1 in (select group_concat(b1) from t2_1025 group by b2);
 
 set @@group_concat_max_len = 256; # anything < (CONVERT_IF_BIGGER_TO_BLOB = 1025)
 
-explain extended select left(a1,7), left(a2,7)
+explain select left(a1,7), left(a2,7)
 from t1_1025
 where a1 in (select group_concat(b1) from t2_1025 group by b2);
 
+--skip_if_hypergraph  # Differing warnings.
 select left(a1,7), left(a2,7)
 from t1_1025
 where a1 in (select group_concat(b1) from t2_1025 group by b2);
@@ -1385,6 +1424,18 @@ SELECT *
 FROM ot1 LEFT JOIN ot2 ON ot1.a=ot2.a+0 AND
                          (ot1.a, ot2.a) IN (SELECT it1.a+0, it2.a+0
                                             FROM it1 JOIN it2 ON it1.a=it2.a);
+
+# In subquery_sj_dupsweed (ie., duplicate weedout active), demonstrates
+# how weedouts that intersect with outer joins are being dropped and then
+# reintroduced again at the very top of the join tree.
+#
+# In subquery_sj_{all,firstmatch}_*, demonstrates how partially overlapping
+# outer joins and first matches are rejected by the join optimizer and cannot
+# exist (DBUG_ASSERTs in FindSubstructure verify it).
+--skip_if_hypergraph  # Depends on query plan.
+EXPLAIN FORMAT=tree SELECT *
+FROM ot1 LEFT JOIN ot2 ON ot1.a=ot2.a AND ot1.a IN (SELECT a FROM it3)
+         LEFT JOIN ot3 ON ot2.a=ot3.a AND ot3.a IN (SELECT a FROM it3);
 
 --sorted_result
 SELECT *
@@ -1758,9 +1809,10 @@ CREATE TABLE t0 (
 INSERT INTO t0 
 VALUES (1,'g','g'), (2,'v','v'), (3,'t','t'), (4,'u','u'), (5,'n','n');
 
-EXPLAIN EXTENDED SELECT vkey FROM t0 WHERE pk IN 
+EXPLAIN SELECT vkey FROM t0 WHERE pk IN
   (SELECT t1.pk FROM t0 t1 JOIN t0 t2 ON t2.vkey = t1.vnokey);
 
+--sorted_result
 SELECT vkey FROM t0 WHERE pk IN 
   (SELECT t1.pk FROM t0 t1 JOIN t0 t2 ON t2.vkey = t1.vnokey);
 
@@ -1798,7 +1850,9 @@ DELIMITER ;|
 INSERT INTO t1 VALUES (1),(2),(3);
 INSERT INTO t2 VALUES (2),(3),(4);
 
+--sorted_result
 CALL p1;
+--sorted_result
 CALL p1;
 
 DROP TABLE t1,t2;
@@ -1999,11 +2053,13 @@ CREATE TABLE t2 (
 ) charset utf8mb4;
 INSERT INTO t2 VALUES (123,NULL,NULL);
 
+--sorted_result
 SELECT int_key  
 FROM t0  
 WHERE varchar_nokey  IN (  
   SELECT t1 .varchar_key  from t1
 );
+--sorted_result
 SELECT t0.int_key  
 FROM t0
 WHERE t0.varchar_nokey  IN (  
@@ -2019,6 +2075,7 @@ WHERE t0.varchar_nokey  IN (
   FROM t1 AS t1_1  JOIN t1 AS t1_2 ON t1_1 .int_key
 );
 
+--sorted_result
 SELECT t0.int_key  
 FROM t0, t2
 WHERE t0.varchar_nokey  IN (  
@@ -2133,6 +2190,7 @@ FROM t2
 WHERE LEFT(country,1) = "A" 
 ; 
 
+--sorted_result
 SELECT city, country_id
 FROM t1
 WHERE country_id IN (
@@ -2141,6 +2199,7 @@ WHERE country_id IN (
   WHERE LEFT(country,1) = "A" 
 );
 
+--sorted_result
 SELECT city, country_id
 FROM t1
 WHERE country_id IN (
@@ -2158,6 +2217,8 @@ WHERE country_id IN (
 );
 ";
 
+
+--sorted_result
 execute stmt;
 
 deallocate prepare stmt;
@@ -2189,7 +2250,10 @@ FROM t1
 WHERE t1field IN (SELECT * FROM v2);
 ";
 
+--sorted_result
 EXECUTE stmt;
+--echo
+--sorted_result
 EXECUTE stmt;
 
 PREPARE stmt FROM
@@ -2202,6 +2266,9 @@ WHERE t1field IN (SELECT * FROM v2)
 ";
 
 EXECUTE stmt;
+--echo
+--echo This line is only in place to help --skip_if_hypergraph diffing some more.
+--echo
 EXECUTE stmt;
 
 DROP TABLE t1, t2, t3;
@@ -2253,10 +2320,13 @@ INSERT INTO t1 VALUES (1,10),(2,11),(1,13);
 CREATE TABLE t2 AS SELECT * FROM t1;
 CREATE TABLE t3 AS SELECT * FROM t1;
 
+# not with prepared statements because of Bug#16926177
+--disable_ps_protocol
 SELECT COUNT(*) FROM t1
 GROUP BY t1.a 
 HAVING t1.a IN (SELECT t3.a FROM t3
                 WHERE t3.b IN (SELECT b FROM t2 WHERE t2.a=t1.a));
+--enable_ps_protocol
 
 DROP TABLE t1, t2, t3;
 
@@ -2365,6 +2435,7 @@ WHERE t1field IN (SELECT v1field FROM v1);
 ";
 
 EXECUTE stmt;
+--echo
 EXECUTE stmt;
 
 DROP PROCEDURE p1;
@@ -2419,6 +2490,7 @@ WHERE EMPNUM IN
    WHERE PNUM IN
      (SELECT PNUM  FROM proj));
 
+--sorted_result
 SELECT EMPNUM, EMPNAME
 FROM staff
 WHERE EMPNUM IN
@@ -2475,7 +2547,7 @@ create table t3 (
 insert into t3 values (1,1, 'foo'), (2,2,'bar');
 
 --echo The following must be converted to a semi-join:
-explain extended SELECT a.idIndividual FROM t1 a 
+explain SELECT a.idIndividual FROM t1 a
 WHERE a.idIndividual IN 
 	(	SELECT c.idObj FROM t3 cona 
 		INNER JOIN t2 c ON c.idContact=cona.idContact 
@@ -2509,9 +2581,9 @@ SELECT one,two from t1 where ROW(one,two) IN (SELECT one,two FROM t2 WHERE flag 
 SELECT one,two,ROW(one,two) IN (SELECT one,two FROM t2 WHERE flag = 'N' group by one,two) as 'test' from t1;
 SELECT one,two,ROW(one,two) IN (SELECT one,two FROM t2 WHERE flag = '0') as 'test' from t1;
 SELECT one,two,ROW(one,two) IN (SELECT one,two FROM t2 WHERE flag = '0' group by one,two) as 'test' from t1;
-explain extended SELECT one,two,ROW(one,two) IN (SELECT one,two FROM t2 WHERE flag = '0') as 'test' from t1;
-explain extended SELECT one,two from t1 where ROW(one,two) IN (SELECT one,two FROM t2 WHERE flag = 'N');
-explain extended SELECT one,two,ROW(one,two) IN (SELECT one,two FROM t2 WHERE flag = '0' group by one,two) as 'test' from t1;
+explain SELECT one,two,ROW(one,two) IN (SELECT one,two FROM t2 WHERE flag = '0') as 'test' from t1;
+explain SELECT one,two from t1 where ROW(one,two) IN (SELECT one,two FROM t2 WHERE flag = 'N');
+explain SELECT one,two,ROW(one,two) IN (SELECT one,two FROM t2 WHERE flag = '0' group by one,two) as 'test' from t1;
 DROP TABLE t1,t2;
 
 
@@ -2679,6 +2751,9 @@ WHERE EMPNUM IN
         FROM t2
         WHERE PTYPE = 'Design'))";
 EXECUTE stmt;
+--echo
+--echo This line is only in place to help --skip_if_hypergraph diffing some more.
+--echo
 EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
@@ -2705,6 +2780,9 @@ WHERE EMPNUM IN
         FROM t2
         WHERE PTYPE = 'Design'))";
 EXECUTE stmt;
+--echo
+--echo This line is only in place to help --skip_if_hypergraph diffing some more.
+--echo
 EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
@@ -2730,6 +2808,9 @@ WHERE EMPNUM IN
         FROM t2
         WHERE PTYPE = 'Design'))";
 EXECUTE stmt;
+--echo
+--echo This line is only in place to help --skip_if_hypergraph diffing some more.
+--echo
 EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
@@ -2784,7 +2865,7 @@ WHERE 1 IN(SELECT 1
              WHERE 1 IN(SELECT 1
                           FROM t3));
 
-explain extended SELECT *
+explain SELECT *
 FROM t1
 WHERE 1 IN(SELECT 1
              FROM t2
@@ -2799,6 +2880,7 @@ insert into t2 select * from t1;
 insert into t3 select * from t1;
 create table t4 select * from t1;
 
+--sorted_result
 SELECT *
 FROM t1
 WHERE 1 IN(SELECT 1
@@ -2817,6 +2899,7 @@ WHERE 1 IN(SELECT 1
                       WHERE 1 IN(SELECT 1
                                  FROM t4)));
 
+--sorted_result
 SELECT *
 FROM t1
 WHERE 1 IN(SELECT 1
@@ -2968,7 +3051,7 @@ INSERT INTO t1 VALUES
 (13,'Apeldoorn','NLD',153491),(14,'Nijmegen','NLD',152463),
 (15,'Enschede','NLD',149544),(16,'Haarlem','NLD',148772),
 (17,'Almere','NLD',142465),(18,'Arnhem','NLD',138020),
-(19,'Zaanstad','NLD',135621),(20,'Â´s-Hertogenbosch','NLD',129170),
+(19,'Zaanstad','NLD',135621),(20,'\'s-Hertogenbosch','NLD',129170),
 (21,'Amersfoort','NLD',126270),(22,'Maastricht','NLD',122087),
 (23,'Dordrecht','NLD',119811),(24,'Leiden','NLD',117196),
 (25,'Haarlemmermeer','NLD',110722),(26,'Zoetermeer','NLD',110214),
@@ -3050,8 +3133,10 @@ CREATE TABLE t2 (
   Population int(11) NOT NULL DEFAULT '0',
   PRIMARY KEY (ID),
   KEY CountryCode (CountryCode)
-) charset utf8mb4;
+);
 
+--character_set latin1
+set names latin1;
 --echo Fill the table with test data
 --disable_query_log
 insert into t2 (ID, Name, CountryCode, Population) values 
@@ -3238,6 +3323,7 @@ insert into t2 (ID, Name, CountryCode, Population) values
 (3531,'Mozyr','BLR',110000), (3532,'Novopolotsk','BLR',106000), (3533,'Lida','BLR',101000),
 (3534,'Soligorsk','BLR',101000), (3535,'Molodetšno','BLR',97000);
 
+
 insert into t1 (Code, Name, Continent) values 
 ('AFG','Afghanistan','Asia'), ('ANT','Netherlands Antilles','North America'),
 ('ALB','Albania','Europe'), ('AND','Andorra','Europe'),
@@ -3271,7 +3357,7 @@ drop table t1, t2;
 
 
 #
-# BUG#35160 "Subquery optimization: table pullout is not reflected in EXPLAIN EXTENDED"
+# BUG#35160 "Subquery optimization: table pullout is not reflected in EXPLAIN"
 #
 create table t0 (a int);
 insert into t0 values (0),(1),(2),(3),(4);
@@ -3284,7 +3370,7 @@ insert into t2 select * from t1;
 
 # Table t2 should be pulled out because t2.a=t0.a equality
 --echo Table t2, unlike table t1, should be displayed as pulled out
-explain extended select * from t0
+explain select * from t0
 where t0.a in ( select t1.a from t1,t2 where t2.a=t0.a and
 t1.b=t2.b);
 
@@ -3298,21 +3384,9 @@ t1.b=t2.b);
 update t1 set a=3, b=11 where a=4;
 update t2 set b=11 where a=3;
 
-# the query just below may exhibit BUG#49129:
-create temporary table tmp select * from t0 where t0.a in 
-  (select t1.a from t1, t2 where t2.a=t0.a and t1.b=t2.b);
-# detect it and warn in result file if it's the case:
-create temporary table tmp_as_ref (a int);
-insert into tmp_as_ref values(0),(1),(2),(3); # correct desired result
-if (`select count(*) from tmp_as_ref left join tmp on tmp.a=tmp_as_ref.a
-where tmp.a is null`)
-{
-  --echo 
-  --echo # The result below is wrong due to Bug#49129
-}
-select * from tmp;
+select * from t0 where t0.a in (select t1.a from t1, t2 where t2.a=t0.a and t1.b=t2.b);
 
-drop table t0, t1, t2, tmp, tmp_as_ref;
+drop table t0, t1, t2;
 
 #
 # BUG#35767: Processing of uncorrelated subquery with semi-join cause wrong result and crash
@@ -3592,52 +3666,60 @@ INSERT INTO t2 VALUES (1,'i','iiii','iiii','iiii','iiii','ffff','ffff','ffff','f
 # table would contain GEOMETRY or different kinds of BLOB/TEXT columns
 let $query=
 SELECT pk FROM t1 WHERE (a, b) IN (SELECT a, b FROM t2 WHERE pk > 0);
-eval EXPLAIN EXTENDED $query;
+eval EXPLAIN $query;
 eval $query;
 
 let $query=
 SELECT pk FROM t1 WHERE (b, c) IN (SELECT b, c FROM t2 WHERE pk > 0);
-eval EXPLAIN EXTENDED $query;
+eval EXPLAIN $query;
+--sorted_result
 eval $query;
 
 let $query=
 SELECT pk FROM t1 WHERE (b, d) IN (SELECT b, d FROM t2 WHERE pk > 0);
-eval EXPLAIN EXTENDED $query;
+eval EXPLAIN $query;
 eval $query;
 
 let $query=
 SELECT pk FROM t1 WHERE (b, e) IN (SELECT b, e FROM t2 WHERE pk > 0);
-eval EXPLAIN EXTENDED $query;
+eval EXPLAIN $query;
+--sorted_result
 eval $query;
 
 let $query=
 SELECT pk FROM t1 WHERE (b, f) IN (SELECT b, f FROM t2 WHERE pk > 0);
-eval EXPLAIN EXTENDED $query;
+eval EXPLAIN $query;
+--sorted_result
 eval $query;
 
 let $query=
 SELECT pk FROM t1 WHERE (b, g) IN (SELECT b, g FROM t2 WHERE pk > 0);
-eval EXPLAIN EXTENDED $query;
+eval EXPLAIN $query;
+--sorted_result
 eval $query;
 
 let $query=
 SELECT pk FROM t1 WHERE (b, h) IN (SELECT b, h FROM t2 WHERE pk > 0);
-eval EXPLAIN EXTENDED $query;
+eval EXPLAIN $query;
+--sorted_result
 eval $query;
 
 let $query=
 SELECT pk FROM t1 WHERE (b, i) IN (SELECT b, i FROM t2 WHERE pk > 0);
-eval EXPLAIN EXTENDED $query;
+eval EXPLAIN $query;
+--sorted_result
 eval $query;
 
 let $query=
 SELECT pk FROM t1 WHERE (b, j) IN (SELECT b, j FROM t2 WHERE pk > 0);
-eval EXPLAIN EXTENDED $query;
+eval EXPLAIN $query;
+--sorted_result
 eval $query;
 
 let $query=
 SELECT pk FROM t1 WHERE (b, k) IN (SELECT b, k FROM t2 WHERE pk > 0);
-eval EXPLAIN EXTENDED $query;
+eval EXPLAIN $query;
+--sorted_result
 eval $query;
 
 DROP TABLE t1, t2;
@@ -3765,6 +3847,7 @@ WHERE t1.id IN (
     )
   )';
 EXECUTE stmt;
+--echo
 EXECUTE stmt;
 
 PREPARE stmt FROM
@@ -3779,6 +3862,7 @@ WHERE t1.id IN (
     )
   )';
 EXECUTE stmt;
+--echo
 EXECUTE stmt;
 
 DROP TABLE t1,t2,t3;
@@ -3794,7 +3878,7 @@ CREATE TABLE t3 (i INTEGER);
 INSERT INTO t1 VALUES (1), (2);
 INSERT INTO t2 VALUES (6);
 INSERT INTO t3 VALUES (1), (2);
-explain extended SELECT * FROM t1 WHERE (t1.i) IN 
+explain SELECT * FROM t1 WHERE (t1.i) IN 
 (SELECT t3.i FROM t3 LEFT JOIN t2 ON t2.i=t3.i);
 SELECT * FROM t1 WHERE (t1.i) IN 
 (SELECT t3.i FROM t3 LEFT JOIN t2 ON t2.i=t3.i);
@@ -3823,7 +3907,10 @@ WHERE country_id IN (SELECT vf_country_id FROM v1);
 ";
 
 --echo
+--sorted_result
 EXECUTE stmt;
+--echo
+--sorted_result
 EXECUTE stmt;
 
 DROP TABLE t1,t2;
@@ -3964,6 +4051,7 @@ let $query=
 SELECT * FROM t1 WHERE t1.i IN (SELECT t2.i
                                 FROM t2 JOIN t3
                                 WHERE t2.i + t3.i = 5);
+--sorted_result
 eval $query;
 eval explain $query;
 
@@ -3989,6 +4077,7 @@ SELECT * FROM ot1,ot4
 WHERE (ot1.a,ot4.a) IN (SELECT it2.a,it3.a
                         FROM it2,it3);
 
+--sorted_result
 eval $query;
 eval explain $query;
 
@@ -4813,6 +4902,7 @@ WHERE ot1.a IN (SELECT a FROM it1) AND
       ot2.a IN (SELECT a FROM it2);
 
 eval explain $query;
+--sorted_result
 eval $query;
 
 DROP TABLE ot1, ot2, it1, it2;
@@ -4973,6 +5063,7 @@ WHERE t1a.col_int_key IN (
 );
 
 eval EXPLAIN $query;
+--sorted_result
 eval $query;
 
 ALTER TABLE t1 ENGINE=Innodb;
@@ -5018,6 +5109,7 @@ WHERE (a, a) IN
 ;
 
 eval explain $query;
+--sorted_result
 eval $query;
 
 DROP TABLE t1, t2;
@@ -5397,9 +5489,12 @@ WHERE col_int_key IN (
   FROM v1 AS alias1
   WHERE alias1.col_varchar_key < 'v'
 );
+--sorted_result
 eval $query;
 eval prepare stmt FROM "$query";
+--sorted_result
 execute stmt;
+--sorted_result
 execute stmt;
 
 DEALLOCATE PREPARE stmt;
@@ -5614,6 +5709,7 @@ FROM t2 AS alias1
 ';
 
 EXECUTE stmt;
+--echo
 EXECUTE stmt;
 
 DEALLOCATE prepare stmt;
@@ -5970,6 +6066,7 @@ WHERE EXISTS
 ";
 
 EXECUTE stmt;
+--echo
 EXECUTE stmt;
 
 DEALLOCATE PREPARE stmt;
@@ -6022,6 +6119,14 @@ SELECT sq2_alias2.col_varchar_key AS sq2_field1,
 FROM t3 AS sq2_alias1 LEFT OUTER JOIN t3 AS sq2_alias2
      ON sq2_alias1.pk = sq2_alias2.col_int_key;
 
+#
+# Note that due to the UNION DISTINCT, view_inline_2 will get a unique index
+# on the temporary table it is materialized into (both parts of the query are
+# materialized straight into the same table). This enables more semijoin
+# optimizations than one would expect; in particular, we can do semijoin
+# table pullout (rewriting the IN into a simple inner join) if enabled,
+# and use unique_subquery instead of index_subquery if not.
+#
 CREATE VIEW view_inline_2 AS
 SELECT 'p', 'p' UNION SELECT 'k', 's';
 
@@ -6235,7 +6340,7 @@ WHERE outr.col_int_nokey IN (
   OR
   outr.col_varchar_key IS NULL
 );
-eval EXPLAIN EXTENDED $query;
+eval EXPLAIN $query;
 --sorted_result
 eval $query;
 
@@ -6270,6 +6375,7 @@ FROM t2 LEFT JOIN t1 ON t2.vc=t1.vc
 WHERE t2.vc IN (SELECT vc FROM t2 AS t3);
 
 eval explain format=json $query;
+--sorted_result
 eval $query;
 
 DROP TABLE t1, t2;
@@ -6301,7 +6407,10 @@ FROM t1 AS alias1
 eval explain $query;
 
 eval PREPARE stmt FROM "$query";
+--sorted_result
 EXECUTE stmt;
+--echo
+--sorted_result
 EXECUTE stmt;
 
 DEALLOCATE PREPARE stmt;
@@ -6346,6 +6455,7 @@ WHERE (col_varchar_nokey, col_varchar_nokey) IN
    );
 
 eval explain format=json $query;
+--sorted_result
 eval $query;
 
 SET @@optimizer_switch= @optimizer_switch_saved;
@@ -6382,6 +6492,7 @@ WHERE (col_int_nokey, col_int_nokey) IN
    );
 
 eval explain format=json $query;
+--sorted_result
 eval $query;
 
 DROP TABLE t1, t2;
@@ -6433,7 +6544,8 @@ INSERT INTO t2 VALUES
  (15,7,'2008-07-02 00:00:00','g','g'), (16,4,'1900-01-01 00:00:00','p','p'),
  (17,1,'2002-12-08 11:34:58','q','q'), (18,9,'1900-01-01 00:00:00','w','w'),
  (19,4,'1900-01-01 00:00:00','d','d'), (20,8,'2002-08-25 20:35:06','e','e');
- 
+
+--sorted_result
 SELECT alias1.col_datetime_key
 FROM t2 AS alias1
      RIGHT JOIN t2 AS alias2
@@ -6463,6 +6575,7 @@ WHERE (alias2.col_varchar_key, alias2.col_varchar_key) IN
         WHERE sq2_alias2.col_int_key < 2);
 
 eval explain format=json $query;
+--sorted_result
 eval $query;
 
 DROP TABLE t1, t2;
@@ -6918,6 +7031,12 @@ ORDER BY col_int_key
 
 eval explain $query;
 
+# In subquery_sj_loosescan_bka_nobnl (ie., with loose scan), shows a case
+# where we can't use NestedLoopSemiJoinWithDuplicateRemovalIterator since we
+# have a table that is both firstmatch (semijoin) _and_ outer join.
+--skip_if_hypergraph  # Depends on query plan.
+eval explain format=tree $query;
+
 eval $query;
 
 DROP TABLE t1, t2, t3, t4;
@@ -7019,10 +7138,12 @@ AND t2.uid=t1.fid;
 
 FLUSH STATUS;
 
+--sorted_result
 SELECT name FROM t2, t1
 WHERE t1.uid IN (SELECT t4.uid FROM t4, t3 WHERE t3.uid=1 AND t4.uid=t3.fid)
 AND t2.uid=t1.fid;
 
+--skip_if_hypergraph  # Depends on the query plan.
 SHOW STATUS LIKE '%handler_read%';
 
 DROP TABLE t1,t2,t3,t4;
@@ -7151,7 +7272,7 @@ WHERE t1.a IN (SELECT t2.a
                                              WHERE t3.b=1));
 
 ANALYZE TABLE t;
-eval EXPLAIN extended $query;
+eval EXPLAIN $query;
 eval $query;
 
 DROP TABLE t;
@@ -7167,3 +7288,18 @@ SELECT c FROM t WHERE 1 IN
 (SELECT t.c = page_size FROM information_schema.innodb_cmpmem);
 
 DROP TABLE t;
+
+--echo #
+--echo # Bug #29132639: WL#12470: SIG 6 IN CONNECTJOINS|SQL/SQL_EXECUTOR.C
+--echo #
+
+CREATE TABLE t1 ( f1 TIME, f2 VARCHAR(1) );
+INSERT INTO t1 VALUES ('08:35:24', 'X'), ('14:51:13', 'S'), ('11:22:33', 'Q');
+CREATE TABLE t2 ( pk INTEGER );
+INSERT INTO t2 VALUES (1), (2);
+ANALYZE TABLE t1, t2;
+--skip_if_hypergraph  # Depends on query plan.
+EXPLAIN FORMAT=tree SELECT * FROM t1 WHERE EXISTS ( SELECT alias1.f2 FROM t2 LEFT JOIN t1 ON 1 LEFT JOIN t1 AS alias1 ON 1 );
+--sorted_result
+SELECT * FROM t1 WHERE EXISTS ( SELECT alias1.f2 FROM t2 LEFT JOIN t1 ON 1 LEFT JOIN t1 AS alias1 ON 1 );
+DROP TABLE t1, t2;

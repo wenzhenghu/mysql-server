@@ -2,6 +2,9 @@
 
 --source include/not_ubsan.inc
 
+# Also disabled on Windows ASAN due to https://bugs.llvm.org/show_bug.cgi?id=35365
+--source include/not_asan_windows.inc
+
 --echo #
 --echo # BUG#21893562 ASSERTION FAILED: IT->BOTH(OPERATION_UNION) || IT->BOTH(OPERATION_INTERSECTION)
 --echo #
@@ -11,7 +14,6 @@
 # runtime error: signed integer overflow: 
 # 17235 * 144115188075875936 cannot be represented in type 'long long int'
 
---error ER_BOOST_GEOMETRY_INCONSISTENT_TURNS_EXCEPTION
 do st_symdifference(
   st_makeenvelope(point(1,2398046010000),point(30000,1)),
   st_convexhull(
@@ -19,7 +21,6 @@ do st_symdifference(
   )
 );
 
---error ER_BOOST_GEOMETRY_INCONSISTENT_TURNS_EXCEPTION
 do st_symdifference(
  st_envelope(
   multipoint(
@@ -33,13 +34,11 @@ do st_symdifference(
  )
 );
 
---error ER_BOOST_GEOMETRY_INCONSISTENT_TURNS_EXCEPTION
 do st_symdifference(
   st_makeenvelope(point(2,28951),point(17237,5514.6191)),
   st_makeenvelope(point(11192,-20054) , point(8128,144115188075855874))
 );
 
---error ER_BOOST_GEOMETRY_INCONSISTENT_TURNS_EXCEPTION
 do st_symdifference(
   st_makeenvelope(point(16781,8388611),point(-15032,-2251799813685244)),
   st_makeenvelope(point(-21087,31851),point(18514,20243))

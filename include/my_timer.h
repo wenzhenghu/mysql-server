@@ -1,13 +1,20 @@
-/* Copyright (c) 2014, 2017, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2014, 2020, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -21,32 +28,25 @@
 */
 
 #include "my_config.h"
-#include "my_macros.h"
-
-struct st_my_timer;
 
 /* POSIX timers API. */
 #ifdef HAVE_POSIX_TIMERS
-# include <time.h>  /* timer_t */
+#include <time.h> /* timer_t */
 
-  typedef timer_t   os_timer_t;
+typedef timer_t os_timer_t;
 #elif defined(HAVE_KQUEUE_TIMERS)
-# include <sys/types.h> /* uintptr_t */
+#include <sys/types.h> /* uintptr_t */
 
-  typedef uintptr_t os_timer_t;
+typedef uintptr_t os_timer_t;
 #elif defined(_WIN32)
-  typedef struct st_os_timer
-  {
-    HANDLE timer_handle;
-    bool timer_state;
-  } os_timer_t;
+struct os_timer_t {
+  HANDLE timer_handle;
+  bool timer_state;
+};
 #endif
 
-typedef struct st_my_timer my_timer_t;
-
 /* Non-copyable timer object. */
-struct st_my_timer
-{
+struct my_timer_t {
   /* Timer ID used to identify the timer in timer requests. */
   os_timer_t id;
 
@@ -54,15 +54,20 @@ struct st_my_timer
   void (*notify_function)(my_timer_t *);
 };
 
-C_MODE_START
-
 /* Initialize internal components. */
-int my_timer_initialize(void);
+int my_timer_initialize();
 
 /* Release any resources acquired. */
-void my_timer_deinitialize(void);
+void my_timer_deinitialize();
 
-/* Create a timer object. */
+/**
+  Create a timer object.
+
+  @param  timer   Location where the timer ID is returned.
+
+  @return On success, 0.
+          On error, -1 is returned, and errno is set to indicate the error.
+*/
 int my_timer_create(my_timer_t *timer);
 
 /* Set the time (in milliseconds) until the next expiration of the timer. */
@@ -73,7 +78,5 @@ int my_timer_cancel(my_timer_t *timer, int *state);
 
 /* Delete a timer object. */
 void my_timer_delete(my_timer_t *timer);
-
-C_MODE_END
 
 #endif /* MY_TIMER_H */

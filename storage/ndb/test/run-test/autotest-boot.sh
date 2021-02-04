@@ -1,15 +1,22 @@
 #!/bin/bash
 
-# Copyright (c) 2007, 2015, Oracle and/or its affiliates. All rights reserved.
+# Copyright (c) 2007, 2019, Oracle and/or its affiliates. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; version 2 of the License.
+# it under the terms of the GNU General Public License, version 2.0,
+# as published by the Free Software Foundation.
+#
+# This program is also distributed with certain software (including
+# but not limited to OpenSSL) that is licensed under separate terms,
+# as designated in a particular file or component or in included license
+# documentation.  The authors of MySQL hereby grant you an additional
+# permission to link the program and your derivative works with the
+# separately licensed software that they have included with MySQL.
 #
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
+# GNU General Public License, version 2.0, for more details.
 #
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
@@ -232,7 +239,12 @@ then
 # and ensure that the local repo is up to date.
                 git -C ${git_local_repo} fetch ${git_remote_repo}
 
-                git clone -b${clone0} ${git_local_repo} ${dst_place0}
+                if [ -z "$clone0" ]
+                then
+                  git clone ${git_local_repo} ${dst_place0}
+                else
+                  git clone -b${clone0} ${git_local_repo} ${dst_place0}
+                fi
                 [ ! -n "${tag0}" ] || git -C ${dst_place0} reset --hard ${tag0}
 		for patch in $patch0 ; do
 			( cd $dst_place0 && patch -p0 ) < $patch
@@ -268,9 +280,11 @@ fi
 
 function build_cluster()
 {
-    if grep -qc autotest storage/ndb/compile-cluster 2>/dev/null
+    mkdir build_dir
+    cd build_dir
+    if grep -qc autotest ../storage/ndb/compile-cluster 2>/dev/null
     then
-        storage/ndb/compile-cluster --autotest $*
+        ../storage/ndb/compile-cluster --autotest $*
     else
         BUILD/compile-ndb-autotest $*
     fi
@@ -317,7 +331,7 @@ fi
 script=$install_dir0/mysql-test/ndb/autotest-run.sh
 for R in $RUN
 do
-    sh -x $script $save_args --conf=$conf --run-dir=$install_dir --install-dir0=$install_dir0 --install-dir1=$install_dir1 --suite=$R --nolock $extra_args
+    bash -x $script $save_args --conf=$conf --run-dir=$install_dir --install-dir0=$install_dir0 --install-dir1=$install_dir1 --suite=$R --nolock $extra_args
 done
 
 if [ "$build" ]

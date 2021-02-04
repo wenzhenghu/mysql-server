@@ -1,21 +1,25 @@
 /*
- Copyright (c) 2014, 2016 , Oracle and/or its affiliates. All rights
- reserved.
+ Copyright (c) 2014, 2020 Oracle and/or its affiliates.
  
- This program is free software; you can redistribute it and/or
- modify it under the terms of the GNU General Public License
- as published by the Free Software Foundation; version 2 of
- the License.
- 
+ This program is free software; you can redistribute it and/or modify
+ it under the terms of the GNU General Public License, version 2.0,
+ as published by the Free Software Foundation.
+
+ This program is also distributed with certain software (including
+ but not limited to OpenSSL) that is licensed under separate terms,
+ as designated in a particular file or component or in included license
+ documentation.  The authors of MySQL hereby grant you an additional
+ permission to link the program and your derivative works with the
+ separately licensed software that they have included with MySQL.
+
  This program is distributed in the hope that it will be useful,
  but WITHOUT ANY WARRANTY; without even the implied warranty of
- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- GNU General Public License for more details.
- 
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License, version 2.0, for more details.
+
  You should have received a copy of the GNU General Public License
  along with this program; if not, write to the Free Software
- Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
- 02110-1301  USA
+ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
  */
 
 
@@ -28,8 +32,6 @@
 #include "BatchImpl.h"
 #include "NativeMethodCall.h"
 #include "NdbWrapperErrors.h"
-
-using namespace v8;
 
 V8WrapperFn getOperationError,
             tryImmediateStartTransaction,
@@ -52,7 +54,6 @@ public:
 
 BatchImplEnvelopeClass BatchImplEnvelope;
 
-// CALLER in DBOperationHelper has a HandleScope
 Local<Value> BatchImpl_Wrapper(BatchImpl *set) {
   Local<Value> jsobj = BatchImplEnvelope.wrap(set);
   BatchImplEnvelope.freeFromGC(set, jsobj);
@@ -60,11 +61,11 @@ Local<Value> BatchImpl_Wrapper(BatchImpl *set) {
 }
 
 // This version is *not* freed from GC
-Local<Object> getWrappedObject(BatchImpl *set) {
-  return BatchImplEnvelope.wrap(set)->ToObject();
+Local<Value> getWrappedObject(BatchImpl *set) {
+  return BatchImplEnvelope.wrap(set);
 }
 
-Local<Value> BatchImpl_Recycle(Handle<Object> oldWrapper,
+Local<Value> BatchImpl_Recycle(Local<Object> oldWrapper,
                                BatchImpl * newSet) {
   DEBUG_PRINT("BatchImpl *Recycle*");
   BatchImpl * oldSet = unwrapPointer<BatchImpl *>(oldWrapper);
@@ -80,7 +81,7 @@ void getOperationError(const Arguments & args) {
   EscapableHandleScope scope(args.GetIsolate());
 
   BatchImpl * set = unwrapPointer<BatchImpl *>(args.Holder());
-  int n = args[0]->Int32Value();
+  int n = GetInt32Arg(args, 0);
 
   const NdbError * err = set->getError(n);
 
@@ -116,7 +117,7 @@ public:
   {
     errorHandler = getNdbErrorIfLessThanZero;
   }
-  void doAsyncCallback(Local<Object>);  
+  void doAsyncCallback(Local<Object>) override;  
 };                               
 
 void TxExecuteAndCloseCall::doAsyncCallback(Local<Object> context) {
@@ -140,7 +141,7 @@ void execute(const Arguments &args) {
 void executeAsynch(const Arguments &args) {
   EscapableHandleScope scope(args.GetIsolate());
   typedef NativeMethodCall_4_<int, BatchImpl,
-                              int, int, int, Handle<Function> > MCALL;
+                              int, int, int, Local<Function> > MCALL;
   MCALL mcall(& BatchImpl::executeAsynch, args);
   mcall.run();
   args.GetReturnValue().Set(mcall.jsReturnVal());
@@ -149,7 +150,7 @@ void executeAsynch(const Arguments &args) {
 
 void readBlobResults(const Arguments &args) {
   BatchImpl * set = unwrapPointer<BatchImpl *>(args.Holder());
-  int n = args[0]->Int32Value();
+  int n = GetInt32Arg(args, 0);
   set->getKeyOperation(n)->readBlobResults(args);
 //  args.GetReturnValue().Set(set->getKeyOperation(n)->readBlobResults());
 }

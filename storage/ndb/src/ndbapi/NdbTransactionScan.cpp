@@ -1,14 +1,21 @@
 /*
-   Copyright (c) 2003, 2010, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2003, 2019, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -84,7 +91,7 @@ NdbTransaction::receiveSCAN_TABREF(const NdbApiSignal* aSignal){
  *****************************************************************************/
 int			
 NdbTransaction::receiveSCAN_TABCONF(const NdbApiSignal* aSignal,
-				   const Uint32 * ops, Uint32 len)
+                                    const Uint32 * ops, Uint32 len)
 {
   const ScanTabConf * conf = CAST_CONSTPTR(ScanTabConf, aSignal->getDataPtr());
 
@@ -104,41 +111,39 @@ NdbTransaction::receiveSCAN_TABCONF(const NdbApiSignal* aSignal,
     }
 
     int retVal = -1;
-    Uint32 words_per_op = theScanningOp ? 3 : 4;
-    for(Uint32 i = 0; i<len; i += words_per_op)
+    const Uint32 *const opsEnd = ops + len;
+    while (ops < opsEnd)
     {
-      Uint32 ptrI = * ops++;
-      Uint32 tcPtrI = * ops++;
-      Uint32 opCount;
-      Uint32 totalLen;
-      if (words_per_op == 3)
-      {
-        Uint32 info = * ops++;
-        opCount  = ScanTabConf::getRows(info);
-        totalLen = ScanTabConf::getLength(info);
-      }
-      else
-      {
-        opCount = * ops++;
-        totalLen = * ops++;
-      }
-
+      const Uint32 ptrI = *ops++;
+      const Uint32 tcPtrI = *ops++;
       void * tPtr = theNdb->theImpl->int2void(ptrI);
       assert(tPtr); // For now
       NdbReceiver* tOp = NdbImpl::void2rec(tPtr);
-      if (tOp && tOp->checkMagicNumber())
+      if (likely(tOp && tOp->checkMagicNumber()))
       {
         // Check if this is a linked operation.
-        if (tOp->getType()==NdbReceiver::NDB_QUERY_OPERATION)
+        if (tOp->getType()==NdbReceiver::NDB_QUERY_OPERATION)  //A SPJ reply
         {
+          const Uint32 rowCount = *ops++;
+          const Uint32 moreMask = *ops++;
+
+          // A 5'th 'activeMask' word was added as part of wl#7636 (SPJ outer join).
+          // Version of connected TC node decide whether a 4/5 word conf is returned.
+          const Uint32 tcNodeId = getConnectedNodeId();
+          const Uint32 nodeVersion = theNdb->theImpl->getNodeNdbVersion(tcNodeId);
+          assert(nodeVersion != 0);
+          const Uint32 activeMask = ndbd_send_active_bitmask(nodeVersion) ? *ops++ : 0;
+
           NdbQueryOperationImpl* queryOp = (NdbQueryOperationImpl*)tOp->m_owner;
           assert (&queryOp->getQuery() == m_scanningQuery);
-
-          if (queryOp->execSCAN_TABCONF(tcPtrI, opCount, totalLen, tOp))
+          if (queryOp->execSCAN_TABCONF(tcPtrI, rowCount, moreMask, activeMask, tOp))
             retVal = 0; // We have result data, wakeup receiver
         }
         else
         {
+          const Uint32 info = *ops++;
+          const Uint32 opCount  = ScanTabConf::getRows(info);
+          const Uint32 totalLen = ScanTabConf::getLength(info);
           if (tcPtrI == RNIL && opCount == 0)
           {
             theScanningOp->receiver_completed(tOp);
@@ -151,7 +156,7 @@ NdbTransaction::receiveSCAN_TABCONF(const NdbApiSignal* aSignal,
           }
         }
       }
-    } //for
+    } //while
     return retVal;
   } else {
 #ifdef NDB_NO_DROPPED_SIGNAL

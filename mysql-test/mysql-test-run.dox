@@ -1,8 +1,8 @@
-########## The MySQL Test Framework, Version 2.0 ##########
+########## The MySQL Test Framework ##########
 
 
 /**
-  @page PAGE_MYSQL_TEST_RUN The MySQL Test Framework, Version 2.0
+  @page PAGE_MYSQL_TEST_RUN The MySQL Test Framework
 
   This manual describes the MySQL test framework, consisting of the
   test driver and the test script language.
@@ -139,8 +139,8 @@
       to the expected result found in the <b>mysql-test/r</b> directory
       (in a file with a <b>.result</b> suffix). If the expected and
       actual results differ, the test case fails. The actual test result
-      is written to a file in the <b>mysql-test/r</b> directory with a
-      <b>.reject</b> suffix, and the difference between the
+      is written to a file in the <b>mysql-test/var/log</b> directory
+      with a <b>.reject</b> suffix, and the difference between the
       <b>.result</b> and <b>.reject</b> files is presented for
       evaluation.
     </li>
@@ -191,7 +191,6 @@
 
   <h3>Table of Contents</h3>
   - @subpage PAGE_TEST_FRAMEWORK_SYSTEM_REQUIREMENTS
-  - @subpage PAGE_TEST_FRAMEWORK_SSL
   - @subpage PAGE_REPORT_BUGS
 
   The MySQL test framework consists of programs that run tests, and
@@ -303,7 +302,7 @@
         of the server can be passed in both
         <b><em>test_name</em>-master.opt</b> and
         <b><em>test_name</em>-slave.opt</b>. Each bootstrap variable
-        must be passed as the value of a <b>--bootstrap</b> option so
+        must be passed as the value of a <b>`--initialize`</b> option so
         that @ref PAGE_MYSQL_TEST_RUN_PL "mysql-test-run.pl" can
         recognize that the variable should be used during server
         initialization, remove the existing data directory, and
@@ -314,9 +313,88 @@
       </li>
 
       <li>
+        A file name of the form <b><em>test_name</em>-client.opt </b>
+        provides @ref PAGE_MYSQLTEST "mysqltest" client options.
+      </li>
+
+      <li>
         A file name of the form <b><em>test_name</em>.cnf</b> contains
         additional entries for the config file to be used for this
         test.
+
+        <ul>
+          <li>
+            During a test run, each server is started with a different
+            <b>defaults-group-suffix</b> value and this suffix value
+            can be used with a group name to specify server specific
+            options. For example, section <b>[mysqld.1]</b> is used to
+            specify options for mysqld server with suffix value
+            <b>".1"</b>.
+          </li>
+
+          <li>
+            The <b>[mysqltest]</b> section is used to specify options
+            for mysqltest client.
+          </li>
+
+          <li>
+            The <b>[ENV]</b> section is used to specify environment
+            variables for a test case.
+          </li>
+
+          <li>
+            To include the options mentioned in another <b>.cnf</b>
+            file, <b>!include path_to_cnf_file</b> is used. Path to
+            the included <b>.cnf</b> should either be an absolute path
+            or a relative path from current location or from
+            <b>mysql-test</b> directory.
+          </li>
+        </ul>
+
+        Here is a sample <b>.cnf</b> file.
+
+        @verbatim
+  !include include/default_my.cnf
+
+  [mysqld.1]
+  Options for server mysqld.1
+
+  [mysqld.2]
+  Options for server mysqld.2
+
+  [mysqltest]
+  ps-protocol
+
+  ...
+  ...
+  ...
+
+  [ENV]
+  SERVER_MYPORT_1= @mysqld.1.port
+  SERVER_MYPORT_2= @mysqld.2.port
+        @endverbatim
+      </li>
+
+      <li>
+        A file name of the form <b><em>test_name</em>.combinations</b>
+        provides section of options for each test run.
+      </li>
+
+      <li>
+        A file name of the form <b><em>suite</em>.opt</b> provides
+        server options to all the tests within the suite it belongs
+        to.
+
+        If a test run is started with more than one server, the
+        options specified in a <b><em>suite</em>.opt</b> are used by
+        all of them. It is also possible to pass the server options
+        needed during the server initialization in the
+        <b><em>suite</em>.opt</b> file.
+
+        The options mentioned in the <b><em>suite</em>.opt</b> file
+        are overridden by those found in a
+        <b><em>test_name</em>-master.opt</b> file or in a
+        <b><em>test_name</em>-slave.opt</b> file.
       </li>
 
       <li>
@@ -338,37 +416,39 @@
         this file.
 
         The format of a line in the <b>disabled.def</b> file looks
-        like this, where fields are separated by one or more spaces or
-        Tab characters:
+        like this, where fields are separated by one or more spaces.
 
         @verbatim
-  test_name : BUG#nnnnn YYYY-MM-DD disabler comment
+  suite_name.test_name [@platform|@!platform] : <BUG|WL>#<XXXX> [<comment>]
         @endverbatim
 
         Example:
 
         @verbatim
-  rpl_row_blob_innodb : BUG#18980 2006-04-10 kent  Test fails randomly
+  main.1st @linux : BUG#18980 Test fails randomly
         @endverbatim
 
+        <b><em>suite_name</em></b> is the suite name.
         <b><em>test_name</em></b> is the test case name.
-        <b>BUG#<em>nnnnn</em></b> indicates the bug related to the
-        test that causes it to fail (and thus requires it to be
-        disabled). <b><em>disabler</em></b> is the name of the person
-        that disabled the test. <b><em>comment</em></b> normally
-        provides a reason why the test was disabled.
 
-        The text following the colon is not part of the mandatory
-        syntax for this file; @ref PAGE_MYSQL_TEST_RUN_PL
-        "mysql-test-run.pl" will not actually care what is written
-        here. However, it is a recommended standard.
-
-        An additional element: after the test name and before the
-        colon you may add one or more <b>\@<em>platform</em></b> to
-        have the test disabled only on specific platform(s). Basic OS
-        names as reported by <b>$^O</b> in Perl, or <b>'windows'</b>
-        are supported. Alternatively, <b>@!<em>platform</i></b> will
+        An additional element after the test name and before the
+        colon you may add a <b>\@<em>platform</em></b> to have the
+        test disabled only on a specific platform. Basic OS names as
+        reported by <b>$^O</b> in Perl, or <b>'windows'</b> are
+        supported. Alternatively, <b>@!<em>platform</em></b> will
         disable the test on all except the named platform.
+
+        <b>BUG#<em>nnnnn</em></b> or <b>WL#<em>nnnn</em></b> indicates
+        the bug or the WL related to the test that causes it to fail
+        (and thus requires it to be disabled).
+
+        The <b><em>comment</em></b> text following the
+        <b>BUG#<em>nnnnn</em></b> or the <b>WL#<em>nnnn</em></b> is
+        not part of the mandatory syntax for this file,
+        @ref PAGE_MYSQL_TEST_RUN_PL "mysql-test-run.pl" will not
+        actually care what is written here. Length of a
+        <b><em>comment</em></b> text must not be more than <b>80</b>
+        characters.
 
         A comment line can be written in the file by beginning the
         line with a “<b>#</b>” character.
@@ -404,6 +484,11 @@
       If a <b>.reject</b> file is created because a test fails, @ref
       PAGE_MYSQL_TEST_RUN_PL "mysql-test-run.pl" removes the file
       later the next time the test succeeds.
+
+      When <b>`--check-testcases`</b> option is enabled, a test case
+      not having its corresponding <b>.result</b> file is marked as
+      failed by MTR. See @ref PAGE_MYSQL_TEST_RUN_PL
+      "mysql-test-run.pl".
     </li>
 
     <li>
@@ -437,6 +522,38 @@
       The <b>suite</b> directory contains a set of subdirectories
       containing named test suites. Each subdirectory represents a
       test suite with the same name.
+
+      A test suite directory contains the following components:
+
+      <ul>
+        <li>
+          The <b>t</b> directory contains test cases.
+        </li>
+
+        <li>
+          The <b>r</b> directory contains test case result files.
+        </li>
+
+        <li>
+          The <b>include</b> directory contains files that are
+          included by the test cases belonging to that suite.
+        </li>
+
+        <li>
+          A file name of the form <b>combinations</b> provides section
+          of options for each test run. See @ref
+          PAGE_CONTROLLING_BINARY_LOG_FORMAT.
+        </li>
+
+        <li>
+          A file name of the form <b><em>my</em>.cnf</b> contains
+          additional entries for the config file used by all the tests
+          within the suite it belongs to.
+
+          A suite specific <b><em>my</em>.cnf</b> file is overridden
+          by a <b><em>test_name</em>.cnf</b> file.
+        </li>
+      </ul>
     </li>
 
     <li>
@@ -524,9 +641,9 @@
       PAGE_MYSQLTEST "mysqltest" reads the expected results from the
       given file and compares them with the actual results. If the
       results do not match, @ref PAGE_MYSQLTEST "mysqltest" writes a
-      <b>.reject</b> file in the same directory as the result file and
-      exits with an error. It will also print out a diff of the
-      expected and actual result, provided it can find an appropriate
+      <b>.reject</b> file in the log directory and exits with an
+      error. It will also print out a diff of the expected and actual
+      result, provided it can find an appropriate
       <b>diff</b> tool to use.
     </li>
 
@@ -584,46 +701,6 @@
 ###############################################################################
 
 
-
-## The Test Framework and SSL
-
-/**
-  @page PAGE_TEST_FRAMEWORK_SSL The Test Framework and SSL
-
-  When @ref PAGE_MYSQL_TEST_RUN_PL "mysql-test-run.pl" starts, it
-  checks whether <b>mysqld</b> supports SSL connections:
-
-  <ul>
-    <li>
-      If <b>mysqld</b> supports SSL, @ref PAGE_MYSQL_TEST_RUN_PL
-      "mysql-test-run.pl" starts it with the proper
-      <b>`--ssl`-<em>xxx</em></b> options that enable it to
-      accept SSL connections for those test cases that require secure
-      connections (those with “ssl” in their name). As @ref
-      PAGE_MYSQL_TEST_RUN_PL "mysql-test-run.pl" runs test cases, a
-      secure connection to <b>mysqld</b> is initiated for those cases
-      that require one. For those test cases that do not require SSL,
-      an unencrypted connection is initiated.
-    </li>
-
-    <li>
-      If <b>mysqld</b> does not support SSL, @ref PAGE_MYSQL_TEST_RUN_PL
-      "mysql-test-run.pl" skips those test cases that require secure
-      connections.
-    </li>
-  </ul>
-
-  If @ref PAGE_MYSQL_TEST_RUN_PL "mysql-test-run.pl" is started with
-  the <b>`--ssl`</b> option, it sets up a secure connection for all
-  test cases. In this case, if <b>mysqld</b> does not support SSL,
-  @ref PAGE_MYSQL_TEST_RUN_PL "mysql-test-run.pl" exits with an error
-  message: <b>Couldn't find support for SSL</b>.
-*/
-
-###############################################################################
-
-
-
 ## How to Report Bugs from Tests in the MySQL Test Suite
 
 /**
@@ -641,8 +718,8 @@
     <li>
       Make sure to include the output of @ref PAGE_MYSQL_TEST_RUN_PL
       "mysql-test-run.pl", as well as contents of all <b>.reject</b>
-      files in the <b>mysql-test/r</b> directory, or the (often much
-      shorter) diff that @ref PAGE_MYSQL_TEST_RUN_PL
+      files in the <b>mysql-test/var/log</b> directory, or the (often
+      much shorter) diff that @ref PAGE_MYSQL_TEST_RUN_PL
       "mysql-test-run.pl" reported.
     </li>
 
@@ -849,6 +926,12 @@
   @ref PAGE_MYSQL_TEST_RUN_PL "mysql-test-run.pl" to pick a value
   automatically, based on system information. The parallel option may
   also be given using the environment variable <b>MTR_PARALLEL</b>.
+
+  @note
+  Test cases which use <b>not_parallel.inc</b> are run at the end with
+  a parallel value of <b>1</b> overriding the <b>`--parallel`</b>
+  option value. Such test cases will be executed at the end of the test
+  run one at a time.
 */
 
 ###############################################################################
@@ -872,12 +955,13 @@
   - @subpage PAGE_PASSING_OPTIONS
   - @subpage PAGE_TESTCASE_SPECIFIC_SERVER_OPTIONS
   - @subpage PAGE_TESTCASE_SPECIFIC_BOOTSTRAP_OPTIONS
+  - @subpage PAGE_TESTCASE_SPECIFIC_CLIENT_OPTIONS
   - @subpage PAGE_INCLUDE_FILES
   - @subpage PAGE_BINARY_LOG_FORMAT
   - @subpage PAGE_WRITING_REPLICATION_TESTS
   - @subpage PAGE_THREAD_SYNCHRONIZATION
   - @subpage PAGE_SUPPRESSING_ERRORS_WARNINGS
-  - @subpage PAGE_STOPPING_SERVER_DURING_TEST
+  - @subpage PAGE_STOPPING_AND_RESTARTING_SERVER_DURING_TEST
   - @subpage PAGE_TIPS_WRITING_TESTCASES
 
   Normally, you run the test suite during the development process to
@@ -970,13 +1054,14 @@
       Assuming that the test case produces output, it should fail
       because the output does not match the result file (which is
       empty at this point). The failure results in creation of a
-      reject file named <b>r/<em>test_name</em>.reject</b>.
+      reject file named
+      <b>mysql-test/var/log/<em>test_name</em>.reject</b>.
       Examine this file. If the reject file appears to contain the
       output that you expect the test case to produce, copy its
       content to the result file:
 
       @verbatim
-  shell> cp r/test_name.reject r/test_name.result
+  shell> cp mysql-test/var/log/test_name.reject r/test_name.result
       @endverbatim
 
       Another way to create the result file is by invoking @ref
@@ -1038,9 +1123,9 @@
 
   Test case file names may use alphanumeric characters (<b>A-Z</b>,
   <b>a-z</b>, <b>0-9</b>), underscore (<b>'_'</b>) or dash
-  (<b>'-'</b>), but should not start with underscore or dash. Other
-  special characters may work but this is not guaranteed so they
-  should be avoided.
+  (<b>'-'</b>), but should not start with underscore or dash. No other
+  special characters are allowed, if used, then an error is thrown and
+  the test run is aborted.
 
   Test names have traditionally used lowercase only, and we recommend
   continuing this for tests added to the common repository, though
@@ -1302,39 +1387,46 @@
   @verbatim
   --disable_warnings
   DROP TABLE IF EXISTS t1;
+  SET @@sql_mode='NO_ENGINE_SUBSTITUTION';
   --enable_warnings
+
   SET SQL_WARNINGS=1;
 
   CREATE TABLE t1 (a INT);
   INSERT INTO t1 VALUES (1);
   INSERT INTO t1 VALUES ("hej");
+
+  DROP TABLE t1;
   @endverbatim
 
   The first few lines try to clean up from possible earlier runs of
   the test case by dropping the <b>t1</b> table. The test case uses
   <b>disable_warnings</b> to prevent warnings from being written to
   the output because it is not of any interest at this point during
-  the test to know whether the table <b>t1</b> was there. After
-  dropping the table, the test case uses <b>enable_warnings</b> so
-  that subsequent warnings will be written to the output. The test
-  case also enables verbose warnings in MySQL using the <b>SET
-  SQL_WARNINGS=1;</b> statement.
+  the test to know whether the table <b>t1</b> was there. The value of
+  <b>sql_mode</b> is changed to <b>NO_ENGINE_SUBSTITUTION</b> to avoid
+  the error thrown by the second insert statement. After this, the
+  test case uses <b>enable_warnings</b> so that subsequent warnings
+  will be written to the output. The test case also enables verbose
+  warnings in MySQL using the <b>SET SQL_WARNINGS=1;</b> statement.
 
   Next, the test case creates the table <b>t1</b> and tries some
   operations. Creating the table and inserting the first row are
   operations that should not generate any warnings. The second insert
   should generate a warning because it inserts a nonnumeric string
-  into a numeric column. The output that results from running the test
-  looks like this:
+  into a numeric column. At the end, it drops the table <b>t1</b>. The
+  output that results from running the test looks like this:
 
   @verbatim
   DROP TABLE IF EXISTS t1;
+  SET @@sql_mode='NO_ENGINE_SUBSTITUTION';
   SET SQL_WARNINGS=1;
   CREATE TABLE t1 (a INT);
   INSERT INTO t1 VALUES (1);
   INSERT INTO t1 VALUES ("hej");
   Warnings:
-  Warning 1265    Data truncated for column 'a' at row 1
+  Warning 1366  Incorrect integer value: 'hej' for column 'a' at row 1
+  DROP TABLE t1;
   @endverbatim
 
   Note that the result includes not only the output from SQL
@@ -1345,7 +1437,8 @@
 
   If there was a test failure, it will be reported to the screen. You
   can see the actual output from the last unsuccessful run of the test
-  case in the reject file <b>r/<em>test_name</em>.reject</b>.
+  case in the reject file
+  <b>mysql-test/var/log/<em>test_name</em>.reject</b>.
 */
 
 ###############################################################################
@@ -1762,7 +1855,7 @@
   @verbatim
   CURRENT_TEST: main.foo
   --- r/foo.result        2009-11-17 16:22:38
-  +++ r/foo.reject        2009-11-17 16:22:47
+  +++ var/log/foo.reject        2009-11-17 16:22:47
   @@ -10,15 +10,15 @@
    SELECT period FROM t1;
    period
@@ -1895,22 +1988,33 @@
       test runs, using the options for each instance of
       <b>`--combination`</b> in successive runs. The following
       command passes <b>`--big-tables`</b> to <b>mysqld</b> for the
-      first test run, and <b>`--innodb`</b> and
-      <b>`--innodb-file-per-table`</b> for the second test run:
+      first test run, <b>`--innodb`</b> for the second run and
+      <b>`--innodb-file-per-table`</b> for the last run:
 
       @verbatim
   shell> ./mysql-test-run.pl
            --combination=--big-tables
-           --combination=--innodb, --innodb-file-per-table
+           --combination=--innodb
+           --combination=--innodb-file-per-table
       @endverbatim
 
-      If <b>`--combination`</b> is given only once, it has no effect.
+      If <b>`--combination`</b> is given only once, it behaves similar
+      to <b>`--mysqld`</b> option.
 
       For test runs specific to a given test suite, an alternative to
       the use of the <b>`--combination`</b> option is to create a
-      <b>combinations</b> file in the suite directory. The file
-      should contain a section of options for each test run. For an
-      example, see @ref PAGE_BINARY_LOG_FORMAT.
+      <b>combinations</b> file in the suite directory. The file should
+      contain a section of options for each test run. For an example,
+      see @ref PAGE_BINARY_LOG_FORMAT.
+
+      <b>combinations</b> file can support <b>bootstrap</b> variables
+      too. The <b>bootstrap</b> variable has to be passed as a value
+      to the <b>`initialize`</b> keyword.
+
+      For a test specific combinations, an alternative to the use of
+      the <b>`--combination`</b> option is to create a
+      <b><em>test_name</em>.combinations</b> file in the test
+      directory.
     </li>
 
     <li>
@@ -2007,45 +2111,32 @@
   with <b>`--innodb-page-size`=8k</b>. The test can be run like this:
 
   @verbatim
-  shell> ./mysql-test-run.pl test_name_8k
-           --bootstrap=--innodb-page-size=8k --mysqld=--innodb-page-size=8k
+  shell> ./mysql-test-run.pl test_name_8k --initialize=--innodb-page-size=8k
   @endverbatim
 
-  To ensure the test runs with only a particular page size, an include
-  file is used to make it skip during runs with other page sizes.
+  This will initialize the data directory with 8k page size, and start the
+  server with that value.
 
-  @verbatim
-  --source include/have_innodb_8k.inc
-  @endverbatim
-
-  One limitation of using this include file is that the test is skipped
-  unless the required option is passed on the command line.
-
-  Another way to run a test with a bootstrap variable is to delete the
-  existing data directory, and initialize a new data directory with
-  the bootstrap options, inside the test. When the server is started
-  with the bootstrap options after this, the SQL queries will run with
-  the specified options.
-
-  Now it is possible to pass bootstrap options in the
+  It is also possible to pass bootstrap options in the
   <b>master.opt</b> file of the test, so that the test can run with
   the specified value of the bootstrap options without using any
-  command line arguments, or reinitializing the server within the
-  test. Specifying bootstrap variables in the opt file is the
-  preferred method. The usage is:
+  command line arguments. The usage is:
 
   @verbatim
-  --bootstrap --innodb-page-size=8k
+  --initialize --innodb-page-size=8k
   @endverbatim
 
   or
 
   @verbatim
-  --bootstrap=--innodb-page-size=8k
+  --initialize=--innodb-page-size=8k
   @endverbatim
 
+  Specifying bootstrap variables in the opt file is the preferred
+  method.
+
   Each bootstrap variable must be specified as the value of a
-  <b>`--bootstrap`</b> option in the opt file to ensure @ref
+  <b>`--initialize`</b> option in the opt file to ensure @ref
   PAGE_MYSQL_TEST_RUN_PL "mysql-test-run.pl" recognizes that the
   variable must be used during server initialization. If there are
   bootstrap options in the file, the current data directory is
@@ -2056,11 +2147,62 @@
   Similarly, bootstrap options passed in the <b>slave.opt</b> will be
   used to reinitialize the slave server in replication scenarios.
 
-  Note that since the options are passed in the opt files, they have
-  precedence over the command line options. So, if a test has a
-  master.opt file containing <b>`--innodb-page-size`=8k</b>, and while
-  it is being run, <b>`--innodb-page-size`=4k</b> is passed on the
-  command line, the test will run with <b>8k</b> page size.
+  Bootstrap options set in the opt file are passed to the server
+  first, followed by the server options. So, server start up options
+  have precedence over bootstrap options, regardless of the order in
+  which they are set in the opt file.
+
+  Note that since the bootstrap options are passed in the opt files,
+  they have precedence over the command line bootstrap options. So,
+  if a test has a master.opt file containing <b>`--innodb-page-size`=8k</b>,
+  and while it is being run, <b>`--innodb-page-size`=4k</b> is passed on
+  the command line, the test will run with <b>8k</b> page size.
+
+  Some tests require the server to be restarted multiple times with
+  different server options, as well different bootstrap options. In
+  such cases, the existing data directory is deleted inside the test
+  and a new data directory is initialized with the bootstrap options.
+  When the server is started with the bootstrap options after this,
+  the SQL queries will run with the specified options.
+
+  @verbatim
+  --exec $MYSQLD --no-defaults --initialize-insecure
+  --lc_messages_dir=$MYSQL_SHAREDIR --innodb_page_size=8K
+  --basedir=$MYSQLD_BASEDIR --datadir=$MYSQL_TMP_DIR/datadir1/data
+  --init-file=$BOOTSTRAP_SQL --secure-file-priv=""
+  @endverbatim
+*/
+
+###############################################################################
+
+
+
+## Specifying Test Case-Specific Client Options
+
+/**
+  @page PAGE_TESTCASE_SPECIFIC_CLIENT_OPTIONS Specifying Test Case-Specific Client Options
+
+  If a test case needs a specific client option, you can specify such
+  options in a file named <b><em>testname</em>-client.opt</b>. When a
+  test case has its own <b>-client.opt</b> file, @ref
+  PAGE_MYSQL_TEST_RUN_PL "mysql-test-run.pl" examines it for any
+  additional options that the @ref PAGE_MYSQLTEST "mysqltest" should
+  run with while executing the test case.
+
+  For example, consider a test case <b>example.test</b> needs
+  <tt>latin1</tt> as default character set for client and connection,
+  then that option can be specified in
+  <b><em>example</em>-client.opt</b> file.
+
+  @verbatim
+  --default-character-set=latin1
+  @endverbatim
+
+  You may refer to environment variables in the option file, using the
+  usual <b><em>$VAR_NAME</em></b> syntax. It is also possible to refer
+  to optional variables using the syntax <b><em>$?VAR_NAME</em></b>.
+  This will be replaced with an empty string if the variable is not
+  set.
 */
 
 ###############################################################################
@@ -2073,13 +2215,7 @@
   @page PAGE_INCLUDE_FILES Using Include Files to Simplify Test Cases
 
   The <b>include</b> directory contains many files intended for
-  inclusion into test case files. For example, if a test case needs to
-  verify that the server supports <b>SSL</b> connections, use this
-  line in the test case file:
-
-  @verbatim
-  --source include/have_ssl.inc
-  @endverbatim
+  inclusion into test case files.
 
   These include files serve many purposes, but in general, they
   encapsulate operations of varying complexity into single files so
@@ -2252,13 +2388,22 @@
   shell> ./mysql-test-run.pl --suite=rpl --do-test=row
   @endverbatim
 
+  Similar to <b>combinations</b> file in the test suite directory, you
+  can also create a file named <b><em>test_name</em>.combinations</b>
+  in the test directory and list the options that you would specify
+  using <b>`--combination`</b>, one line per option.
+
+  If there exist both suite level <b>combinations</b> file and a
+  <b><em>test_name</em>.combinations</b> file, then the
+  <b><em>test_name</em>.combinations</b> file will take the priority
+  i.e combinations specified in suite level <b>combinations</b> file
+  will be ignored.
+
   The format of the <b>combinations</b> file is similar to that of
   <b>my.cnf</b> files (section names followed by options for each
-  section), but options listed in the <b>combinations</b> file
-  should include the leading dashes. (Options in <b>my.cnf</b> files
-  are given without the leading dashes.) @ref PAGE_MYSQL_TEST_RUN_PL
-  "mysql-test-run.pl" displays the section name following the test
-  name when it reports the test result.
+  section). @ref PAGE_MYSQL_TEST_RUN_PL "mysql-test-run.pl" displays
+  the section name following the test name when it reports the test
+  result.
 
   Any <b>`--combination`</b> options specified on the command line
   override those found in a <b>combinations</b> file.
@@ -2268,7 +2413,9 @@
   applies globally to all tests run by a given invocation of @ref
   PAGE_MYSQL_TEST_RUN_PL "mysql-test-run.pl". The
   <b>combinations</b> file is placed in a test suite directory and
-  applies only to tests in that suite.
+  applies only to tests in that suite. The
+  <b><em>test_name</em>.combinations</b> file is placed in a test
+  directory and applies only to <b>test_name</b>.
 */
 
 ###############################################################################
@@ -2569,10 +2716,10 @@
 
 
 
-## Stopping a Server During a Test
+## Stopping and restarting a Server During a Test
 
 /**
-  @page PAGE_STOPPING_SERVER_DURING_TEST Stopping a Server During a Test
+  @page PAGE_STOPPING_AND_RESTARTING_SERVER_DURING_TEST Stopping and Restarting a Server During a Test
 
   If a server dies during execution of a test case, this will be
   interpreted as a failure. However, there may be cases where you
@@ -2601,21 +2748,128 @@
   --source include/wait_until_connected_again.inc
   @endverbatim
 
-  For your convenience, there is a file
-  <b>include/restart_mysqld.inc</b> which you can "source" in your
-  own test case to do what's shown in this code example.
-
   The file name to write the command to will be
   <b>mysqld.2.expect</b> for the slave server in replication tests.
   Note that you have to use <b>$MYSQLTEST_VARDIR/tmp</b> for the
   directory here; if you use <b>$MYSQL_TMP_DIR</b> instead, it will
   not work when running tests in parallel.
 
-  It is also possible to provide additional command line options to
-  the restarted server, by writing a line with <b>restart:</b> (with
-  a colon) followed by one or more options into the expect file. These
-  extra options will be dropped if the same server is restarted again,
-  unless they are repeated.
+  For your convenience, there are files which can be used to do
+  what's shown in the example.
+
+  <ul>
+    <li>
+      <tt>restart_mysqld.inc</tt>
+
+      <b>include/restart_mysqld.inc</b> can be sourced in your
+      own test case, to shutdown and start the server but
+      the server is immediately started up again.
+
+      @verbatim
+  # Restart the server
+  --source include/restart_mysqld.inc
+      @endverbatim
+
+      It is also possible to provide additional command line options
+      to the restarted server, by writing a line with <b>restart:</b>
+      (with a colon) followed by one or more options into the expect
+      file. These extra options will be dropped if the same server
+      is restarted again, unless they are repeated. A value for
+      shutdown timeout can also be set with
+      <b>$shutdown_server_timeout</b>, when this file is used.
+
+      @verbatim
+  # Restart server with extra parameters
+  --let $shutdown_server_timeout= 10
+  --let $restart_parameters= "restart: --innodb_autoinc_lock_mode=1"
+  --source include/restart_mysqld.inc
+      @endverbatim
+
+    </li>
+
+    <li>
+      <tt>kill_and_restart_mysqld.inc</tt>
+
+      Similar to <b>include/restart_mysqld.inc</b>,
+      <b>include/kill_and_restart_mysqld.inc</b> can be used to
+      restart the server, but setting <b>$shutdown_server_timeout</b>
+      will have no effect.
+
+      @verbatim
+  # Restart server with extra parameters
+  --let $restart_paramters= "restart: --innodb_autoinc_lock_mode=0"
+  --source include/kill_and_restart_mysqld.inc
+      @endverbatim
+
+    </li>
+
+    <li>
+      <tt>shutdown_mysqld.inc and start_mysqld.inc</tt>
+
+      If there is something to be done between the server shutdown
+      and startup, there is a file
+      <b>include/shutdown_mysqld.inc</b>
+      which can be used to shutdown the server. A shutdown timeout
+      value can be set and passed to
+      <b>include/shutdown_mysqld.inc</b>.
+      <b>include/start_mysqld.inc</b> can be used to start the
+      server again after it has been shutdown.
+
+      @verbatim
+  # Timeout of 10 seconds
+  --let $shutdown_server_timeout= 10
+  --source include/shutdown_mysqld.inc
+  # Do something while the server is down
+  --source include/start_mysqld.inc
+      @endverbatim
+
+    </li>
+
+    <li>
+      <tt>kill_mysqld.inc</tt>
+
+      To the kill the server,
+      <b>include/kill_mysqld.inc</b> can be sourced, which
+      internally calls <b>--shutdown_server 0</b>. Therefore,
+      setting a value for shutdown timeout will have no effect.
+
+      @verbatim
+  --source include/kill_mysqld.inc
+  # Do something while the server is down
+  --source include/start_mysqld.inc
+      @endverbatim
+
+    </li>
+
+    <li>
+      <tt>wait_until_disconnected.inc</tt>
+
+      It is recommended to use <b>include/wait_until_disconnected</b>
+      in tandem with <b>--shutdown_server</b>. It ensures that all
+      connections to the server are dropped before proceeding with
+      the test. This file is sourced internally in
+      <b>include/shutdown_mysqld.inc</b>,
+      <b>include/kill_mysqld.inc</b>,
+      <b>include/kill_and_restart_mysqld.inc</b>,
+      and <b>include/restart_mysqld.inc</b>.
+
+    </li>
+
+    <li>
+      <tt>wait_until_connected_again.inc</tt>
+
+      <b>include/wait_until_connected_again.inc</b> is used after
+      the server is started again, to ensure that the client
+      connection is restored. It tries to establish the connection
+      till a timeout occurs. This file is sourced internally in
+      <b>include/start_mysqld.inc</b>,
+      <b>include/restart_mysqld.inc</b>,
+      and <b>include/kill_and_restart_mysqld.inc</b>.
+
+    </li>
+
+  </ul>
+
 */
 
 ###############################################################################
@@ -2650,11 +2904,10 @@
       supports fractions of a second. For example, <b>sleep 0.2</b>;
       sleeps 0.2 seconds.
 
-      Try not to use <b>sleep</b> or <b>real_sleep</b> commands
-      more than necessary. The more of them there are, the slower the
-      test suite becomes. In some cases, heavy reliance on sleep
-      operations is an indicator that the logic of a test should be
-      reconsidered.
+      Try not to use the <b>sleep</b> command more than necessary.
+      The more of them there are, the slower the test suite becomes.
+      In some cases, heavy reliance on sleep operations is an indicator
+      that the logic of a test should be reconsidered.
     </li>
 
     <li>
@@ -2838,6 +3091,12 @@
     </li>
 
     <li>
+      <tt>`--async-client`</tt>
+
+      Enable asynchronous communication support in mysql protocol.
+    </li>
+
+    <li>
       <tt>`--basedir`=<b>dir_name</b>, -b <b>dir_name</b></tt>
 
       The base directory for tests.
@@ -2847,6 +3106,22 @@
       <tt>`--character-sets-dir`=<b>path</b></tt>
 
       The directory where character sets are installed.
+    </li>
+
+    <li>
+      <tt>`--colored-diff`</tt>
+
+      Colorize the diff part of the output.
+
+      If enabled, @ref PAGE_MYSQLTEST "mysqltest" uses <b>diff</b>
+      command with <b>`--color`='always'</b> option to print the
+      colored diff. If the command fails or is not supported, @ref
+      PAGE_MYSQLTEST "mysqltest" will report an error and abort the
+      test run.
+
+      @note
+      <b>`--color`</b> option for <b>diff</b> command is available
+      from <b>GNU diffutils</b> version <b>3.4</b>.
     </li>
 
     <li>
@@ -2887,6 +3162,16 @@
 
       Print debugging information and memory and CPU usage statistics
       when the program exits.
+    </li>
+
+
+    <li>
+      <tt>`--default-character-set`=<b>charset_name</b></tt>
+
+      Use <b>charset_name</b> as the default character set for the
+      client and connection. For more information, see [Connection
+      Character Sets and Collations]
+      (https://dev.mysql.com/doc/refman/8.0/en/charset-connection.html).
     </li>
 
     <li>
@@ -3040,9 +3325,9 @@
           @ref PAGE_MYSQLTEST "mysqltest" reads the expected results
           from the given file and compares them with the actual
           results. If the results do not match, @ref PAGE_MYSQLTEST
-          "mysqltest" writes a <b>.reject</b> file in the same
-          directory as the result file, outputs a diff of the two
-          files, and exits with an error.
+          "mysqltest" writes a <b>.reject</b> file in the log
+          directory, outputs a diff of the two files, and exits with
+          an error.
         </li>
 
         <li>
@@ -3076,7 +3361,6 @@
       public key, see [The SHA-256 Authentication Plugin]
       (https://dev.mysql.com/doc/refman/8.0/en/sha256-authentication-plugin.html).
 
-      This option is available only if MySQL was built using OpenSSL.
     </li>
 
     <li>
@@ -3089,17 +3373,6 @@
       <tt>`--skip-safemalloc`</tt>
 
       Do not use memory allocation checking.
-    </li>
-
-    <li>
-      <tt>`--sleep`=<b>num</b>, -T <b>num</b></tt>
-
-      Cause all <b>sleep</b> commands in the test case file to sleep
-      <b><em>num</em></b> seconds. This option does not affect
-      <b>real_sleep</b> commands.
-
-      An option value of 0 can also be used, which effectively
-      disables <b>sleep</b> commands in the test case.
     </li>
 
     <li>
@@ -3146,9 +3419,7 @@
 
       The protocols permitted by the client for encrypted connections.
       The value is a comma-separated list containing one or more of
-      these protocols: TLSv1, TLSv1.1, TLSv1.2. (TLSv1.2 is supported
-      only if MySQL was compiled using OpenSSL 1.0.1 or higher. It is
-      not supported if MySQL was compiled using yaSSL).
+      these protocols: TLSv1, TLSv1.1, TLSv1.2.
     </li>
 
     <li>
@@ -3420,9 +3691,9 @@
   It is also possible to put a list of test names in a file and have
   @ref PAGE_MYSQL_TEST_RUN_PL "mysql-test-run.pl" run those tests,
   using the option <b>`--do-test-list`=file</b>. The tests should be
-  listed one per line in the file, using the fully qualified name
-  <b>suite.test</b>. A space may be used in place of the period. A
-  line beginning with "#" indicates a comment and is ignored.
+  listed one per line in the file. A line beginning with <b>#</b>
+  indicates a comment and is ignored. Similary an empty line in the
+  file is also ignored.
 
   @ref PAGE_MYSQL_TEST_RUN_PL "mysql-test-run.pl" also supports a
   <b>`--do-suite`</b> option, which is similar to <b>`--do-test`</b>
@@ -3430,9 +3701,9 @@
 
   To perform setup prior to running tests, @ref PAGE_MYSQL_TEST_RUN_PL
   "mysql-test-run.pl" needs to invoke <b>mysqld</b> with the
-  <b>`--bootstrap`</b> and <b>`--skip-grant-tables`</b> options.
+  <b>`--initialize`</b> and <b>`--skip-grant-tables`</b> options.
   If MySQL was built with the compiler flag
-  <b>-DDISABLE_GRANT_OPTIONS</b>, then <b>`--bootstrap`</b>,
+  <b>-DDISABLE_GRANT_OPTIONS</b>, then <b>`--initialize`</b>,
   <b>`--skip-grant-tables`</b>, and <b>`--init-file`</b> will be
   disabled. To handle this, set the <b>MYSQLD_BOOTSTRAP</b>
   environment variable to the full path name of a server that has all
@@ -3478,18 +3749,18 @@
       </td>
     </tr>
     <tr>
+      <td><tt>MTR_MAX_PARALLEL</tt></td>
+      <td>
+        If set, defines maximum number of parallel threads if
+        <b>`--parallel`=auto</b> is given
+      </td>
+    </tr>
+    <tr>
       <td><tt>MTR_MEM</tt></td>
       <td>
         If set to anything, will run tests with files in "memory"
         using tmpfs or ramdisk. Not available on Windows. Same as
         <b>`--mem`</b> option
-      </td>
-    </tr>
-    <tr>
-      <td><tt>MTR_MAX_PARALLEL</tt></td>
-      <td>
-        If set, defines maximum number of parallel threads if
-        <b>`--parallel`=auto</b> is given
       </td>
     </tr>
     <tr>
@@ -3516,6 +3787,42 @@
       </td>
     </tr>
     <tr>
+      <td><tt>MTR_RECORD</tt></td>
+      <td>
+        Set to 1 if a MTR run is started with <b>`--record`</b>
+        option, 0 otherwise.
+      </td>
+    </tr>
+    <tr>
+      <td><tt>MTR_UNIQUE_IDS_DIR</tt></td>
+      <td>
+        The method in which the free ports are allocated is by maintaining
+        a list under the unique ids directory. In case there are multiple
+        chroot environments on the same host, then the same set of ports may
+        get allocated for all environments, because there will be
+        multiple unique ids directories in different physical locations,
+        but MTR assumes it is the same directory.
+        This will lead to a conflict while reserving ports for the
+        different MTR runs. To avoid this problem, when using chroot
+        environments, <b>MTR_UNIQUE_IDS_DIR</b> environment variable can
+        be set to a common location, so that all the MTR processes will
+        use the same unique ids directory.
+        Users have to make sure this variable is set to the same path
+        on all environments, and that this common path is mounted on
+        all the environments.
+     <tr>
+      <td><tt>MYSQL_BIN_PATH</tt></td>
+      <td>
+        Path to the directory having mysql binaries.
+      </td>
+    </tr>
+    <tr>
+      <td><tt>MYSQL_CLIENT_BIN_PATH</tt></td>
+      <td>
+        Path to the directory having client binaries.
+      </td>
+    </tr>
+    <tr>
       <td><tt>MYSQL_CONFIG_EDITOR</tt></td>
       <td>
         Path name to <b>mysql_config_editor</b> binary.
@@ -3539,7 +3846,7 @@
       <td>
         Path name to login file used by <b>mysql_config_editor</b>.
         If not set, the default is <b>$HOME/.mylogin.cnf</b>, or
-        <b>%APPDATA%\\MySQL\\.mylogin.cnf</b> on Windows.
+        <b>\%APPDATA%\\MySQL\\\.mylogin.cnf</b> on Windows.
       </td>
     </tr>
     <tr>
@@ -3579,6 +3886,12 @@
       <td>
         Path name to the <b>var</b> directory that is used for logs,
         temporary files, and so forth
+      </td>
+    </tr>
+    <tr>
+      <td><tt>NUMBER_OF_CPUS</tt></td>
+      <td>
+        Defines number of processors.
       </td>
     </tr>
     <tr>
@@ -3636,6 +3949,10 @@
 
       If both <b>`--big-test`</b> and <b>`--only-big-tests`</b>
       are given, <b>`--only-big-tests`</b> is ignored.
+
+      @note
+      This option is enabled by default when test cases are specified
+      on command line.
     </li>
 
     <li>
@@ -3694,10 +4011,15 @@
       <tt>`--check-testcases`</tt>
 
       Check test cases for side effects. This is done by checking the
-      system state before and after each test case; if there is any
-      difference, a warning to that effect is written, but the test
-      case is not marked as failed because of it. This check is
-      enabled by default. To disable it, use the
+      system state before and after each test case. If there is any
+      difference, the test case is marked as failed because of it.
+
+      Similarly, when <b>`--check-testcases`</b> option is enabled,
+      MTR does additional check for missing <b>.result</b> file and a
+      test case not having its corresponding <b>.result</b> file is
+      marked as failed.
+
+      This check is enabled by default. To disable it, use the
       <b>`--nocheck-testcases`</b> option.
     </li>
 
@@ -3751,6 +4073,22 @@
     </li>
 
     <li>
+      <tt>`--colored-diff`</tt>
+
+      Colorize the diff part of the output.
+
+      When this option is enabled, @ref PAGE_MYSQL_TEST_RUN_PL
+      "mysql-test-run.pl" passes <b>`--colored-diff`</b> option to
+      @ref PAGE_MYSQLTEST "mysqltest". If colored diff is enabled,
+      @ref PAGE_MYSQLTEST "mysqltest" uses <b>diff</b> command with
+      <b>`--color`='always'</b> option to print the colored diff.
+
+      @note
+      <b>`--color`</b> option for <b>diff</b> command is available
+      from <b>GNU diffutils</b> version <b>3.4</b>.
+    </li>
+
+    <li>
       <tt>`--combination`=<b>value</b></tt>
 
       Extra option to pass to <b>mysqld</b>. The value should consist
@@ -3759,12 +4097,24 @@
       @ref PAGE_MYSQL_TEST_RUN_PL "mysql-test-run.pl" executes
       multiple test runs, using the options for each instance of
       <b>`--combination`</b> in successive runs. If
-      <b>`--combination`</b> is given only once, it has no effect.
+      <b>`--combination`</b> is given only once, it has no effect and
+      behaves similar to <b>`--mysqld`</b> option.
+
+      If a test being run, passes the same <b>`--mysqld`</b> option from an
+      opt file which is also passed from <b>`--combination`</b>, then that
+      <b>`--combination`</b> run is skipped because opt file always takes
+      higher precedence over command line options. The test will just run
+      once using the options provided in the opt file.
+
       For test runs specific to a given test suite, an alternative to
       the use of <b>`--combination`</b> is to create a
       <b>combinations</b> file in the suite directory. The file
       should contain a section of options for each test run. See @ref
       PAGE_PASSING_OPTIONS.
+
+      For test specific combinations, onc can use
+      <b><em>test_name</em>.combinations</b> file in the test
+      directory.
     </li>
 
     <li>
@@ -3870,26 +4220,25 @@
     </li>
 
     <li>
-      <tt>`--discover`</tt>
-
-      Attempt to preload <b>discover</b>, the Developer Studio
-      Memory Error Discovery Tool when starting <b>mysqld</b>. Reports
-      from <b>discover</b> may be found in
-      <b>log/mysqld.%p.txt</b> under the directory given by
-      <b>`--vardir`</b>. It is supported only on SPARC-M7 systems.
-    </li>
-
-    <li>
       <tt>`--do-suite`=<b>prefix or regex</b></tt>
 
       Run all test cases from suites having a name that begins with
       the given <b><em>prefix</em></b> value or matches the regular
-      expression. If the argument matches no existing suites, @ref
+      expression. If the argument matches no existing suite, @ref
       PAGE_MYSQL_TEST_RUN_PL "mysql-test-run.pl" aborts.
 
       The argument for the <b>`--do-suite`</b> option allows more
       flexible specification of which tests to perform. See the
       description of the <b>`--do-test`</b> option for details.
+
+      In case a suite or a list of suites is specified using the
+      <b>`--suite`</b> option along with a pattern or regular
+      expression given through <b>`--do-suite`</b>, only suite(s)
+      from the list which match the prefix or regular expression
+      are picked up.
+
+      When the <b>`--do-suite`</b> option is specified more than once
+      on the command line, only the last occurrence is considered.
     </li>
 
     <li>
@@ -3919,13 +4268,66 @@
     </li>
 
     <li>
-      <tt>`--do-testlist`=<b>file</b></tt>
+      <tt>`--do-test-list`=<b>file</b></tt>
 
       Run all tests listed in the file <b><em>file</em></b>. In this
-      file, tests should be listed one per line in the form
-      <b><em>suite.test</em></b> or alternatively, with a space instead
-      of the period. A line beginning with # will be ignored and can
-      be used for comments.
+      file, tests should be listed one per line in any of the
+      following forms.
+
+      @verbatim
+  <test_name>
+  <test_name>.test
+  <suite_name>.<test_name>
+  <suite_name>.<test_name>.test
+  path_to_the_test_file
+      @endverbatim
+
+      Path to the test file should either be an absolute path or a
+      relative path from base directory.
+
+      To run a test present in a non-default test suite, either the
+      test name qualified with the suite name i.e
+      <b>suite_name.test_name[.test]</b> or a <b>path</b> to the
+      test file should be mentioned.
+
+      A line beginning with <b>#</b> will be ignored and is considered
+      as a comment. Similarly an empty line in the file is also
+      ignored.
+
+      For example, consider a test list file <b>test_list</b>
+      containing following tests.
+
+      @verbatim
+  # Main suite test '1st.test'
+  1st
+  1st.test
+  main.1st
+  main.1st.test
+  mysql-test/t/1st.test
+
+  # GIS suite test 'geohash_functions.test'
+  gis.geohash_functions
+  mysql-test/suite/gis/t/geohash_functions.test
+
+  # Non-default suite 'test_services'
+  test_services.test_services
+  mysql-test/suite/test_services/t/test_services.test
+
+  # Internal suite test 'i_main.user_var'
+  i_main.user_var
+  internal/mysql-test/suite/i_main/t/user_var.test
+      @endverbatim
+
+      Following command runs the list of tests mentioned in the file.
+
+      @verbatim
+  ./mysql-test-run.pl --do-test-list=test_list
+      @endverbatim
+
+      If both <b>`--suite`</b> and <b>`--do-test-list`</b> are given,
+      and if suite name is <em>not</em> part of the test names listed
+      in the file, then those tests are searched only in the suites
+      mentioned in <b>`--suite`</b> option.
     </li>
 
     <li>
@@ -3934,21 +4336,10 @@
       Ignore any <b>disabled.def</b> file, and run also tests marked
       as disbaled. Success or failure of those tests will be reported
       the same way as other tests.
-    </li>
 
-    <li>
-      <tt>`--experimental`=<b>file_name</b></tt>
-
-      Specify a file that contains a list of test cases that should be
-      displayed with the <b>[ exp-fail ]</b> code rather than
-      <b>[ fail ]</b> if they fail.
-
-      For an example of a file that might be specified using this
-      option, see <b>mysql-test/collections/default.experimental</b>.
-
-      It is also possible to supply more than one
-      <b>`--experimental`</b>, test cases listed in all the files will
-      be treated as experimental.
+      @note
+      This option is enabled by default when test cases are specified
+      on command line.
     </li>
 
     <li>
@@ -3965,15 +4356,39 @@
       needed by the <b>mysql</b> client to connect to the server. Each
       <b>`--extern`</b> can only take one option/value pair as
       argument, so it you need more you need to repeat
-      <b>`--extern`</b> for each of them. Example:
+      <b>`--extern`</b> for each of them.
 
       @verbatim
-  ./mysql-test-run.pl --extern socket=var/tmp/mysqld.1.sock alias
+  ./mysql-test-run.pl --extern socket=var/tmp/mysqld.1.sock main.1st
       @endverbatim
 
-      Note: If a test case has an <b>.opt</b> file that requires the
-      server to be restarted with specific options, the file will not
-      be used. The test case likely will fail as a result.
+      During server initialization, @ref PAGE_MYSQL_TEST_RUN_PL
+      "mysql-test-run.pl" creates a default database <b>test</b> which
+      is used while establishing an initial connection with the
+      server. When running a test case with <b>--extern</b> option, if
+      <b>test</b> database doesn't exist on an already running server,
+      then the test case will fail with following error.
+
+      @verbatim
+  mysqltest: Could not open connection 'default': 1049 Unknown database 'test'
+      @endverbatim
+
+      So if you're running a test case on an already running server
+      using <b>--extern</b> option, it is necessary to create
+      <b>test</b> database on the server before running the test case
+      if it doesn't exist.
+
+      Similarly, @ref PAGE_MYSQL_TEST_RUN_PL "mysql-test-run.pl"
+      creates <b>mtr</b> database during server initialization which
+      contains tables and procedures used to suppress global or test
+      specific warnings. If a test case refers to this database and
+      the database doesn't exist on running server, then the test case
+      will fail.
+
+      @note
+      If a test case has an <b>.opt</b> file that requires the server
+      to be restarted with specific options, the file will not be
+      used. The test case likely will fail as a result.
     </li>
 
     <li>
@@ -3982,16 +4397,6 @@
       Do not perform controlled shutdown when servers need to be
       restarted or at the end of the test run. This is equivalent to
       using <b>`--shutdown-timeout`=0</b>.
-    </li>
-
-    <li>
-      <tt>`--fail-check-testcases`</tt>
-
-      Enabling this option when a test is run, causes it to fail if
-      MTR's internal check of the test case fails. If this option is
-      disabled, only a warning is generated while the test passes.
-      This option is enabled by default. For additional information,
-      see the description of the <b>`--check-testcases`</b> option.
     </li>
 
     <li>
@@ -4010,6 +4415,14 @@
       the same test case. This may be useful e.g. when looking for the
       source of a memory leak, as there will only have been one test
       run before the server exits.
+
+      Enabling this option will cause @ref PAGE_MYSQL_TEST_RUN_PL
+      "mysql-test-run.pl" to restart the server(s) on a newly
+      intialized data directory.
+
+      This option can also be mentioned in
+      <b><em>test-name</em>-master.opt</b> file for a test case to
+      restart the server(s) before it runs.
     </li>
 
     <li>
@@ -4034,6 +4447,22 @@
       <tt>`--include-ndbcluster`, `--include-ndb`</tt>
 
       Run also tests that need Cluster.
+    </li>
+
+    <li>
+      <tt>`--initialize`=<b>value</b></tt>
+
+      Extra bootstrap options that need be to be passed during
+      the server initialization process can be passed as a value
+      to <b>`--initialize`</b>. The server is then started with
+      the specified value. Only one option may be specified in
+      <b>value</b>; to specify more than one, use additional
+      <b>`--initialize`</b> options.
+
+      Options passed as a value to <b>`--mysqld`</b> will have
+      precedence over the options passed to <b>`--initialize`</b>,
+      regardless of the order in which they passed on the command
+      line.
     </li>
 
     <li>
@@ -4119,16 +4548,15 @@
 
       Stop execution after the specified number of tests have failed,
       to avoid using up resources (and time) in case of massive
-      failures. retries are noe counted, nor are failures of tests
-      marked experimental. Defaults to 10, set to 0 for no limit. May
-      also be set with the environment variable
+      failures. retries are noe counted. Defaults to 10, set to 0 for
+      no limit. May also be set with the environment variable
       <b>MTR_MAX_TEST_FAIL</b>.
     </li>
 
     <li>
       <tt>`--mem`</tt>
 
-      This option is not supported on Windows.
+      This option is not supported on Windows and on MacOS.
 
       Run the test suite in memory, using tmpfs or ramdisk. This can
       decrease test times significantly, in particular if you would
@@ -4139,14 +4567,15 @@
       also affects placement of temporary files, which are created in
       <b>var/tmp</b>.
 
-      The default list includes <b>/dev/shm</b>. You can also enable
-      this option by setting the environment variable
-      <b>MTR_MEM[=<em>dir_name</em>]</b>. If <b><em>dir_name</em></b>
-      is given, it is added to the beginning of the list of locations
-      to search, so it takes precedence over any built-in locations.
+      The default list includes <b>/dev/shm</b>, <b>/run/shm</b> and
+      <b>/tmp</b>. You can also enable this option by setting the
+      environment variable <b>MTR_MEM[=<em>dir_name</em>]</b>. If
+      <b><em>dir_name</em></b> is given, it is added to the beginning
+      of the list of locations to search, so it takes precedence over
+      any built-in locations.
 
       Once you have run tests with <b>`--mem`</b> within a
-      <b>mysql-test</b>directory, a soflink <b>var</b> will have been
+      <b>mysql-test</b> directory, a soflink <b>var</b> will have been
       set up to the temporary directory, and this will be re-used the
       next time, until the soflink is deleted. Thus, you do not have
       to repeat the <b>`--mem`</b> option next time.
@@ -4190,6 +4619,26 @@
     </li>
 
     <li>
+      <tt>`--no-skip`</tt>
+
+      This option forces all tests to run, ignoring any
+      <b>`--skip`</b> commands used in the test. This ensures that all
+      tests are run. An excluded list (<b>excludenoskip.list</b>) is
+      maintained to track which tests should continue to be skipped.
+      The <b>`--no-skip`</b> option continues to skip the tests that
+      are named in the excluded list. In case the test or file invoking
+      the <b>`--skip`</b> command is not present in the excluded list, the
+      outcome of the test will be identified as <b>[ noskip-pass ]</b> or
+      <b>[ noskip-fail ]</b> .The default value of <b>--no-skip</b>
+      introduced variable is OFF, which implies users are not forced to
+      run all tests unless the <b>--no-skip</b> is explicitly used.
+
+      @verbatim
+  shell> mysql-test-run.pl --suite=innodb --no-skip
+      @endverbatim
+    </li>
+
+    <li>
       <tt>`--nocheck-testcases`</tt>
 
       Disable the check for test case side effects. For additional
@@ -4205,24 +4654,6 @@
       tests are run in alphabetic order, though similiar combinations
       will be grouped together. If more than one suite is listed, the
       tests are run one suite at a time, in the order listed.
-    </li>
-
-    <li>
-      <tt>`--no-skip`</tt>
-
-      This option forces all tests to run, ignoring any
-      <b>`--skip`</b> commands used in the test. This ensures that all
-      tests are run. An excluded list (<b>excludenoskip.list</b>) is
-      maintained to track which tests should continue to be skipped.
-      The <b>`--no-skip`</b> option continues to skip the tests that
-      are named in the excluded list. The default value of
-      <b>--no-skip</b> introduced variable is OFF, which implies users
-      are not forced to run all tests unless the <b>--no-skip</b> is
-      explicitly used.
-
-      @verbatim
-  shell> mysql-test-run.pl --suite=innodb --no-skip
-      @endverbatim
     </li>
 
     <li>
@@ -4244,6 +4675,11 @@
       <tt>`--nowarnings`</tt>
 
       Do not look for and report errors and warning in the server logs.
+
+      @note
+      In addition to being passed as a command-line option,
+      <b>`--nowarnings`</b> can also be passed in the <b>.opt</b> file of
+      a test case.
     </li>
 
     <li>
@@ -4253,6 +4689,18 @@
       are skipped. If both <b>`--big-test`</b> and
       <b>`--only-big-tests`</b> are given, <b>`--only-big-tests`</b>
       is ignored.
+    </li>
+
+    <li>
+      <tt>`--opt-trace-protocol`</tt>
+
+      Prints the @ref PAGE_OPT_TRACE "optimizer trace" of SQL statements in a test.
+      Running any MTR test with this option executes the following SQL
+      statement after every <b>DML statement</b> that it encounters:
+
+      @verbatim
+  SELECT trace FROM information_schema.optimizer_trace /* injected by --opt-trace-protocol */;
+      @endverbatim
     </li>
 
     <li>
@@ -4307,6 +4755,18 @@
     </li>
 
     <li>
+      <tt>`--quiet`</tt>
+
+      Reuse the output buffer and maintain a single line for reporting
+      successful tests, skipped tests and disabled tests. Failed tests
+      and the necessary information about the failure will be printed
+      on a separate line.
+
+      When <b>`--quiet`</b> option is enabled, MTR prints only the
+      test name and result of the test run.
+    </li>
+
+    <li>
       <tt>`--record`</tt>
 
       Pass the <b>`--record`</b> option to @ref PAGE_MYSQLTEST
@@ -4325,7 +4785,8 @@
     <li>
       <tt>`--repeat`=<b>N</b></tt>
 
-      Run each test <b><em>N</em></b> number of times.
+      Run each test <b><em>N</em></b> number of times, in parallel if
+      <b>`--parallel`</b> option value is greater than 1.
     </li>
 
     <li>
@@ -4349,6 +4810,27 @@
       releases. If the test run is aborted, including if a test fails
       and <b>`--force`</b> is not in use, the time report will not
       be produced.
+    </li>
+
+    <li>
+      <tt>`--report-unstable-tests`</tt>
+
+      The option can be used to distinguish unstable tests which pass
+      on at least one retry attempt from hard failing ones. Unstable
+      tests are reported separately in the end summary in the format:
+      <b>test_name(num_of_failures/num_of_attempts)</b>.
+
+      In case all failures encountered are due to unstable tests, MTR
+      will print the below warning and exit with a zero status code.
+
+      @verbatim
+  mysql-test-run: WARNING: There are failures due to unstable test cases.
+  However, the tests are not hard-failing.
+      @endverbatim
+
+      This option has no effect unless <b>`--force`</b> is used and
+      both <b>`--retry`</b> and <b>`--retry-failure`</b> are set to
+      values greater than 1.
     </li>
 
     <li>
@@ -4423,12 +4905,6 @@
     </li>
 
     <li>
-      <tt>`--skip-ssl`</tt>
-
-      Do not start <b>mysqld</b> with support for SSL connections.
-    </li>
-
-    <li>
       <tt>`--skip-test`=<b>regex</b></tt>
 
       Specify a regular expression to be applied to test case names.
@@ -4462,28 +4938,10 @@
     </li>
 
     <li>
-      <tt>`--sleep`=<b>N</b></tt>
-
-      Pass <b>`--sleep`=<em>N</em></b> to @ref PAGE_MYSQLTEST
-      "mysqltest".
-    </li>
-
-    <li>
       <tt>`--sp-protocol`</tt>
 
       Pass the <b>`--sp-protocol`</b> option to @ref PAGE_MYSQLTEST
       "mysqltest".
-    </li>
-
-    <li>
-      <tt>`--ssl`</tt>
-
-      If @ref PAGE_MYSQL_TEST_RUN_PL "mysql-test-run.pl" is started
-      with the <b>`--ssl`</b> option, it sets up a secure connection
-      for all test cases. In this case, if <b>mysqld</b> does not
-      support SSL, @ref PAGE_MYSQL_TEST_RUN_PL "mysql-test-run.pl"
-      exits with an error message: <b>Couldn't find support for
-      SSL</b>
     </li>
 
     <li>
@@ -4572,11 +5030,33 @@
     </li>
 
     <li>
-      <tt>`--suite`=<b>suite_name</b></tt>
+      <tt>`--suite(s)`=<b>{suite_name|suite_list|suite_set}</b></tt>
 
-      Run the named test suite. The default name is <b>main</b> (the
-      regular test suite located in the <b>mysql-test</b>
-      directory).
+      Run a suite or a comma separated list of suites or those suites
+      which fall under the specified suite set. If the option is not
+      specified explicitly, MTR assumes that it needs to use the
+      default suite set for the test run.
+
+      The suite set's MTR can use are case insensitive and take the
+      below values:
+      @verbatim
+  default     - To run the default list of suites.
+  all         - To scan the mysql directory and run all available suites.
+  non-default - To scan the mysql directory for available suites and
+                collect only the non-default suites.
+      @endverbatim
+
+      The suite set 'all' is used implicitly if neither a suite nor a
+      suite list is specified and\n
+      (i)  There are tests given on the MTR command line <b>or</b>\n
+      (ii) Any of the following options are used: <b>--do-suite</b>,
+      <b>--do-test</b>, <b>--do-test-list</b>.
+
+      Note that suite sets 'all' and 'non-default' do not include ndb test
+      suites in case ndb cluster is not enabled.
+
+      If a suite set is specified in the suite list, MTR does not treat it
+      as a suite set and considers it as the name of a suite to be run.
     </li>
 
     <li>
@@ -4594,9 +5074,40 @@
     </li>
 
     <li>
+      <tt>`--test-progress`[={0|1}]</tt>
+
+      Print the percentage of tests completed. This option is enabled
+      by default. The argument to <b>`--test-progress`</b> is
+      optional. To disable it, set the value to <b>0</b>.
+
+      For example, consider a test suite <b>sample_test_suite</b>
+      containing 3 tests.
+
+      @verbatim
+  ./mysql-test-run.pl --suite=sample_test_suite [--test-progress]
+      @endverbatim
+
+      Running the suite with <b>`--test-progress`</b> option enabled
+      will print the percentage of tests completed.
+
+      @verbatim
+  [ 33%] sample_test_suite.1st                           [ pass ]      1
+  [ 66%] sample_test_suite.2nd                           [ pass ]      1
+  [100%] sample_test_suite.3rd                           [ pass ]      1
+      @endverbatim
+    </li>
+
+    <li>
       <tt>`--testcase-timeout`=<b>minutes</b></tt>
 
       Specify the maximum test case runtime in minutes.
+
+      @note
+      When a test case is run with <b>valgrind</b> option enabled, the
+      test case timeout value becomes 10 times the specified value.
+      For example, running a test case with timeout value
+      <b>1 minute</b> and <b>valgrind</b> enabled will increase the
+      timeout value to <b>10 minutes</b>.
     </li>
 
     <li>
@@ -4685,6 +5196,13 @@
       is reported as failed if any such shutdown warnings were
       produced by valgrind. Pass or failure of this test is also added
       to the total test count reported.
+
+      @note
+      When a test case is run with <b>valgrind</b> option enabled, the
+      test case timeout value becomes 10 times the specified value.
+      For example, running a test case with timeout value
+      <b>1 minute</b> and <b>valgrind</b> enabled will increase the
+      timeout value to <b>10 minutes</b>.
     </li>
 
     <li>
@@ -4732,9 +5250,8 @@
     <li>
       <tt>`--verbose`</tt>
 
-      Give more verbose output regarding test execution. Use the
-      option twice to get even more output. Note that the output
-      generated within each test case is not affected.
+      Give more verbose output regarding test execution. Note that the
+      output generated within each test case is not affected.
     </li>
 
     <li>
@@ -4779,6 +5296,30 @@
       <tt>`--with-ndbcluster-only`</tt>
 
       Run only test cases that have <b>ndb</b> in their name.
+    </li>
+
+    <li>
+      <tt>`--xml-report`=<b>file_name</b></tt>
+
+      Generate an xml file containing result of the test run and write
+      it to the file named as the option argument. It includes
+      suite-wise and overall statistics like the number of tests run,
+      number of failures, number of disabled and skipped tests along
+      with information about each individual test according to its
+      outcome.
+
+      The xml report's structure can be found below :
+
+      @verbatim
+  <testsuites ... >
+    <testsuite ... >
+       <testcase ... />
+       <testcase ... >
+           <failure ... > ... </failure>
+       </testcase>
+    </testsuite>
+  </testsuites>
+      @endverbatim
     </li>
   </ul>
 
@@ -5282,6 +5823,22 @@
     </li>
 
     <li>
+      <tt>assert (<b>expr</b>)</tt>
+
+      Assert that <b>expr</b> is true; otherwise terminate the test program
+      with an error message indicating that <b>expr</b> failed.
+      <b>expr</b> is parsed as it is for <tt>if()</tt> and <tt>while()</tt>,
+      as described at @ref PAGE_MYSQL_TEST_FLOW_CONTROL.
+
+      @verbatim
+        assert(1);
+        assert($x);
+        assert(!$x);
+        assert(`select count(*) from t1`);
+      @endverbatim
+    </li>
+
+    <li>
       <tt>cat_file <b>file_name</b></tt>
 
       <b>cat_file</b> writes the contents of the file to the output.
@@ -5335,7 +5892,8 @@
       <tt>connect (<b>name</b>, <b>host_name</b>,
                    <b>user_name</b>, <b>password</b>, <b>db_name</b>
                    [,<b>port_num</b> [,<b>socket</b> [,<b>options</b>
-                   [,<b>default_auth</b>]]]])</tt>
+                   [,<b>default_auth</b> [,<b>compression algorithm</b>,
+                   [,<b>compression level</b>]]]]]])</tt>
 
       Open a connection to the server and make the connection the
       current connection.
@@ -5409,12 +5967,13 @@
             </li>
 
             <li>
-              <tt>TCP</tt>: Use the TCP/IP connection protocol.
+              <tt>SSL</tt>:Use SSL network protocol to have encrypted connection.
             </li>
 
             <li>
-              <tt>SSL</tt>: Use a secure connection.
+              <tt>TCP</tt>: Use the TCP/IP connection protocol.
             </li>
+
           </ul>
 
           Passing <b>PIPE</b> or <b>SHM</b> on non-Windows systems
@@ -5430,6 +5989,27 @@
           "mysqltest" does not find the plugin, use the
           <b>--plugin-dir</b> option to specify the directory where
           the plugin is located.
+        </li>
+
+        <li>
+          <b><em>compression algorithm</em></b> is the name of compression
+          algorithm to be used to compress data transferred between client
+          server. It is passed to the <b>mysql_options()</b> C API function
+          using the <b>MYSQL_OPT_COMPRESSION_ALGORITHMS</b> option.
+        </li>
+
+        <li>
+          <b><em>zstd compression level</em></b> is the extent of compression
+          to be applied when zstd compression algorithm is used. It is passed to
+          the <b>mysql_options()</b> C API function using the
+          <b>MYSQL_OPT_COMPRESSION_ALGORITHMS</b> option.
+        </li>
+
+        <li>
+          <b><em>compression level</em></b> is the extent of compression to
+          be applied based on the compression algorithm used. It is passed to
+          the <b>mysql_options()</b> C API function using the
+          <b>MYSQL_OPT_COMPRESSION_ALGORITHMS</b> option.
         </li>
       </ul>
 
@@ -5489,23 +6069,39 @@
     </li>
 
     <li>
-      <tt>copy_file <b>from_file to_file</b></tt>
+      <tt>copy_file <b>from_file to_file</b> [<b>retry</b>]</tt>
 
       Copy the file <b><em>from_file</em></b> to the file
       <b><em>to_file</em></b>. The command fails if
       <b><em>to_file</em></b> already exists. The file name arguments
       are subject to variable substitution.
+
+      <b>copy_file</b> can also take an optional argument <b>retry</b>.
+      If the command fails due to an environmental issue, the command
+      can be retried for a <b>retry</b> number of times. Each retry
+      happens after an interval of one second.
+
+      @verbatim
+  copy_file $MYSQL_TMP_DIR/copy1.txt $MYSQL_TMP_DIR/copy2.txt;
+  copy_file $MYSQL_TMP_DIR/foo.txt $MYSQL_TMP_DIR/foo2.txt 5;
+      @endverbatim
     </li>
 
     <li>
       <tt>copy_files_wildcard <b>src_dir_name dst_dir_name</b>
-                              [<b>pattern</b>]</tt>
+                              <b>pattern</b> [<b>retry</b>]</tt>
 
       Copy all files that match the pattern in the source directory to
       the destination directory. Patterns can use <b>?</b> to
       represent any single character, or <b>*</b> for any sequence of
       0 or more characters. The <b>.</b> character is treated like any
-      other. The pattern may not include <b>/</b>.
+      other. The pattern may not include <b>/</b>. If all the files
+      need to be copied, the <b>*</b> wildcard can be used.
+
+      <b>copy_files_wildcard</b> can also take an optional argument
+      <b>retry</b>. If the command fails due to an environmental
+      issue, the command can be retried for a <b>retry</b> number
+      of times. Each retry happens after an interval of one second.
 
       The command works like this:
 
@@ -5527,14 +6123,7 @@
         </li>
 
         <li>
-          The pattern argument is optional. If no pattern is provided,
-          all files from the source directory are copied to the
-          destination directory.
-        </li>
-
-        <li>
-          If a pattern is provided, but no files match it, an error
-          occurs.
+          If no files match the specified pattern, an error occurs.
         </li>
 
         <li>
@@ -5543,7 +6132,8 @@
       </ul>
 
       @verbatim
-  copy_files_wildcard $MYSQLTEST_VARDIR/std_data/ $MYSQLTEST_VARDIR/copy1/ *.txt
+  copy_files_wildcard $MYSQLTEST_VARDIR/std_data/ $MYSQLTEST_VARDIR/copy1/ *.txt;
+  copy_files_wildcard $MYSQLTEST_VARDIR/std_data/ $MYSQLTEST_VARDIR/copy1/ *.txt 5;
       @endverbatim
     </li>
 
@@ -5633,12 +6223,29 @@
       PAGE_MYSQLTEST "mysqltest" aborts the test when a statement sent
       to the server results in an unexpected error, and does not
       generate the <b>.reject</b> file. For discussion of reasons why
-      it can be useful to disable this behavior, see
+      it can be useful to disable this behavior, see @ref
       PAGE_ERROR_HANDLING.
 
       @verbatim
   --disable_abort_on_error
   --enable_abort_on_error
+      @endverbatim
+    </li>
+
+    <li>
+      <tt>disable_async_client</tt>, <tt>enable_async_client</tt>
+
+      Disable or enable asynchronous communication between the client and
+      the server. With this setting enabled, @ref PAGE_MYSQLTEST "mysqltest"
+      uses non-blocking C API's to communicate with the server.<br> Please
+      note that <b>disable_async_client</b> disables asynchronous
+      communication if it had been enabled either by the
+      <b>--enable_async_client</b> command or the <b>--async-client</b>
+      command line option.
+
+      @verbatim
+  --disable_async_client
+  --enable_async_client
       @endverbatim
     </li>
 
@@ -5691,21 +6298,6 @@
       @verbatim
   --disable_metadata
   --enable_metadata
-      @endverbatim
-    </li>
-
-    <li>
-      <tt>disable_parsing</tt>, <tt>enable_parsing</tt>
-
-      Disable or enable query parsing. This setting is enabled by
-      default. When disabled, @ref PAGE_MYSQLTEST "mysqltest" ignores
-      everything until <b>enable_parsing</b>. These commands are
-      useful for "commenting out" a section from a test case without
-      having to add a comment marker to every single line.
-
-      @verbatim
-  --disable_parsing
-  --enable_parsing
       @endverbatim
     </li>
 
@@ -5792,6 +6384,27 @@
     </li>
 
     <li>
+      <tt>disable_testcase bug_number</tt>, <tt>enable_testcase</tt>
+
+      Disable or enable a section from a test case. This setting is
+      enabled by default. When disabled, @ref PAGE_MYSQLTEST
+      "mysqltest" ignores everything until <b>enable_testcase</b>.
+      These commands are useful for disabling a section inside a
+      <b>.test</b> file that fails due to a known bug, without having
+      to disable the entire test case.
+
+      Bug number is a mandatory argument to <b>disable_testcase</b>
+      command and it should be in <b>BUG\#XXXX</b> format where keyword
+      <b>BUG</b> is case-insensitive and <b>XXXX</b> should contain
+      only digits.
+
+      @verbatim
+  --disable_testcase BUG#XXXX
+  --enable_testcase
+      @endverbatim
+    </li>
+
+    <li>
       <tt>disable_warnings</tt>, <tt>enable_warnings</tt>
 
       Disable or enable warnings. This setting is enabled by default.
@@ -5803,8 +6416,54 @@
   --disable_warnings
   --enable_warnings
       @endverbatim
+
+      <b>disable_warnings</b> and <b>enable_warnings</b> commands can
+      take an optional argument specifying one or more comma-separated
+      list of warnings to be disabled or enabled. Each warning
+      specified should be in symbolic error name format.
+
+      @verbatim
+  --disable_warnings ER_BAD_TABLE_ERROR,ER_YES
+  DROP TABLE IF EXISTS t1;
+  --enable_warnings ER_BAD_TABLE_ERROR,ER_YES
+      @endverbatim
+
+      Or
+
+      @verbatim
+  --disable_warnings
+  DROP TABLE IF EXISTS t1;
+  --enable_warnings ER_BAD_TABLE_ERROR,ER_YES
+  DROP TABLE IF EXISTS t1;
+  --disable_warnings ER_BAD_TABLE_ERROR,ER_YES
+  --enable_warnings
+      @endverbatim
+
+      <b>disable_warnings</b> and <b>enable_warnings</b> commands can
+      also take a second optional argument, <b>"ONCE"</b>, which when
+      specified will disable or enable the warnings for next
+      statement only.
+
+      @verbatim
+  --disable_warnings ER_BAD_TABLE_ERROR ONCE
+  DROP TABLE IF EXISTS t1;
+      @endverbatim
+
+      Or
+
+      @verbatim
+  --disable_warnings
+  DROP TABLE IF EXISTS t1;
+  --enable_warnings ER_BAD_TABLE_ERROR ONCE
+  DROP TABLE IF EXISTS t1;
+  --enable_warnings
+      @endverbatim
     </li>
 
+      @note
+      At the end of a test, all the disabled warnings must be enabled,
+      else @ref PAGE_MYSQLTEST "mysqltest" will throw an error and
+      abort the test run.
     <li>
       <tt>disconnect <b>connection_name</b></tt>
 
@@ -6006,7 +6665,7 @@
 
       Execute the shell command using the <b>popen()</b> library call.
       References to variables within the command are replaced with the
-      corresponding values. Use “<b>\$</b>” to specify a literal
+      corresponding values. Use “<b>\\$</b>” to specify a literal
       “<b>$</b>” character.
 
       On Cygwin, the command is executed from <b>cmd.exe</b>, so
@@ -6026,6 +6685,20 @@
       PAGE_MYSQLTEST "mysqltest" now has several commands to perform
       these operations portably, so they should be used instead:
       <b>remove_file</b>, <b>chmod</b>, <b>mkdir</b>, and so forth.
+    </li>
+
+    <li>
+      <tt>exec_in_background <b>command</b> [<b>arg</b>] ...</tt>
+
+      Execute a shell command using the <b>popen()</b> library call in
+      the background. When a command is executed using
+      <b>exec_in_background</b>, @ref PAGE_MYSQLTEST "mysqltest" does
+      not wait for it to finish, nor attempt to read the output of it.
+
+      @verbatim
+  --exec_in_background $MYSQL_DUMP --xml --skip-create test
+  --exec_in_background rm $MYSQLTEST_VARDIR/tmp/t1
+      @endverbatim
     </li>
 
     <li>
@@ -6105,14 +6778,20 @@
     </li>
 
     <li>
-      <tt>file_exists <b>file_name</b></tt>
+      <tt>file_exists <b>file_name</b> [<b>retry</b>]</tt>
 
       <b>file_exists</b> succeeds if the named file exists and fails
       otherwise. The file name argument is subject to variable
       substitution.
 
+      <b>file_exists</b> can also take an optional argument
+      <b>retry</b>. If the command fails due to an environmental
+      issue, the command can be retried for a <b>retry</b> number
+      of times. Each retry happens after an interval of one second.
+
       @verbatim
   file_exists /etc/passwd;
+  file_exists /etc/passwd 5;
       @endverbatim
     </li>
 
@@ -6329,15 +7008,21 @@
     </li>
 
     <li>
-      <tt>move_file <b>from_name to_name</b></tt>
+      <tt>move_file <b>from_name to_name</b> [<b>retry</b>]</tt>
 
       <b>move_file</b> renames <b><em>from_name</em></b> to
       <b><em>to_name</em></b>. The file name arguments are subject to
       variable substitution, but must evaluate to a literal file name,
       not a file name pattern.
 
+      <b>move_file</b> can also take an optional argument <b>retry</b>.
+      If the command fails due to an environmental issue, the command
+      can be retried for a <b>retry</b> number of times. Each retry
+      happens after an interval of one second.
+
       @verbatim
   move_file $MYSQL_TMP_DIR/data01 $MYSQL_TMP_DIR/test.out;
+  move_file $MYSQL_TMP_DIR/data01 $MYSQL_TMP_DIR/test.out 5;
       @endverbatim
     </li>
 
@@ -6455,24 +7140,6 @@
     </li>
 
     <li>
-      <tt>real_sleep <b>num</b></tt>
-
-      Sleep <b><em>num</em></b> seconds. <b><em>num</em></b> can have
-      a fractional part. Unlike the <b>sleep</b> command,
-      <b>real_sleep</b> is not affected by the
-      <b>`--sleep command-line`</b> option.
-
-      @verbatim
-  --real_sleep 10
-  real_sleep 5;
-     @endverbatim
-
-     Try not to use <b>sleep</b> or <b>real_sleep</b> commands more
-     than necessary. The more of them there are, the slower the test
-     suite becomes.
-    </li>
-
-    <li>
       <tt>reap</tt>
 
       Receive the result of the statement sent with the <b>send</b>
@@ -6484,33 +7151,43 @@
     </li>
 
     <li>
-      <tt>remove_file <b>file_name</b></tt>
+      <tt>remove_file <b>file_name</b> [<b>retry</b>]</tt>
 
       <b>remove_file</b> removes the file. It fails with an error if
       the file does not exist. The file name argument is subject to
       variable substitution, but must evaluate to a literal file name,
       not a file name pattern.
 
+      <b>remove_file</b> also takes an optional argument <b>retry</b>.
+      If the command fails due to an environmental issue, the command
+      can be retried for a <b>retry</b> number of times. Each retry
+      happens after an interval of one second.
+
       @verbatim
   remove_file $MYSQL_TMP_DIR/data01;
+  remove_file $MYSQL_TMP_DIR/data01 5
       @endverbatim
     </li>
 
     <li>
-      <tt>remove_files_wildcard <b>dir_name</b> [<b>pattern</b>]</tt>
+      <tt>remove_files_wildcard <b>dir_name</b> <b>pattern</b> [<b>retry</b>]</tt>
 
       Remove all files in the named directory that match the pattern.
       Removal does not apply to directories matching the pattern or
       matching files in subdirectories. Patterns can use <b>?</b> to
       represent any single character, or <b>*</b> for any sequence of
       0 or more characters. The <b>.</b> character is treated like any
-      other. The pattern may not include <b>/</b>.
+      other. The pattern may not include <b>/</b>. If all the files
+      need to be removed, the <b>*</b> wildcard can be used.
 
-      If no pattern argument is given, all files in the directory will
-      be removed, but not the directory itself.
+      <b>remove_files_wildcard</b> can also take an optional argument
+      <b>retry</b>. If the command fails due to an environmental
+      issue, the command can be retried for a <b>retry</b> number of
+      times. Each retry happens after an interval of one second.
 
       @verbatim
   remove_files_wildcard $MYSQL_TMP_DIR file*.txt;
+  remove_files_wildcard $MYSQL_TMP_DIR file*.txt 5;
       @endverbatim
     </li>
 
@@ -6542,6 +7219,34 @@
     </li>
 
     <li>
+      <tt>replace_numeric_round <b>precision</b></tt>
+
+      Rounds off floating point numbers. <b>precision</b> is the
+      number of digits after the decimal point to which the result will
+      be rounded off to. It can only be a number between
+      0 and 16.
+
+      If the precision is 0, then the value is rounded off to the
+      nearest whole number. Trailing zeroes after the decimal point are
+      removed from the numbers.
+
+      Numbers which are <b>greater than <em>1e10</em></b> or <b> lesser
+      than <em> -1e10 </em></b> are represented using the
+      exponential notation after they are rounded off.
+
+      @verbatim
+  --replace_numeric_round 6
+  SELECT 12379.79459775333;
+  12379.794598
+
+  replace_numeric_round 0;
+  SELECT 876.87302;
+  877
+      @endverbatim
+    </li>
+
+
+    <li>
       <tt>replace_regex <b>/pattern/replacement/</b>[i] ...</tt>
 
       In the output from the next statement, find strings within
@@ -6552,13 +7257,12 @@
       sensitive by default. Specify the optional <b>i</b> modifier to
       cause matching to be case insensitive.
 
-      The syntax for allowable patterns is the same as for the
-      <b>REGEXP</b> SQL operator. In addition, the pattern can contain
-      parentheses to mark substrings matched by parts of the pattern.
-      These substrings can be referenced in the replacement string: An
-      instance of <b><em>N</em></b> in the replacement string causes
-      insertion of the <b><em>N</em>-th</b> substring matched by the
-      pattern. For example, the following command matches
+      The syntax for allowable patterns is same as the <b>std::ECMAScript</b>
+      syntax. The pattern can contain parentheses to mark substrings
+      matched by parts of the pattern. These substrings can be referenced in
+      the replacement string: An instance of <b><em>N</em></b> in the
+      replacement string causes insertion of the <b><em>N</em>-th</b> substring
+      matched by the pattern. For example, the following command matches
       <b>strawberry</b> and replaces it with <b>raspberry</b> and
       <b>strawberry</b>:
 
@@ -6603,19 +7307,6 @@
 
       Reset the connection state by calling [mysql_reset_connection()]
       (https://dev.mysql.com/doc/refman/8.0/en/mysql-reset-connection.html).
-    </li>
-
-    <li>
-      <tt>result <b>file_name</b></tt>
-
-      This command specifies a file to be used for comparison when the
-      test case completes. If the content does not match or there is
-      some other error, write the result to
-      <b>r/<em>file_name</em>.reject</b>.
-
-      If the <b>`--record`</b> command-line option is given, the
-      <b>result</b> command changes the file by writing the new test
-      result to it.
     </li>
 
     <li>
@@ -6695,8 +7386,21 @@
       the functionality of both. After variable replacement has been
       done, it behaves like the <b>send</b> command.
 
+      If <b><em>statement</em></b> is omitted, the <b>send_eval</b>
+      command applies to the next statement executed. This means that
+      <b>send_eval</b> can be used on a line by itself before a
+      statement. Thus, this command:
+
       @verbatim
   --send_eval $my_stmt
+      @endverbatim
+    </li>
+
+      Is equivalent to these commands:
+
+      @verbatim
+  --send_eval
+  $my_stmt;
       @endverbatim
     </li>
 
@@ -6740,50 +7444,51 @@
       Skips the rest of the test file after printing the given message
       as the reason. This can be used after checking a condition that
       must be satisfied, as a way of performing an exit that displays
-      a reason. Suppose that the test file <b>mytest</b> has these
-      contents:
+      a reason. References to variables within the message are
+      replaced with the corresponding values. Suppose that the test
+      file <b>mytest.test</b> has these contents:
 
       @verbatim
-  let $v= 0;
-  if (!$v)
+  let $var= 0;
+  if (!$var)
   {
-    skip value is zero, skipping test;
+    skip value of \$var is '$var', skipping test;
   }
   echo This command is never reached;
       @endverbatim
 
-      Executing @ref PAGE_MYSQLTEST "mysqltest-x mytest" yields these
-      results:
+      Executing @ref PAGE_MYSQLTEST "mysqltest" -x mytest.test yields
+      these results:
 
       @verbatim
   The test './mytest' is not supported by this installation
   Detected in file ./mytest at line 4
-  reason: value is zero, skipping test
+  reason: value of $var is '0', skipping test
       @endverbatim
 
-      If the test is run from @ref PAGE_MYSQL_TEST_RUN_PL "mysql-test-
-      run.pl", you will instead see the test result as
+      If the test is run from @ref PAGE_MYSQL_TEST_RUN_PL
+      "mysql-test-run.pl", you will instead see the test result as
       <b>[ skipped ]</b> followed by the message.
+
+      @verbatim
+  main.mytest          [ skipped ]  value of $var is '0', skipping test
+      @endverbatim
     </li>
 
     <li>
       <tt>sleep <b>num</b></tt>
 
-      Sleep <b><em>num</em></b> seconds. <b><em>num</em></b> can have
-      a fractional part. If the <b>`--sleep`</b> command-line option
-      was given, the option value overrides the value given in the
-      <b>sleep</b> command. For example, if @ref PAGE_MYSQLTEST
-      "mysqltest" is started with <b>`--sleep`=10</b>, the command
-      <b>sleep 15</b> sleeps 10 seconds, not 15.
+      Sleep <b><em>num</em></b> seconds. <b><em>num</em></b> need not be
+      a whole number and can have a fractional part as well i.e., the
+      command supports sleeping for intervals shorter than 1 second.
 
       @verbatim
   --sleep 10
   sleep 0.5;
       @endverbatim
 
-      Try not to use <b>sleep</b> or <b>real_sleep</b> commands more
-      than necessary. The more of them there are, the slower the test
-      suite becomes.
+      Try not to use <b>sleep</b> command more than necessary. The
+      more of them there are, the slower the test suite becomes.
     </li>
 
     <li>
@@ -6855,6 +7560,21 @@
       having them affect results. This means that care should be taken
       with <b>sorted_result</b> because it has the potential of hiding
       server bugs that result in true problems with result order.
+    </li>
+
+    <li>
+      <tt>partially_sorted_result <b>start_column</b></tt>
+
+      Similarly to <b>sorted_result</b>, but assumes that the first
+      <b>start_column</b> columns are already sorted, sorting only
+      on the remaining ones. This is useful if you wish to verify
+      a partial ordering property, e.g. that <b>SELECT a,b,c ORDER BY
+      a</b>. In this case, you could use <b>partially_sorted_result 1</b>
+      to sort only on b and c, giving deterministic results without
+      masking bugs where sorting on a column would not work correctly.
+
+      <tt>sorted_result</tt> is functionally equal to
+      <tt>partially_sorted_result 0</tt>.
     </li>
 
     <li>
@@ -6949,29 +7669,6 @@
     </li>
 
     <li>
-      <tt>system <b>command</b> [<b>arg</b>] ...</tt>
-
-      Execute the shell command using the <tt>system()</tt> library
-      call. References to variables within the command are replaced
-      with the corresponding values. Use “<tt>\$</tt>” to specify a
-      literal “<tt>$</tt>” character.
-
-      @verbatim
-  --system echo '[mysqltest1]' > $MYSQLTEST_VARDIR/tmp/tmp.cnf
-  --system echo 'port=1234' >> $MYSQLTEST_VARDIR/tmp/tmp.cnf
-  system rm $MYSQLTEST_VARDIR/master-data/test/t1.MYI;
-      @endverbatim
-
-      @note
-      <b>exec</b> or <b>system</b> are sometimes used to perform file
-      system operations, but the command for doing so tend to be
-      operating system specific, which reduces test portability. @ref
-      PAGE_MYSQLTEST "mysqltest" now has several commands to perform
-      these operations portably, so they should be used instead:
-      <b>remove_file</b>, <b>chmod</b>, <b>mkdir</b>, and so forth.
-    </li>
-
-    <li>
       <tt>vertical_results</tt>
 
       Set the default query result display format to vertical.
@@ -6990,7 +7687,7 @@
       'Slave_running'</b> statements until the result is <b>OFF</b>.
 
       For information about alternative means of slave server control,
-      see PAGE_WRITING_REPLICATION_TESTS.
+      see @ref PAGE_WRITING_REPLICATION_TESTS.
     </li>
 
     <li>
@@ -7556,8 +8253,7 @@
 
     <li>
       The <b>test_services</b> plugin demonstrates how to test the
-      <b>my_snprintf</b> and <b>my_plugin_log_service</b> services
-      in unthreaded context.
+      <b>my_plugin_log_service</b> service in unthreaded context.
     </li>
 
     <li>
@@ -7648,8 +8344,7 @@
         <li>
           If you copied <b>test_services.cc</b> or
           <b>test_services_threaded.cc</b>, the file contains tests
-          for the <b>my_snprintf</b> and
-          <b>my_plugin_log_service</b> services in unthreaded or
+          for the <b>my_plugin_log_service</b> service in unthreaded or
           threaded contexts. Replace or modify those tests with code
           for your own tests.
           those tests with code for your own tests.

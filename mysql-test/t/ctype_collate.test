@@ -1,5 +1,6 @@
  #Get deafult engine value
 --let $DEFAULT_ENGINE = `select @@global.default_storage_engine`
+--character_set latin1
 
 --disable_warnings
 DROP TABLE IF EXISTS t1;
@@ -85,12 +86,16 @@ SELECT latin1_f COLLATE koi8r_general_ci  AS latin1_f_as FROM t1 ORDER BY latin1
 
 # GROUP BY
 
-SELECT latin1_f,count(*) FROM t1 GROUP BY latin1_f ASC;
+--skip_if_hypergraph  # Picks a different (but equally valid) representative for each group.
+SELECT latin1_f,count(*) FROM t1 GROUP BY latin1_f ORDER BY latin1_f;
 --source include/turn_off_only_full_group_by.inc
-SELECT latin1_f,count(*) FROM t1 GROUP BY latin1_f COLLATE latin1_swedish_ci ASC;
-SELECT latin1_f,count(*) FROM t1 GROUP BY latin1_f COLLATE latin1_german2_ci ASC;
-SELECT latin1_f,count(*) FROM t1 GROUP BY latin1_f COLLATE latin1_general_ci ASC;
-SELECT latin1_f,count(*) FROM t1 GROUP BY latin1_f COLLATE latin1_bin ASC;
+--skip_if_hypergraph  # Picks a different (but equally valid) representative for each group.
+SELECT latin1_f,count(*) FROM t1 GROUP BY latin1_f COLLATE latin1_swedish_ci ORDER BY latin1_f COLLATE latin1_swedish_ci;
+--skip_if_hypergraph  # Picks a different (but equally valid) representative for each group.
+SELECT latin1_f,count(*) FROM t1 GROUP BY latin1_f COLLATE latin1_german2_ci ORDER BY latin1_f COLLATE latin1_german2_ci;
+--skip_if_hypergraph  # Picks a different (but equally valid) representative for each group.
+SELECT latin1_f,count(*) FROM t1 GROUP BY latin1_f COLLATE latin1_general_ci ORDER BY latin1_f COLLATE latin1_general_ci;
+SELECT latin1_f,count(*) FROM t1 GROUP BY latin1_f COLLATE latin1_bin ORDER BY latin1_f COLLATE latin1_bin;
 --error 1253
 SELECT latin1_f,count(*) FROM t1 GROUP BY latin1_f COLLATE koi8r_general_ci;
 --source include/restore_sql_mode_after_turn_off_only_full_group_by.inc
@@ -108,7 +113,7 @@ SELECT DISTINCT latin1_f COLLATE koi8r             FROM t1;
 
 # Aggregates
 
---disable_parsing
+--disable_testcase BUG#0000
 SELECT MAX(k COLLATE latin1_german2_ci)
 FROM t1
 WHERE
@@ -119,7 +124,7 @@ HAVING
 SELECT *
 FROM t1 
 HAVING (_latin1'Mu"ller' COLLATE latin1_german2_ci) = k;
---enable_parsing
+--enable_testcase
 
 #
 # Check that SHOW displays COLLATE clause
@@ -151,7 +156,7 @@ SHOW FIELDS FROM  t1;
 SET CHARACTER SET 'latin1';
 SHOW VARIABLES LIKE 'character_set_client';
 SELECT charset(_latin1 'a'),collation(_latin1 'a'),coercibility('a'),'a'='A';
-explain extended SELECT charset('a'),collation('a'),coercibility('a'),'a'='A';
+explain SELECT charset('a'),collation('a'),coercibility('a'),'a'='A';
 
 SET CHARACTER SET koi8r;
 SHOW VARIABLES LIKE 'collation_client';

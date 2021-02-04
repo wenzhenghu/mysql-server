@@ -1,23 +1,34 @@
-/* Copyright (c) 2000, 2017, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2000, 2019, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
+
+   Without limiting anything contained in the foregoing, this file,
+   which is part of C Driver for MySQL (Connector/C), is also subject to the
+   Universal FOSS Exception, version 1.0, a copy of which can be found at
+   http://oss.oracle.com/licenses/universal-foss-exception.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA */
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 /**
   @file mysys/mulalloc.cc
 */
 
-#include <stdarg.h>
 #include <stdarg.h>
 #include <stddef.h>
 #include <sys/types.h>
@@ -38,39 +49,36 @@
   SYNOPSIS
     my_multi_malloc()
       myFlags              Flags
-	ptr1, length1      Multiple arguments terminated by null ptr
-	ptr2, length2      ...
+        ptr1, length1      Multiple arguments terminated by null ptr
+        ptr2, length2      ...
         ...
-	NULL
+        NULL
 */
 
-void* my_multi_malloc(PSI_memory_key key, myf myFlags, ...)
-{
+void *my_multi_malloc(PSI_memory_key key, myf myFlags, ...) {
   va_list args;
-  char **ptr,*start,*res;
-  size_t tot_length,length;
-  DBUG_ENTER("my_multi_malloc");
+  char **ptr, *start, *res;
+  size_t tot_length, length;
+  DBUG_TRACE;
 
-  va_start(args,myFlags);
-  tot_length=0;
-  while ((ptr=va_arg(args, char **)))
-  {
-    length=va_arg(args,uint);
-    tot_length+=ALIGN_SIZE(length);
+  va_start(args, myFlags);
+  tot_length = 0;
+  while ((ptr = va_arg(args, char **))) {
+    length = va_arg(args, uint);
+    tot_length += ALIGN_SIZE(length);
   }
   va_end(args);
 
-  if (!(start=(char *) my_malloc(key, tot_length,myFlags)))
-    DBUG_RETURN(0); /* purecov: inspected */
+  if (!(start = (char *)my_malloc(key, tot_length, myFlags)))
+    return nullptr; /* purecov: inspected */
 
-  va_start(args,myFlags);
-  res=start;
-  while ((ptr=va_arg(args, char **)))
-  {
-    *ptr=res;
-    length=va_arg(args,uint);
-    res+=ALIGN_SIZE(length);
+  va_start(args, myFlags);
+  res = start;
+  while ((ptr = va_arg(args, char **))) {
+    *ptr = res;
+    length = va_arg(args, uint);
+    res += ALIGN_SIZE(length);
   }
   va_end(args);
-  DBUG_RETURN((void*) start);
+  return (void *)start;
 }

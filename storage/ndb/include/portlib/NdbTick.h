@@ -1,14 +1,21 @@
 /*
-   Copyright (c) 2003, 2016, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2003, 2020, Oracle and/or its affiliates.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -19,6 +26,7 @@
 #define NDB_TICK_H
 
 #include <assert.h>
+#include <time.h>
 #include <ndb_types.h>
 
 
@@ -44,7 +52,7 @@ typedef struct NDB_TICKS {
 
 public:
   NDB_TICKS()
-  { t = 0; };
+  { t = 0; }
 
   /**
    * Provide functionality for fetch and reconstruct of tick value.
@@ -52,10 +60,10 @@ public:
    * the clock is used to generate a pseudo random number.
    */
   Uint64 getUint64() const
-  { return t; };
+  { return t; }
 
   explicit NDB_TICKS(Uint64 val)
-  { t = val; };
+  { t = val; }
 
 } NDB_TICKS; 
 
@@ -66,6 +74,11 @@ public:
  */
 bool
 NdbTick_IsMonotonic();
+
+#ifndef _WIN32
+int
+NdbTick_GetMonotonicClockId(clockid_t* clk);
+#endif
 
 /**
  * Returns number of 'ticks' since some 
@@ -133,7 +146,7 @@ private:
 
   friend void NdbTick_Init();
 
-  NdbDuration(Uint64 ticks) : t(ticks) {};
+  NdbDuration(Uint64 ticks) : t(ticks) {}
 }; //class NdbDuration
 
 

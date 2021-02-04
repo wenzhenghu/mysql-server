@@ -1,14 +1,21 @@
 /*
-   Copyright (c) 2003, 2010, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2003, 2019, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -17,6 +24,8 @@
 
 #ifndef NDB_VECTOR_HPP
 #define NDB_VECTOR_HPP
+
+#include <utility>
 
 #include <ndb_global.h>
 #include <portlib/NdbMutex.h>
@@ -30,12 +39,13 @@ public:
 
   T& operator[](unsigned i);
   const T& operator[](unsigned i) const;
-  unsigned size() const { return m_size; };
+  unsigned size() const { return m_size; }
   
   int push_back(const T &);
   int push(const T&, unsigned pos);
   T& set(T&, unsigned pos, T& fill_obj);
   T& back();
+  const T& back() const;
   
   void erase(unsigned index);
   
@@ -44,6 +54,7 @@ public:
   int fill(unsigned new_size, T & obj);
 
   Vector<T>& operator=(const Vector<T>&);
+  Vector<T>& operator=(Vector<T>&&);
 
   /** Does deep copy.*/
   Vector(const Vector&); 
@@ -174,6 +185,14 @@ Vector<T>::back(){
 }
 
 template<class T>
+const T &
+Vector<T>::back() const {
+  if(m_size==0)
+    abort();
+  return (* this)[m_size - 1];
+}
+
+template<class T>
 int
 Vector<T>::push_back(const T & t){
   if(m_size == m_arraySize){
@@ -250,7 +269,7 @@ Vector<T>::fill(unsigned new_size, T & obj){
  *  an error code instead of aborting.
  */
 template<class T>
-Vector<T>& 
+Vector<T>&
 Vector<T>::operator=(const Vector<T>& obj){
   if(this != &obj){
     clear();
@@ -263,6 +282,17 @@ Vector<T>::operator=(const Vector<T>& obj){
     }
   }
   return * this;
+}
+
+template<class T>
+Vector<T>&
+Vector<T>::operator=(Vector<T>&& obj){
+  using std::swap;
+  swap(m_items, obj.m_items);
+  swap(m_size, obj.m_size);
+  swap(m_incSize, obj.m_incSize);
+  swap(m_arraySize, obj.m_arraySize);
+  return *this;
 }
 
 template<class T>
@@ -305,11 +335,12 @@ public:
 
   T& operator[](unsigned i);
   const T& operator[](unsigned i) const;
-  unsigned size() const { return m_size; };
+  unsigned size() const { return m_size; }
   
   int push_back(const T &);
   int push_back(const T &, bool lockMutex);
   T& back();
+  const T& back() const;
   
   void erase(unsigned index);
   void erase(unsigned index, bool lockMutex);
@@ -403,6 +434,14 @@ MutexVector<T>::operator[](unsigned i) const {
 template<class T>
 T &
 MutexVector<T>::back(){
+  if(m_size==0)
+    abort();
+  return (* this)[m_size - 1];
+}
+
+template<class T>
+const T &
+MutexVector<T>::back() const {
   if(m_size==0)
     abort();
   return (* this)[m_size - 1];

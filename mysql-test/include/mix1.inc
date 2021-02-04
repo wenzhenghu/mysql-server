@@ -111,12 +111,12 @@ INSERT INTO t3 SELECT a + 4, a + 4, 3 FROM t3;
 
 # demonstrate a problem when a must-use-sort table flag
 # (sort_by_table=1) is being neglected.
-SELECT STRAIGHT_JOIN SQL_NO_CACHE t1.b, t1.a FROM t1, t3, t2 WHERE
+SELECT STRAIGHT_JOIN t1.b, t1.a FROM t1, t3, t2 WHERE
   t3.a = t2.a AND t2.b = t1.a AND t3.b = 1 AND t3.c IN (1, 2)
   ORDER BY t1.b LIMIT 2;
 
 # demonstrate the problem described in the bug report
-SELECT STRAIGHT_JOIN SQL_NO_CACHE t1.b, t1.a FROM t1, t3, t2 WHERE
+SELECT STRAIGHT_JOIN t1.b, t1.a FROM t1, t3, t2 WHERE
   t3.a = t2.a AND t2.b = t1.a AND t3.b = 1 AND t3.c IN (1, 2)
   ORDER BY t1.b LIMIT 5;
 DROP TABLE t1, t2, t3;
@@ -211,8 +211,9 @@ CREATE TABLE t1 (
   a6 timestamp NOT NULL DEFAULT '2000-01-01 01:01:01',
   a7 tinyblob,
   INDEX idx (a6,a7(239),a5)
-) ENGINE=InnoDB;
+) charset latin1 ENGINE=InnoDB;
 
+ANALYZE TABLE t1;
 EXPLAIN SELECT a4 FROM t1 WHERE
 a6=NULL AND
 a4='UNcT5pIde4I6c2SheTo4gt92OV1jgJCVkXmzyf325R1DwLURkbYHwhydANIZMbKTgdcR5xS';
@@ -400,6 +401,7 @@ drop table t1;
 create table t1 (f1 int, f2 char(1), primary key(f1,f2)) stats_persistent=0;
 insert into t1 values ( 1,"e"),(2,"a"),( 3,"c"),(4,"d");
 alter table t1 drop primary key, add primary key (f2, f1);
+ANALYZE TABLE t1;
 explain select distinct f1 a, f1 b from t1;
 explain select distinct f1, f2 from t1;
 drop table t1;
@@ -455,47 +457,19 @@ INSERT INTO t1(id, dept, age, name) VALUES
   (4011, 'cs7', 10, 'rs4'), (4012, 'cs8', 20, 'rs4'), (4019, 'cs9', 10, 'rs5'),
   (4020, 'cs10', 20, 'rs5'),(4027, 'cs11', 10, 'rs6'),(4028, 'cs12', 20, 'rs6');
 
+ANALYZE TABLE t1;
+--echo # Masking (#) number in "rows" column of the following EXPLAIN output, as it may vary (bug#47746).
+--replace_column 10 #
 EXPLAIN SELECT DISTINCT t1.name, t1.dept FROM t1 WHERE t1.name='rs5';
 SELECT DISTINCT t1.name, t1.dept FROM t1 WHERE t1.name='rs5';
 DELETE FROM t1;
+ANALYZE TABLE t1;
 --echo # Masking (#) number in "rows" column of the following EXPLAIN output, as it may vary (bug#47746).
 --replace_column 10 #
 EXPLAIN SELECT DISTINCT t1.name, t1.dept FROM t1 WHERE t1.name='rs5';
 SELECT DISTINCT t1.name, t1.dept FROM t1 WHERE t1.name='rs5';
 
 DROP TABLE t1;
-
---source include/innodb_rollback_on_timeout.inc
-
-#
-# Bug #27210: INNODB ON DUPLICATE KEY UPDATE
-#
-
-set @save_qcache_size=@@global.query_cache_size;
-set @save_qcache_type=@@global.query_cache_type;
-set global query_cache_size=10*1024*1024;
-set global query_cache_type=1;
-connect (con1,localhost,root,,);
-connection con1;
-drop table if exists `test`;
-CREATE TABLE `test` (`test1` varchar(3) NOT NULL,
-  `test2` varchar(4) NOT NULL,PRIMARY KEY  (`test1`))
-  ENGINE=InnoDB DEFAULT CHARSET=latin1;
-INSERT INTO `test` (`test1`, `test2`) VALUES ('tes', '5678');
-disconnect con1;
-connect (con2,localhost,root,,);
-connection con2;
-select * from test;
-INSERT INTO `test` (`test1`, `test2`) VALUES ('tes', '1234')
-  ON DUPLICATE KEY UPDATE `test2` = '1234';
-select * from test;
-flush tables;
-select * from test;
-disconnect con2;
-connection default;
-drop table test;
-set global query_cache_type=@save_qcache_type;
-set global query_cache_size=@save_qcache_size;
 
 --source include/innodb_rollback_on_timeout.inc
 
@@ -999,6 +973,7 @@ SELECT * FROM t1 WHERE b=20 FOR UPDATE;
 # This statement gives a "failed: 1205: Lock wait timeout exceeded; try
 # restarting transaction" message when the bug is present.
 START TRANSACTION;
+--skip_if_hypergraph
 SELECT * FROM t1 WHERE b=10 ORDER BY A FOR UPDATE;
 ROLLBACK;
 
@@ -1534,7 +1509,7 @@ if ($test_foreign_keys)
                   FOREIGN KEY (c) REFERENCES t1 (a,k) ON UPDATE NO ACTION) engine=innodb;
   --error ER_WRONG_FK_DEF
   CREATE TABLE t2 (c INT NOT NULL, d INT NOT NULL, PRIMARY KEY (c,d),
-                  FOREIGN KEY f1 (c) REFERENCES t1 (a,k) ON UPDATE NO ACTION) engine=innodb;
+                  CONSTRAINT f1 FOREIGN KEY (c) REFERENCES t1 (a,k) ON UPDATE NO ACTION) engine=innodb;
   CREATE TABLE t2 (c INT NOT NULL, d INT NOT NULL, PRIMARY KEY (c,d),
                   CONSTRAINT c1 FOREIGN KEY f1 (c) REFERENCES t1 (a) ON DELETE NO ACTION,
                   CONSTRAINT c2 FOREIGN KEY (c) REFERENCES t1 (a) ON UPDATE NO ACTION,
@@ -1678,6 +1653,7 @@ analyze table t2;
 -- enable_query_log
 
 explain select * from t1, t2 where t2.a=t1.a and t2.b + 1;
+--sorted_result
 select * from t1, t2 where t2.a=t1.a and t2.b + 1;
 
 drop table t1,t2;

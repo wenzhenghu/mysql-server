@@ -1,24 +1,31 @@
-/* Copyright (c) 2017 Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2016, 2020, Oracle and/or its affiliates.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software Foundation,
-   51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 #ifndef DD__PARAMETER_INCLUDED
 #define DD__PARAMETER_INCLUDED
 
-#include "dd/types/column.h"         // dd::Column::enum_column_types
-#include "dd/types/entity_object.h"  // dd::Entity_object
 #include "my_inttypes.h"
+#include "sql/dd/types/column.h"         // dd::Column::enum_column_types
+#include "sql/dd/types/entity_object.h"  // dd::Entity_object
 
 namespace dd {
 
@@ -27,32 +34,27 @@ namespace dd {
 class Routine;
 class Parameter_impl;
 class Parameter_type_element;
-class Object_type;
+
+namespace tables {
+class Parameters;
+}
 
 ///////////////////////////////////////////////////////////////////////////
 
-class Parameter : virtual public Entity_object
-{
-public:
-  static const Object_type &TYPE();
-  static const Object_table &OBJECT_TABLE();
-  typedef Collection<Parameter_type_element*> Parameter_type_element_collection;
+class Parameter : virtual public Entity_object {
+ public:
+  typedef Collection<Parameter_type_element *>
+      Parameter_type_element_collection;
   typedef Parameter_impl Impl;
+  typedef tables::Parameters DD_table;
 
-public:
-  virtual ~Parameter()
-  { };
+ public:
+  ~Parameter() override {}
 
-public:
+ public:
+  enum enum_parameter_mode { PM_IN = 1, PM_OUT, PM_INOUT };
 
-  enum enum_parameter_mode
-  {
-    PM_IN = 1,
-    PM_OUT,
-    PM_INOUT
-  };
-
-public:
+ public:
   /////////////////////////////////////////////////////////////////////////
   // Is name null?
   /////////////////////////////////////////////////////////////////////////
@@ -155,7 +157,7 @@ public:
   virtual const Properties &options() const = 0;
 
   virtual Properties &options() = 0;
-  virtual bool set_options_raw(const String_type &options_raw) = 0;
+  virtual bool set_options(const String_type &options_raw) = 0;
 
   /////////////////////////////////////////////////////////////////////////
   // Elements.
@@ -170,6 +172,6 @@ public:
 
 ///////////////////////////////////////////////////////////////////////////
 
-}
+}  // namespace dd
 
-#endif // DD__PARAMETER_INCLUDED
+#endif  // DD__PARAMETER_INCLUDED

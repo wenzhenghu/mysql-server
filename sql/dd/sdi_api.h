@@ -1,40 +1,45 @@
-/* Copyright (c) 2016, 2017, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2016, 2019, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software Foundation,
-   51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 #ifndef DD_SDI_API_INCLUDED
 #define DD_SDI_API_INCLUDED
 
-
 #include <memory>
 
-#include "dd/string_type.h"
-#include "mem_root_fwd.h"
+#include "sql/dd/string_type.h"
+#include "sql/dd/types/table.h"
 
-class THD;
+struct MEM_ROOT;
 class MDL_request;
+class THD;
 struct TABLE_LIST;
 
 namespace dd {
-class Table;
 namespace sdi {
 
 /**
   State and operations for importing an sdi file into the DD.
  */
-class Import_target
-{
+class Import_target {
   /** Full path to the sdi file being imported. */
   dd::String_type m_path;
 
@@ -62,7 +67,7 @@ class Import_target
   */
   std::unique_ptr<dd::String_type> m_lc_sname;
 
-public:
+ public:
   /**
     Creates an instance to handle the import of a single sdi file.
     @param path full path to an sdi file to import
@@ -74,14 +79,14 @@ public:
   /**
     Having a unique_ptr as member makes this a move-only type.
    */
-  Import_target(Import_target &&)= default;
-  Import_target(const Import_target &)= delete;
+  Import_target(Import_target &&) = default;
+  Import_target(const Import_target &) = delete;
 
   /**
     Finish import by removing tmp sdi file when importing from sdi
     file in datadir.
 
-    @retval true if an error occured
+    @retval true if an error occurred
     @retval false otherwise
    */
   bool commit() const;
@@ -90,7 +95,7 @@ public:
     Restore old state by renaming tmp sdi file back to its original
     name when importing from sdi file in datadir.
 
-    @retval true if an error occured
+    @retval true if an error occurred
     @retval false otherwise
    */
   bool rollback() const;
@@ -125,22 +130,20 @@ public:
     @param thd thread context
     @param shared_buffer pointer to a dd::String_type which is used to
            store the sdi string until it is deserialized.
-    @retval true if an error occured
+    @retval true if an error occurred
     @retval false otherwise
    */
   bool load(THD *thd, String_type *shared_buffer);
 
   /**
-    Initializes a TABLE_LIST object with info from this Import_target.
+    Constructs a TABLE_LIST object with info from this Import_target.
     TABLE_LIST::db and TABLE_LIST::table_name are initialized to the
     canonical (lowercased for lctn==2) representation,
     TABLE_LIST::alias to the native
     table_name, and TABLE_LIST::m_lock_descriptor.type is set to
     TL_IGNORE.
-
-    @param tlp object to initialize
    */
-  void init_table_list(TABLE_LIST *tlp) const;
+  TABLE_LIST make_table_list() const;
 
   /**
     Upadate the schema reference in the Table object and store
@@ -149,7 +152,7 @@ public:
     member function is called.
 
     @param thd thread handle
-    @retval true if an error occured
+    @retval true if an error occurred
     @retval false otherwise
    */
   bool store_in_dd(THD *thd) const;
@@ -162,7 +165,7 @@ public:
 
   @param thd thread handle
   @param t import target context
-  @retval true if an error occured
+  @retval true if an error occurred
   @retval false otherwise
 */
 bool check_privileges(THD *thd, const Import_target &t);
@@ -178,7 +181,7 @@ bool check_privileges(THD *thd, const Import_target &t);
 */
 MDL_request *mdl_request(const Import_target &t, MEM_ROOT *mem_root);
 
-} // namespace sdi
-} // namespace dd
+}  // namespace sdi
+}  // namespace dd
 
 #endif /* DD_SDI_API_INCLUDED */

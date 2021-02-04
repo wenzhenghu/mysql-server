@@ -1,17 +1,24 @@
-/* Copyright (c) 2012, 2017, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2012, 2020, Oracle and/or its affiliates. All rights reserved.
 
   This program is free software; you can redistribute it and/or modify
-  it under the terms of the GNU General Public License as published by
-  the Free Software Foundation; version 2 of the License.
+  it under the terms of the GNU General Public License, version 2.0,
+  as published by the Free Software Foundation.
+
+  This program is also distributed with certain software (including
+  but not limited to OpenSSL) that is licensed under separate terms,
+  as designated in a particular file or component or in included license
+  documentation.  The authors of MySQL hereby grant you an additional
+  permission to link the program and your derivative works with the
+  separately licensed software that they have included with MySQL.
 
   This program is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  GNU General Public License for more details.
+  GNU General Public License, version 2.0, for more details.
 
   You should have received a copy of the GNU General Public License
-  along with this program; if not, write to the Free Software Foundation,
-  51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
+  along with this program; if not, write to the Free Software
+  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 #ifndef PFS_MUTEX_PROVIDER_H
 #define PFS_MUTEX_PROVIDER_H
@@ -23,43 +30,39 @@
 
 #include <sys/types.h>
 
-#include "my_psi_config.h"
+/* HAVE_PSI_*_INTERFACE */
+#include "my_psi_config.h"  // IWYU pragma: keep
 
 #ifdef HAVE_PSI_MUTEX_INTERFACE
-#ifdef MYSQL_SERVER
+#if defined(MYSQL_SERVER) || defined(PFS_DIRECT_CALL)
 #ifndef MYSQL_DYNAMIC_PLUGIN
+#ifndef WITH_LOCK_ORDER
 
 #include "my_inttypes.h"
 #include "my_macros.h"
 #include "mysql/psi/psi_mutex.h"
 
-#define PSI_MUTEX_CALL(M) pfs_ ## M ## _v1
+#define PSI_MUTEX_CALL(M) pfs_##M##_v1
 
-C_MODE_START
-
-void pfs_register_mutex_v1(const char *category,
-                           PSI_mutex_info_v1 *info,
+void pfs_register_mutex_v1(const char *category, PSI_mutex_info_v1 *info,
                            int count);
 
-PSI_mutex*
-pfs_init_mutex_v1(PSI_mutex_key key, const void *identity);
+PSI_mutex *pfs_init_mutex_v1(PSI_mutex_key key, const void *identity);
 
-void pfs_destroy_mutex_v1(PSI_mutex* mutex);
+void pfs_destroy_mutex_v1(PSI_mutex *mutex);
 
-PSI_mutex_locker*
-pfs_start_mutex_wait_v1(PSI_mutex_locker_state *state,
-                        PSI_mutex *mutex, PSI_mutex_operation op,
-                        const char *src_file, uint src_line);
+PSI_mutex_locker *pfs_start_mutex_wait_v1(PSI_mutex_locker_state *state,
+                                          PSI_mutex *mutex,
+                                          PSI_mutex_operation op,
+                                          const char *src_file, uint src_line);
 
 void pfs_unlock_mutex_v1(PSI_mutex *mutex);
 
-void pfs_end_mutex_wait_v1(PSI_mutex_locker* locker, int rc);
+void pfs_end_mutex_wait_v1(PSI_mutex_locker *locker, int rc);
 
-C_MODE_END
-
+#endif /* WITH_LOCK_ORDER */
 #endif /* MYSQL_DYNAMIC_PLUGIN */
-#endif /* MYSQL_SERVER */
+#endif /* MYSQL_SERVER || PFS_DIRECT_CALL */
 #endif /* HAVE_PSI_MUTEX_INTERFACE */
 
 #endif /* PFS_MUTEX_PROVIDER_H */
-

@@ -2,8 +2,11 @@
 # The include statement below is a temp one for tests that are yet to
 #be ported to run with InnoDB,
 #but needs to be kept for tests that would need MyISAM in future.
+--source include/not_hypergraph.inc # Costs vary
 --source include/force_myisam_default.inc
--- source include/big_test.inc
+--source include/have_myisam.inc
+--source include/not_valgrind.inc
+--source include/big_test.inc
 
 #
 # A simple test of the greedy query optimization algorithm and the switches that

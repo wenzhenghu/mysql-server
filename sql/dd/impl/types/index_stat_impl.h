@@ -1,17 +1,24 @@
-/* Copyright (c) 2014, 2017, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2014, 2020, Oracle and/or its affiliates.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software Foundation,
-   51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 #ifndef DD__INDEX_STAT_IMPL_INCLUDED
 #define DD__INDEX_STAT_IMPL_INCLUDED
@@ -20,116 +27,125 @@
 #include <new>
 #include <string>
 
-#include "dd/impl/raw/raw_record.h"
-#include "dd/impl/types/entity_object_impl.h" // dd::Entity_object_impl
-#include "dd/types/dictionary_object_table.h" // dd::Dictionary_object_table
-#include "dd/types/index_stat.h"              // dd::Index_stats
-#include "dd/types/object_type.h"             // dd::Object_type
 #include "my_inttypes.h"
+#include "sql/dd/impl/raw/raw_record.h"
+#include "sql/dd/impl/types/entity_object_impl.h"  // dd::Entity_object_impl
+#include "sql/dd/object_id.h"
+#include "sql/dd/string_type.h"
+#include "sql/dd/types/entity_object_table.h"
+#include "sql/dd/types/index_stat.h"  // dd::Index_stat
 
 namespace dd {
 
 ///////////////////////////////////////////////////////////////////////////
 
 class Charset;
-class Raw_table;
-class Transaction;
 class Object_key;
 class Open_dictionary_tables_ctx;
+class Raw_table;
 class Weak_object;
+class Object_table;
 
 ///////////////////////////////////////////////////////////////////////////
 
-class Index_stat_impl : public Entity_object_impl,
-                        public Index_stat
-{
-public:
-  Index_stat_impl()
-   :m_cardinality(0)
-  { }
+class Index_stat_impl : public Entity_object_impl, public Index_stat {
+ public:
+  Index_stat_impl() : m_cardinality(0), m_cached_time(0) {}
 
-public:
-  virtual void debug_print(String_type &outb) const;
+ public:
+  void debug_print(String_type &outb) const override;
 
-  virtual const Dictionary_object_table &object_table() const
-  { return Index_stat::OBJECT_TABLE(); }
+  const Object_table &object_table() const override;
 
-  virtual bool validate() const;
+  bool validate() const override;
 
-  virtual bool restore_attributes(const Raw_record &r);
-  virtual bool store_attributes(Raw_record *r);
+  bool restore_attributes(const Raw_record &r) override;
+  bool store_attributes(Raw_record *r) override;
 
-public:
+ public:
+  static void register_tables(Open_dictionary_tables_ctx *otx);
 
   /////////////////////////////////////////////////////////////////////////
   // schema name.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual const String_type &schema_name() const
-  { return m_schema_name; }
+  const String_type &schema_name() const override { return m_schema_name; }
 
-  virtual void set_schema_name(const String_type &schema_name)
-  { m_schema_name= schema_name; }
+  void set_schema_name(const String_type &schema_name) override {
+    m_schema_name = schema_name;
+  }
 
   /////////////////////////////////////////////////////////////////////////
   // table name.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual const String_type &table_name() const
-  { return m_table_name; }
+  const String_type &table_name() const override { return m_table_name; }
 
-  virtual void set_table_name(const String_type &table_name)
-  { m_table_name= table_name; }
+  void set_table_name(const String_type &table_name) override {
+    m_table_name = table_name;
+  }
 
   /////////////////////////////////////////////////////////////////////////
   // index name.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual const String_type &index_name() const
-  { return m_index_name; }
+  const String_type &index_name() const override { return m_index_name; }
 
-  virtual void set_index_name(const String_type &index_name)
-  { m_index_name= index_name; }
+  void set_index_name(const String_type &index_name) override {
+    m_index_name = index_name;
+  }
 
   /////////////////////////////////////////////////////////////////////////
   // column name.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual const String_type &column_name() const
-  { return m_column_name; }
+  const String_type &column_name() const override { return m_column_name; }
 
-  virtual void set_column_name(const String_type &column_name)
-  { m_column_name= column_name; }
+  void set_column_name(const String_type &column_name) override {
+    m_column_name = column_name;
+  }
 
   /////////////////////////////////////////////////////////////////////////
   // cardinality.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual ulonglong cardinality() const
-  { return m_cardinality; }
+  ulonglong cardinality() const override { return m_cardinality; }
 
-  virtual void set_cardinality(ulonglong cardinality)
-  { m_cardinality= cardinality; }
+  void set_cardinality(ulonglong cardinality) override {
+    m_cardinality = cardinality;
+  }
 
-public:
-  virtual Object_key *create_primary_key() const;
-  virtual bool has_new_primary_key() const;
+  /////////////////////////////////////////////////////////////////////////
+  // cached_time.
+  /////////////////////////////////////////////////////////////////////////
+
+  ulonglong cached_time() const override { return m_cached_time; }
+
+  void set_cached_time(ulonglong cached_time) override {
+    m_cached_time = cached_time;
+  }
+
+ public:
+  Object_key *create_primary_key() const override;
+  bool has_new_primary_key() const override;
 
   // Fix "inherits ... via dominance" warnings
-  virtual Weak_object_impl *impl()
-  { return Weak_object_impl::impl(); }
-  virtual const Weak_object_impl *impl() const
-  { return Weak_object_impl::impl(); }
-  virtual Object_id id() const
-  { return Entity_object_impl::id(); }
-  virtual bool is_persistent() const
-  { return Entity_object_impl::is_persistent(); }
-  virtual const String_type &name() const
-  { return Entity_object_impl::name(); }
-  virtual void set_name(const String_type &name)
-  { Entity_object_impl::set_name(name); }
+  Entity_object_impl *impl() override { return Entity_object_impl::impl(); }
+  const Entity_object_impl *impl() const override {
+    return Entity_object_impl::impl();
+  }
+  Object_id id() const override { return Entity_object_impl::id(); }
+  bool is_persistent() const override {
+    return Entity_object_impl::is_persistent();
+  }
+  const String_type &name() const override {
+    return Entity_object_impl::name();
+  }
+  void set_name(const String_type &name) override {
+    Entity_object_impl::set_name(name);
+  }
 
-private:
+ private:
   // Fields
   String_type m_schema_name;
   String_type m_table_name;
@@ -137,22 +153,11 @@ private:
   String_type m_column_name;
 
   ulonglong m_cardinality;
-
+  ulonglong m_cached_time;
 };
 
 ///////////////////////////////////////////////////////////////////////////
 
-class Index_stat_type : public Object_type
-{
-public:
-  virtual Weak_object *create_object() const
-  { return new (std::nothrow) Index_stat_impl(); }
+}  // namespace dd
 
-  virtual void register_tables(Open_dictionary_tables_ctx *otx) const;
-};
-
-///////////////////////////////////////////////////////////////////////////
-
-}
-
-#endif // DD__INDEX_STAT_IMPL_INCLUDED
+#endif  // DD__INDEX_STAT_IMPL_INCLUDED

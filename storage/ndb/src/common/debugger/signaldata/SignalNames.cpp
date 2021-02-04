@@ -1,14 +1,21 @@
 /*
-   Copyright (c) 2003, 2016, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2003, 2020, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -166,8 +173,6 @@ const GsnName SignalNames [] = {
   ,{ GSN_DIVERIFYCONF,           "DIVERIFYCONF" }
   ,{ GSN_DIVERIFYREF,            "DIVERIFYREF" }
   ,{ GSN_DIVERIFYREQ,            "DIVERIFYREQ" }
-  ,{ GSN_EMPTY_LCP_REQ,          "EMPTY_LCP_REQ" }
-  ,{ GSN_EMPTY_LCP_CONF,         "EMPTY_LCP_CONF" }
   ,{ GSN_ENABLE_COMREQ,          "ENABLE_COMREQ" }
   ,{ GSN_ENABLE_COMCONF,         "ENABLE_COMCONF" }
   ,{ GSN_END_LCPCONF,            "END_LCPCONF" }
@@ -824,5 +829,73 @@ const GsnName SignalNames [] = {
   ,{ GSN_LOCAL_RECOVERY_COMP_REP, "LOCAL_RECOVERY_COMP_REP" }
   ,{ GSN_CANCEL_SUBSCRIPTION_REQ, "CANCEL_SUBSCRIPTION_REQ" }
   ,{ GSN_ISOLATE_ORD, "ISOLATE_ORD" }
+  ,{ GSN_PROCESSINFO_REP, "PROCESSINFO_REP" }
+  ,{ GSN_SYNC_PAGE_CACHE_REQ, "SYNC_PAGE_CACHE_REQ" }
+  ,{ GSN_SYNC_PAGE_CACHE_CONF, "SYNC_PAGE_CACHE_CONF" }
+  ,{ GSN_SYNC_EXTENT_PAGES_REQ, "SYNC_EXTENT_PAGES_REQ" }
+  ,{ GSN_SYNC_EXTENT_PAGES_CONF, "SYNC_EXTENT_PAGES_CONF" }
+  ,{ GSN_RESTORABLE_GCI_REP, "RESTORABLE_GCI_REP" }
+  ,{ GSN_WAIT_ALL_COMPLETE_LCP_REQ, "WAIT_ALL_COMPLETE_LCP_REQ" }
+  ,{ GSN_WAIT_ALL_COMPLETE_LCP_CONF, "WAIT_ALL_COMPLETE_LCP_CONF" }
+  ,{ GSN_WAIT_COMPLETE_LCP_REQ, "WAIT_COMPLETE_LCP_REQ" }
+  ,{ GSN_WAIT_COMPLETE_LCP_CONF, "WAIT_COMPLETE_LCP_CONF" }
+  ,{ GSN_INFO_GCP_STOP_TIMER, "INFO_STOP_GCP_TIMER" }
+  ,{ GSN_READ_LOCAL_SYSFILE_REQ, "READ_LOCAL_SYSFILE_REQ" }
+  ,{ GSN_READ_LOCAL_SYSFILE_CONF, "READ_LOCAL_SYSFILE_CONF" }
+  ,{ GSN_WRITE_LOCAL_SYSFILE_REQ, "WRITE_LOCAL_SYSFILE_REQ" }
+  ,{ GSN_WRITE_LOCAL_SYSFILE_CONF, "WRITE_LOCAL_SYSFILE_CONF" }
+  ,{ GSN_GET_LATEST_GCI_REQ, "GET_LATEST_GCI_REQ" }
+  ,{ GSN_HALT_COPY_FRAG_REQ, "HALT_COPY_FRAG_REQ" }
+  ,{ GSN_HALT_COPY_FRAG_CONF, "HALT_COPY_FRAG_CONF" }
+  ,{ GSN_HALT_COPY_FRAG_REF, "HALT_COPY_FRAG_REF" }
+  ,{ GSN_RESUME_COPY_FRAG_REQ, "RESUME_COPY_FRAG_REQ" }
+  ,{ GSN_RESUME_COPY_FRAG_CONF, "RESUME_COPY_FRAG_CONF" }
+  ,{ GSN_RESUME_COPY_FRAG_REF, "RESUME_COPY_FRAG_REF" }
+  ,{ GSN_START_LOCAL_LCP_ORD, "START_LOCAL_LCP_ORD" }
+  ,{ GSN_START_FULL_LOCAL_LCP_ORD, "START_FULL_LOCAL_LCP_ORD" }
+  ,{ GSN_START_DISTRIBUTED_LCP_ORD, "START_DISTRIBUTED_LCP_ORD" }
+  ,{ GSN_CUT_UNDO_LOG_TAIL_REQ, "CUT_UNDO_LOG_TAIL_REQ" }
+  ,{ GSN_CUT_UNDO_LOG_TAIL_CONF, "CUT_UNDO_LOG_TAIL_CONF" }
+  ,{ GSN_CUT_REDO_LOG_TAIL_REQ, "CUT_REDO_LOG_TAIL_REQ" }
+  ,{ GSN_CUT_REDO_LOG_TAIL_CONF, "CUT_REDO_LOG_TAIL_CONF" }
+  ,{ GSN_LCP_ALL_COMPLETE_REQ, "LCP_ALL_COMPLETE_REQ" }
+  ,{ GSN_LCP_ALL_COMPLETE_CONF, "LCP_ALL_COMPLETE_CONF" }
+  ,{ GSN_COPY_FRAG_IN_PROGRESS_REP, "COPY_FRAG_IN_PROGRESS_REP" }
+  ,{ GSN_COPY_FRAG_NOT_IN_PROGRESS_REP,
+     "COPY_FRAG_NOT_IN_PROGRESS_REP" }
+  ,{ GSN_SET_LOCAL_LCP_ID_REQ, "SET_LOCAL_LCP_ID_REQ" }
+  ,{ GSN_SET_LOCAL_LCP_ID_CONF, "SET_LOCAL_LCP_ID_CONF" }
+  ,{ GSN_START_NODE_LCP_REQ, "START_NODE_LCP_REQ" }
+  ,{ GSN_START_NODE_LCP_CONF, "START_NODE_LCP_CONF" }
+  ,{ GSN_UNDO_LOG_LEVEL_REP, "UNDO_LOG_LEVEL_REP" }
+  ,{ GSN_LCP_START_REP, "LCP_START_REP" }
+  ,{ GSN_INFORM_BACKUP_DROP_TAB_REQ, "INFORM_BACKUP_DROP_TAB_REQ" }
+  ,{ GSN_INFORM_BACKUP_DROP_TAB_CONF, "INFORM_BACKUP_DROP_TAB_CONF" }
+  ,{ GSN_CHECK_LCP_IDLE_ORD, "CHECK_LCP_IDLE_ORD" }
+  ,{ GSN_SET_LATEST_LCP_ID, "SET_LATEST_LCP_ID" }
+  ,{ GSN_SYNC_PAGE_WAIT_REP, "SYNC_PAGE_WAIT_REP" }
+  ,{ GSN_REDO_STATE_REP, "REDO_STATE_REP" }
+  ,{ GSN_WAIT_LCP_IDLE_REQ, "WAIT_LCP_IDLE_REQ" }
+  ,{ GSN_WAIT_LCP_IDLE_CONF, "WAIT_LCP_IDLE_CONF" }
+  ,{ GSN_LOCAL_LATEST_LCP_ID_REP, "LOCAL_LATEST_LCP_ID_REP" }
+  ,{ GSN_SYNC_THREAD_VIA_REQ, "SYNC_THREAD_VIA_REQ" }
+  ,{ GSN_SYNC_THREAD_VIA_CONF, "SYNC_THREAD_VIA_CONF" }
+  ,{ GSN_SET_UP_MULTI_TRP_REQ, "SET_UP_MULTI_TRP_REQ" }
+  ,{ GSN_SET_UP_MULTI_TRP_CONF, "SET_UP_MULTI_TRP_CONF" }
+  ,{ GSN_GET_NUM_MULTI_TRP_REQ, "GET_NUM_MULTI_TRP_REQ" }
+  ,{ GSN_GET_NUM_MULTI_TRP_CONF, "GET_NUM_MULTI_TRP_CONF" }
+  ,{ GSN_GET_NUM_MULTI_TRP_REF, "GET_NUM_MULTI_TRP_REF" }
+  ,{ GSN_FREEZE_THREAD_REQ, "FREEZE_THREAD_REQ" }
+  ,{ GSN_FREEZE_THREAD_CONF, "FREEZE_THREAD_CONF" }
+  ,{ GSN_FREEZE_ACTION_REQ, "FREEZE_ACTION_REQ" }
+  ,{ GSN_FREEZE_ACTION_CONF, "FREEZE_ACTION_CONF" }
+  ,{ GSN_ACTIVATE_TRP_REQ, "ACTIVATE_TRP_REQ" }
+  ,{ GSN_ACTIVATE_TRP_CONF, "ACTIVATE_TRP_CONF" }
+  ,{ GSN_SWITCH_MULTI_TRP_REQ, "SWITCH_MULTI_TRP_REQ" }
+  ,{ GSN_SWITCH_MULTI_TRP_CONF, "SWITCH_MULTI_TRP_CONF" }
+  ,{ GSN_SWITCH_MULTI_TRP_REF, "SWITCH_MULTI_TRP_REF" }
+  ,{ GSN_MEASURE_WAKEUP_TIME_ORD, "MEASURE_WAKEUP_TIME_ORD" }
+  ,{ GSN_UPD_QUERY_DIST_ORD, "UPD_QUERY_DIST_ORD" }
+  ,{ GSN_UPD_THR_LOAD_ORD, "UPDATE_THR_LOAD_ORD" }
 };
 const unsigned short NO_OF_SIGNAL_NAMES = sizeof(SignalNames)/sizeof(GsnName);

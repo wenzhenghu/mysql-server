@@ -92,15 +92,24 @@ SET @@global.debug= "d,mts_worker_thread_fails";
 set @@global.slave_parallel_workers= 2;
 
 start slave sql_thread;
---let $slave_sql_errno= 1593
+--let $slave_sql_errno= 13117
 source include/wait_for_slave_sql_error.inc;
 
 set @@global.slave_checkpoint_group= @save.slave_checkpoint_group;
 set @@global.slave_parallel_workers= @save.slave_parallel_workers;
 set @@global.debug= @save.debug;
 
-source include/start_slave.inc;
+# Bug#24679056:MULTI-THREADED SLAVE LEAKS WORKER THREADS IN CASE
+#              OF THREAD CREATE FAILURE
+#
+# The current test verifies that there is no orphaned SQL worker thread
+# by setting the assert_count= 0, when we check the output of
+# SELECT *FROM PROCESSLIST table, this is same as SHOW PROCESSLIST.
 
+--let $assert_text= Verified that their is no orphaned SQL worker thread
+--let $assert_cond= `SELECT COUNT(*) = 0 FROM INFORMATION_SCHEMA.PROCESSLIST WHERE STATE='Waiting for an event from Coordinator'`
+--source include/assert.inc
+--source include/start_slave.inc
 #
 # BUG#13681205 : REPLICATION FAILS DURING SLAVE WORKERS INITIALIZATION, 
 #                CRASHES SLAVE 
@@ -117,7 +126,7 @@ source include/start_slave.inc;
 --source include/stop_slave.inc
 call mtr.add_suppression("option 'slave_checkpoint_group': unsigned value 524281 adjusted to 524280");
 call mtr.add_suppression("Failed during slave worker thread create");
-call mtr.add_suppression("Slave SQL for channel '': Failed during slave workers initialization, Error_code: 1593");
+call mtr.add_suppression("Slave SQL for channel '': Failed during slave workers initialization, Error_code: MY-13117");
 call mtr.add_suppression("Mismatch between the number of bytes configured to store checkpoint information and the previously stored information");
 
 set @save.slave_checkpoint_group= @@global.slave_checkpoint_group;
@@ -148,7 +157,7 @@ SET @@global.slave_checkpoint_group=524281;
 --let $saved_debug=`SELECT @global.debug`
 SET @@global.debug= "d,inject_init_worker_init_info_fault";
 START SLAVE SQL_THREAD;
---let $slave_sql_errno=1593
+--let $slave_sql_errno=13117
 --source include/wait_for_slave_sql_error.inc
 SET @@global.debug= @save.debug;
 
@@ -179,14 +188,14 @@ let $relay_file = query_get_value( SHOW SLAVE STATUS, Relay_Log_File, 1 );
 let $relay_pos = query_get_value( SHOW SLAVE STATUS, Relay_Log_Pos, 1 );
 --replace_regex /relay_log_file=[^,]+/RELAY_LOG_FILE=FILE/ /relay_log_pos=[0-9]+/ RELAY_LOG_POS= POS/
 --error ER_MTS_RESET_WORKERS
-eval change master to relay_log_file='$relay_file', relay_log_pos=$relay_pos;
+eval CHANGE REPLICATION SOURCE to relay_log_file='$relay_file', relay_log_pos=$relay_pos;
 
 ## Relay_log_info::reset_workers_recovered() error branch
 
 set @@global.debug= "d,mts_debug_recovery_reset_fails";
 start slave sql_thread;
 # ER_SLAVE_FATAL_ERROR
---let $slave_sql_errno=1593
+--let $slave_sql_errno=13117
 --source include/wait_for_slave_sql_error.inc
 
 #
@@ -213,5 +222,4 @@ set @@global.slave_parallel_workers= @save.slave_parallel_workers;
 
 --source include/start_slave.inc
 --source include/rpl_reset.inc
-
 --source include/rpl_end.inc

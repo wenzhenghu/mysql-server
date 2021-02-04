@@ -1,24 +1,13 @@
 # WL#6745 InnoDB R-tree support
 # This test case will test R-tree split, mostly on duplciate records.
 
-# Not supported in embedded
---source include/not_embedded.inc
 
 --source include/big_test.inc
 --source include/not_valgrind.inc
 --source include/have_debug.inc
 
-########################################
-##### WL#7554 Force schema `test` to character set latin1
-##### This test should be migrated to utf8mb4
---disable_query_log
-let $testdbcs55=`select default_character_set_name from information_schema.schemata where schema_name='test'`;
-alter schema test default character set latin1;
---enable_query_log
-########################################
-
 # Create table with R-tree index.
-create table t1 (c1 int, c2 geometry not null, spatial index (c2))engine=innodb;
+create table t1 (c1 int, c2 geometry not null SRID 0, spatial index (c2))engine=innodb;
 
 # Insert enough values to let R-tree split.
 insert into t1 values(1, Point(1,1));
@@ -109,9 +98,45 @@ let $restart_parameters = restart;
 # Clean up.
 drop table t1;
 
-########################################
-##### WL#7554 set schema `test` back to what it was
---disable_query_log
---eval alter schema test default character set $testdbcs55;
---enable_query_log
-########################################
+--echo #
+--echo # Bug #29465567 INNODB: RTREE SPLIT ASSERTION FAILURE
+--echo #
+
+# Create table with R-tree index.
+create table t1 (c1 int, c2 geometry not null SRID 0, spatial index (c2))engine=innodb;
+
+# Insert enough values to let R-tree split.
+insert into t1 values(1, Point(1,1));
+insert into t1 values(2, Point(2,2));
+insert into t1 values(3, Point(3,3));
+insert into t1 values(4, Point(4,4));
+insert into t1 values(5, Point(5,5));
+insert into t1 values(6, Point(6,6));
+insert into t1 values(7, Point(7,7));
+insert into t1 values(8, Point(8,8));
+insert into t1 values(9, Point(9,9));
+
+insert into t1 select * from t1;
+insert into t1 select * from t1;
+insert into t1 select * from t1;
+insert into t1 select * from t1;
+insert into t1 select * from t1;
+insert into t1 select * from t1;
+insert into t1 select * from t1;
+insert into t1 select * from t1;
+start transaction;
+insert into t1 select * from t1;
+rollback;
+check table t1;
+insert into t1 select * from t1;
+insert into t1 select * from t1;
+insert into t1 select * from t1;
+insert into t1 select * from t1;
+
+#Check first round spliting.
+SET SESSION debug="+d, rtr_page_need_first_split";
+insert into t1 select * from t1;
+SET SESSION debug="-d, rtr_page_need_first_split";
+
+# Clean up.
+drop table t1;

@@ -1,14 +1,21 @@
 /*
-   Copyright (c) 2005, 2016, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2005, 2020, Oracle and/or its affiliates.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -19,7 +26,7 @@
 #define TSMAN_H
 
 #include <SimulatedBlock.hpp>
-
+#include <ndb_limits.h>
 #include <IntrusiveList.hpp>
 #include <NodeBitmask.hpp>
 #include <signaldata/GetTabInfo.hpp>
@@ -36,7 +43,7 @@ class Tsman : public SimulatedBlock
 {
 public:
   Tsman(Block_context&);
-  virtual ~Tsman();
+  ~Tsman() override;
   BLOCK_DEFINES(Tsman);
   
 protected:
@@ -62,6 +69,7 @@ protected:
   void execFSREADCONF(Signal*);
 
   void execFSCLOSEREF(Signal*);
+  void fscloseconf(Signal*);
   void execFSCLOSECONF(Signal*);
 
   void execALLOC_EXTENT_REQ(Signal*);
@@ -116,6 +124,7 @@ public:
 	Uint32 m_first_free_extent;
 	Uint32 m_lcp_free_extent_head; // extents freed but not LCP
 	Uint32 m_lcp_free_extent_tail;
+        Uint32 m_lcp_free_extent_count;
 	Uint32 m_offset_data_pages;    // 1(zero) + extent header pages
 	Uint32 m_data_pages;
 	Uint32 m_used_extent_cnt;
@@ -143,6 +152,9 @@ public:
       Uint32 nextPool;
     };
 
+#define NUM_EXTENT_PAGE_MUTEXES 32
+    NdbMutex m_extent_page_mutex[NUM_EXTENT_PAGE_MUTEXES];
+
     Uint32 hashValue() const {
       return m_file_no;
     }
@@ -151,10 +163,10 @@ public:
     }
   };
 
-  typedef RecordPool<Datafile, RWPool<Datafile> > Datafile_pool;
-  typedef DLList<Datafile, Datafile_pool> Datafile_list;
-  typedef LocalDLList<Datafile, Datafile_pool> Local_datafile_list;
-  typedef DLHashTable<Datafile_pool, Datafile> Datafile_hash;
+  typedef RecordPool<RWPool<Datafile> > Datafile_pool;
+  typedef DLFifoList<Datafile_pool> Datafile_list;
+  typedef LocalDLFifoList<Datafile_pool> Local_datafile_list;
+  typedef DLHashTable<Datafile_pool> Datafile_hash;
 
   struct Tablespace
   {
@@ -184,6 +196,10 @@ public:
 
     Datafile_list::Head m_full_files; // Files wo/ free space
     Datafile_list::Head m_meta_files; // Files being created/dropped
+
+    // Total extents of a tablespace (sum of data page extents of all files)
+    Uint64 m_total_extents;
+    Uint64 m_total_used_extents;  // Total extents used from a tablespace
     
     Uint32 nextHash;
     Uint32 prevHash;
@@ -201,10 +217,10 @@ public:
     }
   };
 
-  typedef RecordPool<Tablespace, RWPool<Tablespace> > Tablespace_pool;
-  typedef DLList<Tablespace, Tablespace_pool> Tablespace_list;
-  typedef LocalDLList<Tablespace, Tablespace_pool> Local_tablespace_list;
-  typedef KeyTable<Tablespace_pool, Tablespace> Tablespace_hash;
+  typedef RecordPool<RWPool<Tablespace> > Tablespace_pool;
+  typedef DLList<Tablespace_pool> Tablespace_list;
+  typedef LocalDLList<Tablespace_pool> Local_tablespace_list;
+  typedef KeyTable<Tablespace_pool> Tablespace_hash;
 
 private:
   friend class Tablespace_client;
@@ -212,6 +228,7 @@ private:
   Tablespace_pool m_tablespace_pool;
   
   bool m_lcp_ongoing;
+  BlockReference m_end_lcp_ref;
   Datafile_hash m_file_hash;
   Tablespace_list m_tablespace_list;
   Tablespace_hash m_tablespace_hash;
@@ -219,14 +236,25 @@ private:
   Lgman * m_lgman;
   SimulatedBlock * m_tup;
 
-  SafeMutex m_client_mutex;
-  void client_lock(BlockNumber block, int line);
-  void client_unlock(BlockNumber block, int line);
+  NdbMutex *m_client_mutex[MAX_NDBMT_LQH_THREADS + 1];
+  NdbMutex *m_alloc_extent_mutex;
+  void client_lock();
+  void client_unlock();
+  void client_lock(Uint32 instance);
+  void client_unlock(Uint32 instance);
+  bool is_datafile_ready(Uint32 file_no);
+  void lock_extent_page(Uint32 file_no, Uint32 page_no);
+  void unlock_extent_page(Uint32 file_no, Uint32 page_no);
+  void lock_extent_page(Datafile*, Uint32 page_no);
+  void unlock_extent_page(Datafile*, Uint32 page_no);
+  void lock_alloc_extent();
+  void unlock_alloc_extent();
   
   int open_file(Signal*, Ptr<Tablespace>, Ptr<Datafile>, CreateFileImplReq*,
 		SectionHandle* handle);
   void load_extent_pages(Signal* signal, Ptr<Datafile> ptr);
   void load_extent_page_callback(Signal*, Uint32, Uint32);
+  void load_extent_page_callback_direct(Signal*, Uint32, Uint32);
   void create_file_ref(Signal*, Ptr<Tablespace>, Ptr<Datafile>, 
 		       Uint32,Uint32,Uint32);
   int update_page_free_bits(Signal*, Local_key*, unsigned committed_bits);
@@ -248,6 +276,7 @@ private:
 
   void release_extent_pages(Signal* signal, Ptr<Datafile> ptr);
   void release_extent_pages_callback(Signal*, Uint32, Uint32);
+  void release_extent_pages_callback_direct(Signal*, Uint32, Uint32);
 
   struct req
   {
@@ -259,10 +288,17 @@ private:
   
   struct req lookup_extent(Uint32 page_no, const Datafile*) const;
   Uint32 calc_page_no_in_extent(Uint32 page_no, const struct req* val) const;
-  uint64 calculate_extent_pages_in_file(Uint64 extents,
+  Uint64 calculate_extent_pages_in_file(Uint64 extents,
                                         Uint32 extent_size,
                                         Uint64 data_pages,
                                         bool v2);
+  void sendEND_LCPCONF(Signal*);
+  void get_set_extent_info(Signal *signal,
+                           Local_key &key,
+                           Uint32 &tableId,
+                           Uint32 &fragId,
+                           Uint32 &create_table_version,
+                           bool read);
 };
 
 inline
@@ -299,7 +335,6 @@ public:
   Uint32 m_fragment_id;
   Uint32 m_create_table_version;
   Uint32 m_tablespace_id;
-  bool m_lock;
   DEBUG_OUT_DEFINES(TSMAN);
 
 public:
@@ -309,8 +344,8 @@ public:
                     Uint32 table,
                     Uint32 fragment,
                     Uint32 create_table_version,
-                    Uint32 tablespaceId,
-                    bool lock = true) {
+                    Uint32 tablespaceId)
+  {
     Uint32 bno = block->number();
     Uint32 ino = block->instance();
     m_block= numberToBlock(bno, ino);
@@ -320,24 +355,16 @@ public:
     m_fragment_id= fragment;
     m_create_table_version = create_table_version;
     m_tablespace_id= tablespaceId;
-    m_lock = lock;
 
-    D("client ctor " << bno << "/" << ino
-      << V(m_table_id) << V(m_fragment_id) << V(m_tablespace_id));
-    if (m_lock)
-      m_tsman->client_lock(m_block, 0);
+    m_tsman->client_lock(ino);
   }
 
   Tablespace_client(Signal* signal, Tsman* tsman, Local_key* key);//undef
 
-  ~Tablespace_client() {
-#ifdef VM_TRACE
-    Uint32 bno = blockToMain(m_block);
+  ~Tablespace_client()
+  {
     Uint32 ino = blockToInstance(m_block);
-#endif
-    D("client dtor " << bno << "/" << ino);
-    if (m_lock)
-      m_tsman->client_unlock(m_block, 0);
+    m_tsman->client_unlock(ino);
   }
   
   /**
@@ -345,7 +372,7 @@ public:
    *        <0 if failure, -error code
    */
   int alloc_extent(Local_key* key);
-  
+ 
   /**
    * Allocated a page from an extent
    *   performs linear search in extent free bits until it find 
@@ -386,7 +413,19 @@ public:
    * Update unlogged page free bit
    */
   int unmap_page(Local_key*, Uint32 bits);
-  
+
+  /**
+   * Check if datafile is ready for checkpoints.
+   */
+  bool is_datafile_ready(Uint32 file_no);
+
+  /**
+   * Lock/Unlock extent page to ensure that access to this extent
+   * page is serialised.
+   */
+  void lock_extent_page(Uint32 file_no, Uint32 page_no);
+  void unlock_extent_page(Uint32 file_no, Uint32 page_no);
+
   /**
    * Undo handling of page bits
    */
@@ -406,6 +445,36 @@ public:
    * Update lsn of page corresponing to key
    */
   int update_lsn(Local_key* key, Uint64 lsn);
+
+  /**
+   * During UNDO log execution TUP proxy needs a fast method
+   * to get the table id and fragment id based on the page id.
+   * We get this information from the extent information.
+   */
+  void get_extent_info(Local_key &key);
+  Uint32 get_table_id()
+  {
+    return m_table_id;
+  }
+  Uint32 get_fragment_id()
+  {
+    return m_fragment_id;
+  }
+  Uint32 get_create_table_version()
+  {
+    return m_create_table_version;
+  }
+
+  /**
+   * TUP proxy might discover an extent header that haven't
+   * been written. This can happen if the node crashes before
+   * completing an LCP before the crash and after the extent
+   * was created. In this case we might have pages written
+   * but not yet the extent written. These are found since there
+   * must be an UNDO log record referring to them since the WAL
+   * principle applies here.
+   */
+  void write_extent_info(Local_key &key);
 };
 
 inline
@@ -440,11 +509,14 @@ Tablespace_client::alloc_page_from_extent(Local_key* key, Uint32 bits)
   req->request.tablespace_id = m_tablespace_id;
   m_tsman->execALLOC_PAGE_REQ(m_signal);
 
-  if(req->reply.errorCode == 0){
+  if(req->reply.errorCode == 0)
+  {
     *key = req->key;
     D("alloc_page_from_extent" << V(*key) << V(bits) << V(req->bits));
     return req->bits;
-  } else {
+  }
+  else
+  {
     return -(int)req->reply.errorCode;
   }
 }
@@ -488,6 +560,27 @@ Tablespace_client::get_page_free_bits(Local_key *key,
 }
 
 inline
+bool
+Tablespace_client::is_datafile_ready(Uint32 file_no)
+{
+  return m_tsman->is_datafile_ready(file_no);
+}
+
+inline
+void
+Tablespace_client::lock_extent_page(Uint32 file_no, Uint32 page_no)
+{
+  m_tsman->lock_extent_page(file_no, page_no);
+}
+
+inline
+void
+Tablespace_client::unlock_extent_page(Uint32 file_no, Uint32 page_no)
+{
+  m_tsman->unlock_extent_page(file_no, page_no);
+}
+
+inline
 int
 Tablespace_client::unmap_page(Local_key *key, unsigned uncommitted_bits)
 {
@@ -507,7 +600,29 @@ Tablespace_client::restart_undo_page_free_bits(Local_key* key,
 					      committed_bits);
 }
 
+inline
+void
+Tablespace_client::get_extent_info(Local_key &key)
+{
+  m_tsman->get_set_extent_info(m_signal,
+                               key,
+                               m_table_id,
+                               m_fragment_id,
+                               m_create_table_version,
+                               true);
+}
 
+inline
+void
+Tablespace_client::write_extent_info(Local_key &key)
+{
+  m_tsman->get_set_extent_info(m_signal,
+                               key,
+                               m_table_id,
+                               m_fragment_id,
+                               m_create_table_version,
+                               false);
+}
 #undef JAM_FILE_ID
 
 #endif

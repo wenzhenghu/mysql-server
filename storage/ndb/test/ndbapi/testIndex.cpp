@@ -1,14 +1,21 @@
 /*
-   Copyright (c) 2003, 2015, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2003, 2020, Oracle and/or its affiliates.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -2263,7 +2270,7 @@ runBug25059(NDBT_Context* ctx, NDBT_Step* step)
     ops.startTransaction(pNdb);
     ops.pkUpdateRecord(pNdb, 10 + rand() % rows, rows);
     int tmp;
-    int arg;
+    int arg = 0;
     switch(rand() % 2){
     case 0:
       arg = AbortOnError;
@@ -2689,7 +2696,7 @@ runBug56829(NDBT_Context* ctx, NDBT_Step* step)
   while (loop < loops)
   {
     CHECK2(rows > 0, "rows must be != 0");
-    g_info << "loop " << loop << "<" << loops << endl;
+    g_err << "loop " << loop << "<" << loops << endl;
 
     // at first loop connect to mgm
     if (loop == 0)
@@ -2725,15 +2732,15 @@ runBug56829(NDBT_Context* ctx, NDBT_Step* step)
 
     // initial
     CHECK2(get_data_memory_pages(h, dbmask, &pages[0]) == NDBT_OK, "failed");
-    g_info << "initial pages " << pages[0] << endl;
+    g_err << "initial pages " << pages[0] << endl;
 
     // create table
-    g_info << "create table " << tabname << endl;
+    g_err << "create table " << tabname << endl;
     const NdbDictionary::Table* pTab = 0;
     CHECK2(pDic->createTable(tab) == 0, pDic->getNdbError());
     CHECK2((pTab = pDic->getTable(tabname)) != 0, pDic->getNdbError());
     CHECK2(get_data_memory_pages(h, dbmask, &pages[1]) == NDBT_OK, "failed");
-    g_info << "create table pages " << pages[1] << endl;
+    g_err << "create table pages " << pages[1] << endl;
 
     // choice of index attributes is not relevant to this bug
     // choose one non-PK updateable column
@@ -2760,21 +2767,21 @@ runBug56829(NDBT_Context* ctx, NDBT_Step* step)
     CHECK2(ind.getNoOfColumns() == 1, "cannot use table " << tabname);
 
     // create index
-    g_info << "create index " << indname << " on " << ind.getColumn(0)->getName() << endl;
+    g_err << "create index " << indname << " on " << ind.getColumn(0)->getName() << endl;
     const NdbDictionary::Index* pInd = 0;
     CHECK2(pDic->createIndex(ind, *pTab) == 0, pDic->getNdbError());
     CHECK2((pInd = pDic->getIndex(indname, tabname)) != 0, pDic->getNdbError());
     CHECK2(get_data_memory_pages(h, dbmask, &pages[2]) == NDBT_OK, "failed");
-    g_info << "create index pages " << pages[2] << endl;
+    g_err << "create index pages " << pages[2] << endl;
 
     HugoTransactions trans(*pTab);
 
     // load all records
-    g_info << "load records" << endl;
+    g_err << "load records" << endl;
     CHECK2(trans.loadTable(pNdb, rows) == 0, trans.getNdbError());
     memset(rowmask, 1, rows);
     CHECK2(get_data_memory_pages(h, dbmask, &pages[3]) == NDBT_OK, "failed");
-    g_info << "load records pages " << pages[3] << endl;
+    g_err << "load records pages " << pages[3] << endl;
 
     // test index with random ops
     g_info << "test index ops" << endl;
@@ -2809,34 +2816,42 @@ runBug56829(NDBT_Context* ctx, NDBT_Step* step)
     }
 
     // delete all records
-    g_info << "delete records" << endl;
+    g_err << "delete records" << endl;
     CHECK2(trans.clearTable(pNdb) == 0, trans.getNdbError());
     memset(rowmask, 0, rows);
+    sleep(2);
     CHECK2(get_data_memory_pages(h, dbmask, &pages[4]) == NDBT_OK, "failed");
-    g_info << "delete records pages " << pages[4] << endl;
+    g_err << "delete records pages " << pages[4] << endl;
 
     // drop index
-    g_info << "drop index" <<  endl;
+    g_err << "drop index" <<  endl;
     CHECK2(pDic->dropIndex(indname, tabname) == 0, pDic->getNdbError());
     CHECK2(get_data_memory_pages(h, dbmask, &pages[5]) == NDBT_OK, "failed");
-    g_info << "drop index pages " << pages[5] << endl;
+    g_err << "drop index pages " << pages[5] << endl;
 
     // drop table
-    g_info << "drop table" << endl;
+    g_err << "drop table" << endl;
     CHECK2(pDic->dropTable(tabname) == 0, pDic->getNdbError());
     CHECK2(get_data_memory_pages(h, dbmask, &pages[6]) == NDBT_OK, "failed");
-    g_info << "drop table pages " << pages[6] << endl;
+    g_err << "drop table pages " << pages[6] << endl;
 
     // verify
+    /**
+     * Even after dropping all rows, we might still have data memory pages
+     * allocated for fragment page maps. So only after dropping both index
+     * and tables can we rely on all memory allocated for a table to be
+     * dropped. But we can assume that create table, create index will not
+     * allocate any pages.
+     */
     CHECK2(pages[1] == pages[0], "pages after create table " << pages[1]
                                   << " not == initial pages " << pages[0]);
     CHECK2(pages[2] == pages[0], "pages after create index " << pages[2]
                                   << " not == initial pages " << pages[0]);
     CHECK2(pages[3] >  pages[0], "pages after load " << pages[3]
                                   << " not >  initial pages " << pages[0]);
-    CHECK2(pages[4] == pages[0], "pages after delete " << pages[4]
+    CHECK2(pages[4] < pages[3], "pages after delete " << pages[4]
                                   << " not == initial pages " << pages[0]);
-    CHECK2(pages[5] == pages[0], "pages after drop index " << pages[5]
+    CHECK2(pages[5] < pages[3], "pages after drop index " << pages[5]
                                   << " not == initial pages " << pages[0]);
     CHECK2(pages[6] == pages[0], "pages after drop table " << pages[6]
                                   << " not == initial pages " << pages[0]);
@@ -3777,7 +3792,7 @@ TESTCASE("RefreshWithOrderedIndex",
   FINALIZER(createPkIndex_Drop);
   FINALIZER(runClearTable);
 }
-NDBT_TESTSUITE_END(testIndex);
+NDBT_TESTSUITE_END(testIndex)
 
 int main(int argc, const char** argv){
   ndb_init();

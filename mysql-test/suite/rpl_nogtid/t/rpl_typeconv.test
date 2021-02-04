@@ -2,6 +2,9 @@
 --source include/no_valgrind_without_big.inc
 --source include/not_group_replication_plugin.inc
 
+# sql_slave_skip_counter is not supported with compression
+--source include/not_binlog_transaction_compression_on.inc
+
 --source include/have_binlog_format_row.inc
 --source include/master-slave.inc
 
@@ -80,7 +83,7 @@ SELECT RPAD(Source, 15, ' ') AS Source_Type,
 enable_query_log;
 DROP TABLE type_conversions;
 
-call mtr.add_suppression("Slave SQL.*Column 1 of table .test.t1. cannot be converted from type.* Error_code: 1677");
+call mtr.add_suppression("Slave SQL.*Column 1 of table .test.t1. cannot be converted from type.* Error_code: MY-013146");
 call mtr.add_suppression("The slave coordinator and worker threads are stopped, possibly leaving data in inconsistent state");
 
 connection master;

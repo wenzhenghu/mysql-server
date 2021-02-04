@@ -1,24 +1,31 @@
-/* Copyright (c) 2014, 2017, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2014, 2020, Oracle and/or its affiliates.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software Foundation,
-   51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 #ifndef DD__INDEX_ELEMENT_INCLUDED
 #define DD__INDEX_ELEMENT_INCLUDED
 
-#include "dd/sdi_fwd.h"                // dd::Sdi_wcontext
-#include "dd/types/weak_object.h"      // dd::Weak_object
 #include "my_inttypes.h"
+#include "sql/dd/sdi_fwd.h"            // dd::Sdi_wcontext
+#include "sql/dd/types/weak_object.h"  // dd::Weak_object
 
 namespace dd {
 
@@ -27,28 +34,23 @@ namespace dd {
 class Column;
 class Index;
 class Index_element_impl;
-class Object_type;
+
+namespace tables {
+class Index_column_usage;
+}
 
 ///////////////////////////////////////////////////////////////////////////
 
-class Index_element : virtual public Weak_object
-{
-public:
-  static const Object_type &TYPE();
-  static const Object_table &OBJECT_TABLE();
+class Index_element : virtual public Weak_object {
+ public:
   typedef Index_element_impl Impl;
+  typedef tables::Index_column_usage DD_table;
 
-public:
-  enum enum_index_element_order
-  {
-    ORDER_UNDEF= 1,
-    ORDER_ASC,
-    ORDER_DESC
-  };
+ public:
+  enum enum_index_element_order { ORDER_UNDEF = 1, ORDER_ASC, ORDER_DESC };
 
-public:
-  virtual ~Index_element()
-  { };
+ public:
+  ~Index_element() override {}
 
   /////////////////////////////////////////////////////////////////////////
   // index.
@@ -79,6 +81,7 @@ public:
   virtual uint length() const = 0;
   virtual void set_length(uint length) = 0;
   virtual void set_length_null(bool is_null) = 0;
+  virtual bool is_length_null() const = 0;
 
   /////////////////////////////////////////////////////////////////////////
   // order.
@@ -94,7 +97,6 @@ public:
   virtual bool is_hidden() const = 0;
   virtual void set_hidden(bool hidden) = 0;
 
-
   /**
     Converts *this into json.
 
@@ -108,7 +110,6 @@ public:
   */
 
   virtual void serialize(Sdi_wcontext *wctx, Sdi_writer *w) const = 0;
-
 
   /**
     Re-establishes the state of *this by reading sdi information from
@@ -134,6 +135,6 @@ public:
 
 ///////////////////////////////////////////////////////////////////////////
 
-}
+}  // namespace dd
 
-#endif // DD__INDEX_ELEMENT_INCLUDED
+#endif  // DD__INDEX_ELEMENT_INCLUDED

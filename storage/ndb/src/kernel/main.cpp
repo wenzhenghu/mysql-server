@@ -1,14 +1,21 @@
 /*
-   Copyright (c) 2003, 2014, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2003, 2020, Oracle and/or its affiliates.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -19,11 +26,14 @@
 #include <ndb_opts.h>
 #include <kernel/NodeBitmask.hpp>
 #include <portlib/ndb_daemon.h>
+#include "util/ndb_openssl_evp.h"
 
+#include "my_alloc.h"
 #include "ndbd.hpp"
 #include "angel.hpp"
 
 #include "../common/util/parse_mask.hpp"
+#include "OwnProcessInfo.hpp"
 
 #include <EventLogger.hpp>
 
@@ -39,8 +49,10 @@ static int opt_report_fd;
 static int opt_initial;
 static int opt_no_start;
 static unsigned opt_allocated_nodeid;
+static int opt_angel_pid;
 static int opt_retries;
 static int opt_delay;
+static unsigned long opt_logbuffer_size;
 
 extern NdbNodeBitmask g_nowait_nodes;
 
@@ -93,6 +105,10 @@ static struct my_option my_long_options[] =
     "INTERNAL: nodeid allocated by angel process",
     (uchar**) &opt_allocated_nodeid, (uchar**) &opt_allocated_nodeid, 0,
     GET_UINT, REQUIRED_ARG, 0, 0, UINT_MAX, 0, 0, 0 },
+  { "angel-pid", NDB_OPT_NOSHORT,
+    "INTERNAL: angel process id",
+    (uchar**) &opt_angel_pid, (uchar **) &opt_angel_pid, 0,
+    GET_UINT, REQUIRED_ARG, 0, 0, UINT_MAX, 0, 0, 0 },
   { "connect-retries", 'r',
     "Number of times mgmd is contacted at start. -1: eternal retries",
     (uchar**) &opt_retries, (uchar**) &opt_retries, 0,
@@ -101,6 +117,15 @@ static struct my_option my_long_options[] =
     "Number of seconds between each connection attempt",
     (uchar**) &opt_delay, (uchar**) &opt_delay, 0,
     GET_INT, REQUIRED_ARG, 5, 0, 3600, 0, 0, 0 },
+  { "logbuffer-size", NDB_OPT_NOSHORT,
+    "Size of the log buffer for data node ndb_x_out.log",
+    (uchar**) &opt_logbuffer_size, (uchar**) &opt_logbuffer_size, 0,
+#if defined(VM_TRACE) || defined(ERROR_INSERT)
+    GET_ULONG, REQUIRED_ARG, 1024*1024, 2048, ULONG_MAX, 0, 0, 0
+#else
+    GET_ULONG, REQUIRED_ARG, 32768, 2048, ULONG_MAX, 0, 0, 0
+#endif
+  },
   { 0, 0, 0, 0, 0, 0, GET_NO_ARG, NO_ARG, 0, 0, 0, 0, 0, 0}
 };
 
@@ -113,11 +138,6 @@ static void short_usage_sub(void)
   ndb_service_print_options("ndbd");
 }
 
-static void usage()
-{
-  ndb_usage(short_usage_sub, load_default_groups, my_long_options);
-}
-
 /**
  * C++ Standard 3.6.1/3:
  *  The function main shall not be used (3.2) within a program.
@@ -128,6 +148,8 @@ int
 real_main(int argc, char** argv)
 {
   NDB_INIT(argv[0]);
+  Ndb_opts::release();  // because ndbd can fork and call real_main() again
+  Ndb_opts opts(argc, argv, my_long_options, load_default_groups);
 
   // Print to stdout/console
   g_eventLogger->createConsoleHandler();
@@ -142,8 +164,7 @@ real_main(int argc, char** argv)
   // Turn on max loglevel for startup messages
   g_eventLogger->m_logLevel.setLogLevel(LogLevel::llStartUp, 15);
 
-  ndb_opt_set_usage_funcs(short_usage_sub, usage);
-  ndb_load_defaults(NULL,load_default_groups,&argc,&argv);
+  opts.set_usage_funcs(short_usage_sub);
 
 #ifndef DBUG_OFF
   opt_debug= "d:t:O,/tmp/ndbd.trace";
@@ -160,8 +181,7 @@ real_main(int argc, char** argv)
   }
 
   int ho_error;
-  if ((ho_error=handle_options(&argc, &argv, my_long_options,
-                               ndb_std_get_one_option)))
+  if ((ho_error=opts.handle_options()))
     exit(ho_error);
 
   if (opt_no_daemon || opt_foreground) {
@@ -190,6 +210,11 @@ real_main(int argc, char** argv)
     }
   }
 
+ if(opt_angel_pid)
+  {
+    setOwnProcessInfoAngelPid(opt_angel_pid);
+  }
+
   if (opt_foreground ||
       opt_allocated_nodeid ||
       opt_report_fd)
@@ -201,7 +226,8 @@ real_main(int argc, char** argv)
     ndbd_run(opt_foreground, opt_report_fd,
              opt_ndb_connectstring, opt_ndb_nodeid, opt_bind_address,
              opt_no_start, opt_initial, opt_initialstart,
-             opt_allocated_nodeid, opt_retries, opt_delay);
+             opt_allocated_nodeid, opt_retries, opt_delay,
+             opt_logbuffer_size);
   }
 
   /**
@@ -228,6 +254,9 @@ real_main(int argc, char** argv)
 int
 main(int argc, char** argv)
 {
-  return ndb_daemon_init(argc, argv, real_main, angel_stop,
-                         "ndbd", "MySQL Cluster Data Node Daemon");
+  ndb_openssl_evp::library_init();
+  int rc = ndb_daemon_init(argc, argv, real_main, angel_stop,
+                           "ndbd", "MySQL Cluster Data Node Daemon");
+  ndb_openssl_evp::library_end();
+  return rc;
 }

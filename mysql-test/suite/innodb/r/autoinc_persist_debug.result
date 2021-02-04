@@ -73,11 +73,11 @@ a	b
 SHOW CREATE TABLE t4;
 Table	Create Table
 t4	CREATE TABLE `t4` (
-  `a` int(11) NOT NULL AUTO_INCREMENT,
-  `b` int(11) DEFAULT NULL,
+  `a` int NOT NULL AUTO_INCREMENT,
+  `b` int DEFAULT NULL,
   PRIMARY KEY (`a`),
   KEY `b` (`b`)
-) ENGINE=InnoDB AUTO_INCREMENT=14 DEFAULT CHARSET=latin1
+) ENGINE=InnoDB AUTO_INCREMENT=14 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
 INSERT INTO t5 VALUES(0, 1), (100, 2), (50, 3);
 INSERT INTO t5 VALUES(0, 4), (109, 5), (0, 6);
 SELECT * FROM t5;
@@ -91,11 +91,11 @@ a	b
 SHOW CREATE TABLE t5;
 Table	Create Table
 t5	CREATE TABLE `t5` (
-  `a` int(11) NOT NULL AUTO_INCREMENT,
-  `b` int(11) DEFAULT NULL,
+  `a` int NOT NULL AUTO_INCREMENT,
+  `b` int DEFAULT NULL,
   PRIMARY KEY (`a`),
   KEY `b` (`b`)
-) ENGINE=InnoDB AUTO_INCREMENT=111 DEFAULT CHARSET=latin1
+) ENGINE=InnoDB AUTO_INCREMENT=111 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
 set global innodb_log_checkpoint_now=ON;
 SELECT @start_global_value;
 @start_global_value
@@ -128,19 +128,19 @@ Expect 112
 SHOW CREATE TABLE t4;
 Table	Create Table
 t4	CREATE TABLE `t4` (
-  `a` int(11) NOT NULL AUTO_INCREMENT,
-  `b` int(11) DEFAULT NULL,
+  `a` int NOT NULL AUTO_INCREMENT,
+  `b` int DEFAULT NULL,
   PRIMARY KEY (`a`),
   KEY `b` (`b`)
-) ENGINE=InnoDB AUTO_INCREMENT=18 DEFAULT CHARSET=latin1
+) ENGINE=InnoDB AUTO_INCREMENT=18 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
 SHOW CREATE TABLE t5;
 Table	Create Table
 t5	CREATE TABLE `t5` (
-  `a` int(11) NOT NULL AUTO_INCREMENT,
-  `b` int(11) DEFAULT NULL,
+  `a` int NOT NULL AUTO_INCREMENT,
+  `b` int DEFAULT NULL,
   PRIMARY KEY (`a`),
   KEY `b` (`b`)
-) ENGINE=InnoDB AUTO_INCREMENT=115 DEFAULT CHARSET=latin1
+) ENGINE=InnoDB AUTO_INCREMENT=115 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
 # Scenario 2: Mix the persisted autoinc counter and corrupted bits
 TRUNCATE TABLE t1;
 TRUNCATE TABLE t2;
@@ -238,14 +238,109 @@ SELECT * FROM t6;
 id	name
 99	mysql
 DROP TABLE t1, t2, t3, t4, t5, t6;
-CREATE TABLE t1 (a INT AUTO_INCREMENT NOT NULL, b INT, KEY(a))
-PARTITION BY RANGE (b)
-( PARTITION p0 VALUES LESS THAN (4),
-PARTITION p1 VALUES LESS THAN (100));
-SELECT * FROM t1;
-a	b
-set session debug = "+d,partition_truncate_no_reset";
-TRUNCATE TABLE t1;
-set session debug = "-d,partition_truncate_no_reset";
-ALTER TABLE t1 ADD INDEX(b), ALGORITHM = INPLACE;
+#
+# Scenario 4: Test ALTER TABLE .. AUTO_INCREMENT to a smaller value
+# and maybe crash
+#
+CREATE TABLE t1(a TINYINT AUTO_INCREMENT KEY) ENGINE = InnoDB;
+INSERT INTO t1 VALUES(0), (0), (10), (20), (30), (31), (32);
+INSERT INTO t1 VALUES(0), (0), (0);
+SELECT MAX(a) `Expect 35` FROM t1;
+Expect 35
+35
+DELETE FROM t1 WHERE a >= 30;
+ALTER TABLE t1 AUTO_INCREMENT = 21;
+# restart
+SHOW CREATE TABLE t1;
+Table	Create Table
+t1	CREATE TABLE `t1` (
+  `a` tinyint NOT NULL AUTO_INCREMENT,
+  PRIMARY KEY (`a`)
+) ENGINE=InnoDB AUTO_INCREMENT=21 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+INSERT INTO t1 VALUES(0), (0), (0);
+SELECT MAX(a) `Expect 23` FROM t1;
+Expect 23
+23
+DROP TABLE t1;
+CREATE TABLE t1(a TINYINT AUTO_INCREMENT KEY) ENGINE = InnoDB;
+INSERT INTO t1 VALUES(0), (0), (10), (20), (30), (31), (32);
+INSERT INTO t1 VALUES(0), (0), (0);
+SELECT MAX(a) `Expect 35` FROM t1;
+Expect 35
+35
+DELETE FROM t1 WHERE a >= 30;
+SET SESSION debug="+d, ib_ddl_crash_before_update_stats";
+# Write file to make mysql-test-run.pl expect crash
+ALTER TABLE t1 AUTO_INCREMENT = 21;
+ERROR HY000: Lost connection to MySQL server during query
+# Restart mysqld after the crash and reconnect.
+SHOW CREATE TABLE t1;
+Table	Create Table
+t1	CREATE TABLE `t1` (
+  `a` tinyint NOT NULL AUTO_INCREMENT,
+  PRIMARY KEY (`a`)
+) ENGINE=InnoDB AUTO_INCREMENT=36 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+INSERT INTO t1 VALUES(0), (0), (0);
+SELECT MAX(a) `Expect 38` FROM t1;
+Expect 38
+38
+DROP TABLE t1;
+CREATE TABLE t1 (a INT AUTO_INCREMENT NOT NULL, KEY(a))
+PARTITION BY RANGE (a)
+( PARTITION p0 VALUES LESS THAN (10),
+PARTITION p1 VALUES LESS THAN (20),
+PARTITION p2 VALUES LESS THAN (50));
+INSERT INTO t1 VALUES(0), (0), (10), (20), (30), (31), (32);
+INSERT INTO t1 VALUES(0), (0), (0);
+SELECT MAX(a) `Expect 35` FROM t1;
+Expect 35
+35
+DELETE FROM t1 WHERE a >= 30;
+ALTER TABLE t1 AUTO_INCREMENT = 21;
+# restart
+SHOW CREATE TABLE t1;
+Table	Create Table
+t1	CREATE TABLE `t1` (
+  `a` int NOT NULL AUTO_INCREMENT,
+  KEY `a` (`a`)
+) ENGINE=InnoDB AUTO_INCREMENT=21 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+/*!50100 PARTITION BY RANGE (`a`)
+(PARTITION p0 VALUES LESS THAN (10) ENGINE = InnoDB,
+ PARTITION p1 VALUES LESS THAN (20) ENGINE = InnoDB,
+ PARTITION p2 VALUES LESS THAN (50) ENGINE = InnoDB) */
+INSERT INTO t1 VALUES(0), (0), (0);
+SELECT MAX(a) `Expect 23` FROM t1;
+Expect 23
+23
+DROP TABLE t1;
+CREATE TABLE t1 (a INT AUTO_INCREMENT NOT NULL, KEY(a))
+PARTITION BY RANGE (a)
+( PARTITION p0 VALUES LESS THAN (10),
+PARTITION p1 VALUES LESS THAN (20),
+PARTITION p2 VALUES LESS THAN (50));
+INSERT INTO t1 VALUES(0), (0), (10), (20), (30), (31), (32);
+INSERT INTO t1 VALUES(0), (0), (0);
+SELECT MAX(a) `Expect 35` FROM t1;
+Expect 35
+35
+DELETE FROM t1 WHERE a >= 30;
+SET SESSION debug="+d, ib_ddl_crash_before_update_stats";
+# Write file to make mysql-test-run.pl expect crash
+ALTER TABLE t1 AUTO_INCREMENT = 21;
+ERROR HY000: Lost connection to MySQL server during query
+# Restart mysqld after the crash and reconnect.
+SHOW CREATE TABLE t1;
+Table	Create Table
+t1	CREATE TABLE `t1` (
+  `a` int NOT NULL AUTO_INCREMENT,
+  KEY `a` (`a`)
+) ENGINE=InnoDB AUTO_INCREMENT=36 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+/*!50100 PARTITION BY RANGE (`a`)
+(PARTITION p0 VALUES LESS THAN (10) ENGINE = InnoDB,
+ PARTITION p1 VALUES LESS THAN (20) ENGINE = InnoDB,
+ PARTITION p2 VALUES LESS THAN (50) ENGINE = InnoDB) */
+INSERT INTO t1 VALUES(0), (0), (0);
+SELECT MAX(a) `Expect 38` FROM t1;
+Expect 38
+38
 DROP TABLE t1;

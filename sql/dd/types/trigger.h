@@ -1,17 +1,24 @@
-/* Copyright (c) 2016, 2017, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2016, 2020, Oracle and/or its affiliates.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software Foundation,
-   51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 #ifndef DD__TRIGGER_INCLUDED
 #define DD__TRIGGER_INCLUDED
@@ -19,48 +26,41 @@
 #include <time.h>
 
 #ifdef _WIN32
-#include <winsock2.h>                 // timeval
+#include <winsock2.h>  // timeval
 #endif
 
-#include "dd/sdi_fwd.h"               // dd::Sdi_wcontext
-#include "dd/types/entity_object.h"   // dd::Entity_object
 #include "my_inttypes.h"
+#include "sql/dd/sdi_fwd.h"              // dd::Sdi_wcontext
+#include "sql/dd/types/entity_object.h"  // dd::Entity_object
+
+struct MDL_key;
+struct CHARSET_INFO;
 
 namespace dd {
 
 ///////////////////////////////////////////////////////////////////////////
 
 class Trigger_impl;
-class Object_type;
-class Object_table;
+
+namespace tables {
+class Triggers;
+}
 
 ///////////////////////////////////////////////////////////////////////////
 
 /// Class representing a Trigger in DD framework.
-class Trigger : virtual public Entity_object
-{
-public:
-  static const Object_type &TYPE();
-  static const Object_table &OBJECT_TABLE();
+class Trigger : virtual public Entity_object {
+ public:
   typedef Trigger_impl Impl;
+  typedef tables::Triggers DD_table;
 
-public:
-  enum class enum_event_type
-  {
-    ET_INSERT = 1,
-    ET_UPDATE,
-    ET_DELETE
-  };
+ public:
+  enum class enum_event_type { ET_INSERT = 1, ET_UPDATE, ET_DELETE };
 
-  enum class enum_action_timing
-  {
-    AT_BEFORE = 1,
-    AT_AFTER
-  };
+  enum class enum_action_timing { AT_BEFORE = 1, AT_AFTER };
 
-public:
-  virtual ~Trigger()
-  { };
+ public:
+  ~Trigger() override {}
 
   /////////////////////////////////////////////////////////////////////////
   // schema.
@@ -103,8 +103,8 @@ public:
   virtual void set_action_statement(const String_type &action_statement) = 0;
 
   virtual const String_type &action_statement_utf8() const = 0;
-  virtual void set_action_statement_utf8(const String_type
-                                         &action_statement_utf8) = 0;
+  virtual void set_action_statement_utf8(
+      const String_type &action_statement_utf8) = 0;
 
   /////////////////////////////////////////////////////////////////////////
   // created.
@@ -144,15 +144,19 @@ public:
   virtual void set_client_collation_id(Object_id client_collation_id) = 0;
 
   virtual Object_id connection_collation_id() const = 0;
-  virtual void set_connection_collation_id(Object_id connection_collation_id) = 0;
+  virtual void set_connection_collation_id(
+      Object_id connection_collation_id) = 0;
 
   virtual Object_id schema_collation_id() const = 0;
   virtual void set_schema_collation_id(Object_id schema_collation_id) = 0;
 
+  static void create_mdl_key(const String_type &schema_name,
+                             const String_type &name, MDL_key *key);
+  static const CHARSET_INFO *name_collation();
 };
 
 ///////////////////////////////////////////////////////////////////////////
 
-}
+}  // namespace dd
 
-#endif // DD__TRIGGER_INCLUDED
+#endif  // DD__TRIGGER_INCLUDED

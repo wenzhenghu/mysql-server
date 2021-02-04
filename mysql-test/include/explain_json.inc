@@ -1,9 +1,9 @@
 # This file is a collection of regression and coverage tests
 # for WL#5855: Print EXPLAIN in JSON format
 
+--source include/force_myisam_default.inc
+--source include/have_myisam.inc
 
-set @save_storage_engine= @@default_storage_engine;
-set default_storage_engine=MyISAM;
 set end_markers_in_json=on;
 
 --echo # new "FORMAT" keyword doesn't conflict with the FORMAT() function name:
@@ -345,6 +345,7 @@ let $query=SELECT DISTINCT SUM(b) s FROM t1 GROUP BY a ORDER BY s;
 FLUSH STATUS;
 --eval $query
 --disable_warnings
+--skip_if_hypergraph  # Depends on the query plan.
 SHOW SESSION STATUS WHERE (Variable_name LIKE 'Sort_%' OR Variable_name LIKE 'Created_%_tables') AND Value > 0;
 --enable_warnings
 
@@ -369,5 +370,3 @@ INSERT INTO t1 VALUES (1,10), (2,20), (3,30),  (4,40);
 INSERT INTO t2 VALUES (2), (3), (4), (5);
 EXPLAIN FORMAT=JSON SELECT * FROM t2 WHERE t2.a IN (SELECT a FROM t1 WHERE t1.b <> 30);
 DROP TABLE t1, t2;
-
-set default_storage_engine= @save_storage_engine;

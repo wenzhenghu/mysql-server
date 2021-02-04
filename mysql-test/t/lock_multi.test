@@ -4,6 +4,7 @@
 
 --source include/force_myisam_default.inc
 --source include/have_myisam.inc
+--source include/not_hypergraph.inc  # Appears to depend on query plans.
 
 # Save the initial number of concurrent sessions
 --source include/count_sessions.inc
@@ -1199,10 +1200,10 @@ let $wait_condition=
 # Note: This query causes two timeouts.
 # 1: try_acquire_high_prio_shared_mdl_lock on t1
 # 2: recover_from_failed_open on t1
-SET SESSION information_schema_stats=latest;
+SET SESSION information_schema_stats_expiry=0;
 SELECT table_name, table_rows, table_comment FROM information_schema.tables
   WHERE table_schema= 'test' AND table_name= 't1';
-SET SESSION information_schema_stats=cached;
+SET SESSION information_schema_stats_expiry=default;
 
 --echo # Connection default
 connection default;
@@ -4620,7 +4621,7 @@ connection default;
 let $wait_condition=
   select count(*) = 1 from information_schema.processlist
   where state = "Waiting for table metadata lock" and
-        info = "select * from t1, t2";
+        info = "PREPARE stmt1 FROM ...";
 --source include/wait_condition.inc
 
 --echo # This ALTER TABLE upgrades SNRW lock on t1 to X lock.

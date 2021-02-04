@@ -7,16 +7,6 @@
 #Want to skip this test from daily Valgrind execution
 --source include/no_valgrind_without_big.inc
 
-########################################
-##### WL#7554 Force schema `test` to character set latin1
-##### This test should be migrated to utf8mb4
---disable_query_log
-let $testdbcs239=`select default_character_set_name from information_schema.schemata where schema_name='test'`;
-alter schema default character set latin1;
-use test;
---enable_query_log
-########################################
-
 --disable_warnings
 drop table if exists t1;
 --enable_warnings
@@ -55,9 +45,9 @@ SELECT * FROM t1 WHERE b = 9223372036854775808;
 SELECT * FROM t1 WHERE b = 18446744073709551612;
 SELECT * FROM t1 WHERE b = 18446744073709551615;
 analyze table t1;
-EXPLAIN PARTITIONS SELECT * FROM t1 WHERE b = 9223372036854775808;
-EXPLAIN PARTITIONS SELECT * FROM t1 WHERE b = 18446744073709551612;
-EXPLAIN PARTITIONS SELECT * FROM t1 WHERE b = 18446744073709551615;
+EXPLAIN SELECT * FROM t1 WHERE b = 9223372036854775808;
+EXPLAIN SELECT * FROM t1 WHERE b = 18446744073709551612;
+EXPLAIN SELECT * FROM t1 WHERE b = 18446744073709551615;
 DROP TABLE t1;
 
 #
@@ -74,6 +64,20 @@ CREATE TABLE t1 (c1 INT)
   PARTITIONS 5;
 INSERT INTO t1 VALUES (1), (2), (3), (4), (5);
 ALTER TABLE t1 COALESCE PARTITION 3;
+DROP TABLE t1;
+
+#
+# LINEAR HASH tests for ADD PARTITION
+#
+CREATE TABLE t1 (c1 INT)
+  PARTITION BY LINEAR HASH (c1)
+  PARTITIONS 3;
+INSERT INTO t1 VALUES (1), (2), (3), (4), (5), (6), (7);
+ALTER TABLE t1 ADD PARTITION PARTITIONS 2;
+SELECT * FROM t1 ORDER BY c1;
+ALTER TABLE t1 ADD PARTITION PARTITIONS 10;
+SELECT * FROM t1 ORDER BY c1;
+SHOW CREATE TABLE t1;
 DROP TABLE t1;
 
 #
@@ -94,25 +98,22 @@ select * from t1 where a > 3 and a <= 6;
 select * from t1 where a > 5;
 select * from t1 where a >= 1 and a <= 5;
 analyze table t1;
-explain partitions select * from t1 where a < 0;
-explain partitions select * from t1 where a is null or (a >= 5 and a <= 7); 
-explain partitions select * from t1 where a is null;
-explain partitions select * from t1 where a is not null;
-explain partitions select * from t1 where a >= 1 and a < 3;
-explain partitions select * from t1 where a >= 3 and a <= 5;
-explain partitions select * from t1 where a > 2 and a < 4;
-explain partitions select * from t1 where a > 3 and a <= 6;
-explain partitions select * from t1 where a > 5;
-explain partitions select * from t1 where a >= 1 and a <= 5;
+explain select * from t1 where a < 0;
+explain select * from t1 where a is null or (a >= 5 and a <= 7); 
+explain select * from t1 where a is null;
+explain select * from t1 where a is not null;
+explain select * from t1 where a >= 1 and a < 3;
+explain select * from t1 where a >= 3 and a <= 5;
+explain select * from t1 where a > 2 and a < 4;
+explain select * from t1 where a > 3 and a <= 6;
+explain select * from t1 where a > 5;
+explain select * from t1 where a >= 1 and a <= 5;
 
 drop table t1;
 
 #
 # Partition by hash, basic
 #
-CREATE TABLESPACE ts1 ADD DATAFILE 'ts1.ibd';
-CREATE TABLESPACE ts2 ADD DATAFILE 'ts2.ibd';
-CREATE TABLESPACE ts3 ADD DATAFILE 'ts3.ibd';
 CREATE TABLE t1 (
 a int not null,
 b int not null,
@@ -120,9 +121,9 @@ c int not null,
 primary key(a,b))
 partition by hash (a + 2)
 partitions 3
-(partition x1 tablespace ts1,
- partition x2 tablespace ts2,
- partition x3 tablespace ts3);
+(partition x1,
+ partition x2,
+ partition x3);
 
 insert into t1 values (1,1,1);
 SHOW CREATE TABLE t1;
@@ -147,15 +148,12 @@ select * from t1;
 ALTER TABLE t1
 partition by hash (a + 3)
 partitions 3
-(partition x1 tablespace ts1,
- partition x2 tablespace ts2,
- partition x3 tablespace ts3);
+(partition x1,
+ partition x2,
+ partition x3);
 select * from t1;
 SHOW CREATE TABLE t1;
 drop table t1;
-DROP TABLESPACE ts1;
-DROP TABLESPACE ts2;
-DROP TABLESPACE ts3;
 
 #
 # Partition by hash, only one partition
@@ -480,10 +478,3 @@ SHOW TABLES;
 CREATE TABLE t1 (c1 BIGINT NOT NULL, c2 CHAR(5)) PARTITION BY HASH(c1) PARTITIONS 50;
 SHOW TABLES; 
  SHOW CREATE TABLE t1; DROP TABLE t1; SHOW TABLES;
-
-########################################
-##### WL#7554 set schema `test` back to what it was
---disable_query_log
---eval alter schema test default character set $testdbcs239;
---enable_query_log
-########################################

@@ -1,17 +1,24 @@
-/* Copyright (c) 2017 Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2016, 2020, Oracle and/or its affiliates.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software Foundation,
-   51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 #ifndef DD__EVENT_IMPL_INCLUDED
 #define DD__EVENT_IMPL_INCLUDED
@@ -20,14 +27,14 @@
 #include <new>
 #include <string>
 
-#include "dd/impl/raw/raw_record.h"
-#include "dd/impl/types/entity_object_impl.h"  // dd::Entity_object_impl
-#include "dd/impl/types/weak_object_impl.h"
-#include "dd/object_id.h"
-#include "dd/types/dictionary_object_table.h"  // dd::Dictionary_object_table
-#include "dd/types/event.h"                    // dd::Event
-#include "dd/types/object_type.h"              // dd::Object_type
 #include "my_inttypes.h"
+#include "sql/dd/impl/raw/raw_record.h"
+#include "sql/dd/impl/types/entity_object_impl.h"  // dd::Entity_object_impl
+#include "sql/dd/impl/types/weak_object_impl.h"
+#include "sql/dd/object_id.h"
+#include "sql/dd/string_type.h"
+#include "sql/dd/types/event.h"  // dd::Event
+#include "sql/sql_time.h"        // gmt_time_to_local_time
 
 namespace dd {
 
@@ -35,304 +42,305 @@ namespace dd {
 
 class Open_dictionary_tables_ctx;
 class Weak_object;
+class Object_table;
 
-class Event_impl : public Entity_object_impl,
-                   public Event
-{
-public:
+class Event_impl : public Entity_object_impl, public Event {
+ public:
   Event_impl();
-  Event_impl(const Event_impl&);
+  Event_impl(const Event_impl &);
 
-  virtual ~Event_impl()
-  { }
+  ~Event_impl() override {}
 
-public:
-  virtual const Dictionary_object_table &object_table() const
-  { return Event::OBJECT_TABLE(); }
+ public:
+  const Object_table &object_table() const override;
 
-  virtual bool validate() const;
+  static void register_tables(Open_dictionary_tables_ctx *otx);
 
-  virtual bool restore_attributes(const Raw_record &r);
+  bool validate() const override;
 
-  virtual bool store_attributes(Raw_record *r);
+  bool restore_attributes(const Raw_record &r) override;
 
-  virtual void debug_print(String_type &outb) const;
+  bool store_attributes(Raw_record *r) override;
 
-public:
+  void debug_print(String_type &outb) const override;
+
+ public:
   /////////////////////////////////////////////////////////////////////////
   // schema.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual Object_id schema_id() const
-  { return m_schema_id; }
+  Object_id schema_id() const override { return m_schema_id; }
 
-  virtual void set_schema_id(Object_id schema_id)
-  { m_schema_id= schema_id; }
+  void set_schema_id(Object_id schema_id) override { m_schema_id = schema_id; }
 
   /////////////////////////////////////////////////////////////////////////
   // definer.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual const String_type &definer_user() const
-  { return m_definer_user; }
+  const String_type &definer_user() const override { return m_definer_user; }
 
-  virtual const String_type &definer_host() const
-  { return m_definer_host; }
+  const String_type &definer_host() const override { return m_definer_host; }
 
-  virtual void set_definer(const String_type &username,
-                           const String_type &hostname)
-  {
-    m_definer_user= username;
-    m_definer_host= hostname;
+  void set_definer(const String_type &username,
+                   const String_type &hostname) override {
+    m_definer_user = username;
+    m_definer_host = hostname;
   }
 
   /////////////////////////////////////////////////////////////////////////
   // time_zone
   /////////////////////////////////////////////////////////////////////////
 
-  virtual const String_type &time_zone() const
-  { return m_time_zone; }
+  const String_type &time_zone() const override { return m_time_zone; }
 
-  virtual void set_time_zone(const String_type &time_zone)
-  { m_time_zone= time_zone; }
+  void set_time_zone(const String_type &time_zone) override {
+    m_time_zone = time_zone;
+  }
 
   /////////////////////////////////////////////////////////////////////////
   // definition/utf8.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual const String_type &definition() const
-  { return m_definition; }
+  const String_type &definition() const override { return m_definition; }
 
-  virtual void set_definition(const String_type &definition)
-  { m_definition= definition; }
+  void set_definition(const String_type &definition) override {
+    m_definition = definition;
+  }
 
-  virtual const String_type &definition_utf8() const
-  { return m_definition_utf8; }
+  const String_type &definition_utf8() const override {
+    return m_definition_utf8;
+  }
 
-  virtual void set_definition_utf8(const String_type &definition_utf8)
-  { m_definition_utf8= definition_utf8; }
+  void set_definition_utf8(const String_type &definition_utf8) override {
+    m_definition_utf8 = definition_utf8;
+  }
 
   /////////////////////////////////////////////////////////////////////////
   // execute_at.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual my_time_t execute_at() const
-  { return m_execute_at; }
+  my_time_t execute_at() const override { return m_execute_at; }
 
-  virtual void set_execute_at(my_time_t execute_at)
-  { m_execute_at= execute_at; }
+  void set_execute_at(my_time_t execute_at) override {
+    m_execute_at = execute_at;
+  }
 
-  virtual void set_execute_at_null(bool is_null)
-  { m_is_execute_at_null= is_null; }
+  void set_execute_at_null(bool is_null) override {
+    m_is_execute_at_null = is_null;
+  }
 
-  virtual bool is_execute_at_null() const
-  { return m_is_execute_at_null; }
+  bool is_execute_at_null() const override { return m_is_execute_at_null; }
 
   /////////////////////////////////////////////////////////////////////////
   // interval_value.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual uint interval_value() const
-  { return m_interval_value; }
+  uint interval_value() const override { return m_interval_value; }
 
-  virtual void set_interval_value(uint interval_value)
-  { m_interval_value= interval_value; }
+  void set_interval_value(uint interval_value) override {
+    m_interval_value = interval_value;
+  }
 
-  virtual void set_interval_value_null(bool is_null)
-  { m_is_interval_value_null= is_null; }
+  void set_interval_value_null(bool is_null) override {
+    m_is_interval_value_null = is_null;
+  }
 
-  virtual bool is_interval_value_null() const
-  { return m_is_interval_value_null; }
+  bool is_interval_value_null() const override {
+    return m_is_interval_value_null;
+  }
 
   /////////////////////////////////////////////////////////////////////////
   // interval_field
   /////////////////////////////////////////////////////////////////////////
 
-  virtual enum_interval_field interval_field() const
-  { return m_interval_field; }
+  enum_interval_field interval_field() const override {
+    return m_interval_field;
+  }
 
-  virtual void set_interval_field(enum_interval_field interval_field)
-  { m_interval_field= interval_field; }
+  void set_interval_field(enum_interval_field interval_field) override {
+    m_interval_field = interval_field;
+  }
 
-  virtual void set_interval_field_null(bool is_null)
-  { m_is_interval_field_null= is_null; }
+  void set_interval_field_null(bool is_null) override {
+    m_is_interval_field_null = is_null;
+  }
 
-  virtual bool is_interval_field_null() const
-  { return m_is_interval_field_null; }
+  bool is_interval_field_null() const override {
+    return m_is_interval_field_null;
+  }
 
   /////////////////////////////////////////////////////////////////////////
   // sql_mode
   /////////////////////////////////////////////////////////////////////////
 
-  virtual ulonglong sql_mode() const
-  { return m_sql_mode; }
+  ulonglong sql_mode() const override { return m_sql_mode; }
 
-  virtual void set_sql_mode(ulonglong sm)
-  { m_sql_mode= sm; }
+  void set_sql_mode(ulonglong sm) override { m_sql_mode = sm; }
 
   /////////////////////////////////////////////////////////////////////////
   // starts.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual my_time_t starts() const
-  { return m_starts; }
+  my_time_t starts() const override { return m_starts; }
 
-  virtual void set_starts(my_time_t starts)
-  { m_starts= starts; }
+  void set_starts(my_time_t starts) override { m_starts = starts; }
 
-  virtual void set_starts_null(bool is_null)
-  { m_is_starts_null= is_null; }
+  void set_starts_null(bool is_null) override { m_is_starts_null = is_null; }
 
-  virtual bool is_starts_null() const
-  { return m_is_starts_null; }
+  bool is_starts_null() const override { return m_is_starts_null; }
 
   /////////////////////////////////////////////////////////////////////////
   // ends.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual my_time_t ends() const
-  { return m_ends; }
+  my_time_t ends() const override { return m_ends; }
 
-  virtual void set_ends(my_time_t ends)
-  { m_ends= ends; }
+  void set_ends(my_time_t ends) override { m_ends = ends; }
 
-  virtual void set_ends_null(bool is_null)
-  { m_is_ends_null= is_null; }
+  void set_ends_null(bool is_null) override { m_is_ends_null = is_null; }
 
-  virtual bool is_ends_null() const
-  { return m_is_ends_null; }
+  bool is_ends_null() const override { return m_is_ends_null; }
 
   /////////////////////////////////////////////////////////////////////////
   // event_status
   /////////////////////////////////////////////////////////////////////////
 
-  virtual enum_event_status event_status() const
-  { return m_event_status; }
+  enum_event_status event_status() const override { return m_event_status; }
 
-  virtual void set_event_status(enum_event_status event_status)
-  { m_event_status= event_status; }
+  void set_event_status(enum_event_status event_status) override {
+    m_event_status = event_status;
+  }
 
-  virtual void set_event_status_null(bool is_null)
-  { m_is_event_status_null= is_null; }
+  void set_event_status_null(bool is_null) override {
+    m_is_event_status_null = is_null;
+  }
 
-  virtual bool is_event_status_null() const
-  { return m_is_event_status_null; }
+  bool is_event_status_null() const override { return m_is_event_status_null; }
 
   /////////////////////////////////////////////////////////////////////////
   // on_completion
   /////////////////////////////////////////////////////////////////////////
 
-  virtual enum_on_completion on_completion() const
-  { return m_on_completion; }
+  enum_on_completion on_completion() const override { return m_on_completion; }
 
-  virtual void set_on_completion(enum_on_completion on_completion)
-  { m_on_completion= on_completion; }
+  void set_on_completion(enum_on_completion on_completion) override {
+    m_on_completion = on_completion;
+  }
 
   /////////////////////////////////////////////////////////////////////////
   // created.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual ulonglong created() const
-  { return m_created; }
+  ulonglong created(bool convert_time) const override {
+    return convert_time ? gmt_time_to_local_time(m_created) : m_created;
+  }
 
-  virtual void set_created(ulonglong created)
-  { m_created= created; }
+  void set_created(ulonglong created) override { m_created = created; }
 
   /////////////////////////////////////////////////////////////////////////
   // last altered.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual ulonglong last_altered() const
-  { return m_last_altered; }
+  ulonglong last_altered(bool convert_time) const override {
+    return convert_time ? gmt_time_to_local_time(m_last_altered)
+                        : m_last_altered;
+  }
 
-  virtual void set_last_altered(ulonglong last_altered)
-  { m_last_altered= last_altered; }
+  void set_last_altered(ulonglong last_altered) override {
+    m_last_altered = last_altered;
+  }
 
   /////////////////////////////////////////////////////////////////////////
   // last_executed.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual my_time_t last_executed() const
-  { return m_last_executed; }
+  my_time_t last_executed() const override { return m_last_executed; }
 
-  virtual void set_last_executed(my_time_t last_executed)
-  {
-    m_is_last_executed_null= false;
-    m_last_executed= last_executed;
+  void set_last_executed(my_time_t last_executed) override {
+    m_is_last_executed_null = false;
+    m_last_executed = last_executed;
   }
 
-  virtual void set_last_executed_null(bool is_null)
-  { m_is_last_executed_null= is_null; }
+  void set_last_executed_null(bool is_null) override {
+    m_is_last_executed_null = is_null;
+  }
 
-  virtual bool is_last_executed_null() const
-  { return m_is_last_executed_null; }
+  bool is_last_executed_null() const override {
+    return m_is_last_executed_null;
+  }
 
   /////////////////////////////////////////////////////////////////////////
   // comment.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual const String_type &comment() const
-  { return m_comment; }
+  const String_type &comment() const override { return m_comment; }
 
-  virtual void set_comment(const String_type &comment)
-  { m_comment= comment; }
+  void set_comment(const String_type &comment) override { m_comment = comment; }
 
   /////////////////////////////////////////////////////////////////////////
   // originator
   /////////////////////////////////////////////////////////////////////////
 
-  virtual ulonglong originator() const
-  { return m_originator; }
+  ulonglong originator() const override { return m_originator; }
 
-  virtual void set_originator(ulonglong originator)
-  { m_originator= originator; }
+  void set_originator(ulonglong originator) override {
+    m_originator = originator;
+  }
 
   /////////////////////////////////////////////////////////////////////////
   // collation.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual Object_id client_collation_id() const
-  { return m_client_collation_id; }
+  Object_id client_collation_id() const override {
+    return m_client_collation_id;
+  }
 
-  virtual void set_client_collation_id(Object_id client_collation_id)
-  { m_client_collation_id= client_collation_id; }
+  void set_client_collation_id(Object_id client_collation_id) override {
+    m_client_collation_id = client_collation_id;
+  }
 
-  virtual Object_id connection_collation_id() const
-  { return m_connection_collation_id; }
+  Object_id connection_collation_id() const override {
+    return m_connection_collation_id;
+  }
 
-  virtual void set_connection_collation_id(Object_id connection_collation_id)
-  { m_connection_collation_id= connection_collation_id; }
+  void set_connection_collation_id(Object_id connection_collation_id) override {
+    m_connection_collation_id = connection_collation_id;
+  }
 
-  virtual Object_id schema_collation_id() const
-  { return m_schema_collation_id; }
+  Object_id schema_collation_id() const override {
+    return m_schema_collation_id;
+  }
 
-  virtual void set_schema_collation_id(Object_id schema_collation_id)
-  { m_schema_collation_id= schema_collation_id; }
+  void set_schema_collation_id(Object_id schema_collation_id) override {
+    m_schema_collation_id = schema_collation_id;
+  }
 
   // Fix "inherits ... via dominance" warnings
-  virtual Weak_object_impl *impl()
-  { return Weak_object_impl::impl(); }
-  virtual const Weak_object_impl *impl() const
-  { return Weak_object_impl::impl(); }
-  virtual Object_id id() const
-  { return Entity_object_impl::id(); }
-  virtual bool is_persistent() const
-  { return Entity_object_impl::is_persistent(); }
-  virtual const String_type &name() const
-  { return Entity_object_impl::name(); }
-  virtual void set_name(const String_type &name)
-  { Entity_object_impl::set_name(name); }
+  Entity_object_impl *impl() override { return Entity_object_impl::impl(); }
+  const Entity_object_impl *impl() const override {
+    return Entity_object_impl::impl();
+  }
+  Object_id id() const override { return Entity_object_impl::id(); }
+  bool is_persistent() const override {
+    return Entity_object_impl::is_persistent();
+  }
+  const String_type &name() const override {
+    return Entity_object_impl::name();
+  }
+  void set_name(const String_type &name) override {
+    Entity_object_impl::set_name(name);
+  }
 
-private:
+ private:
   enum_interval_field m_interval_field;
-  enum_event_status   m_event_status;
-  enum_on_completion  m_on_completion;
+  enum_event_status m_event_status;
+  enum_on_completion m_on_completion;
 
   ulonglong m_sql_mode;
   ulonglong m_created;
   ulonglong m_last_altered;
   ulonglong m_originator;
-  uint      m_interval_value;
+  uint m_interval_value;
 
   my_time_t m_execute_at;
   my_time_t m_starts;
@@ -361,25 +369,11 @@ private:
   Object_id m_connection_collation_id;
   Object_id m_schema_collation_id;
 
-  Event *clone() const
-  {
-    return new Event_impl(*this);
-  }
+  Event *clone() const override { return new Event_impl(*this); }
 };
 
 ///////////////////////////////////////////////////////////////////////////
 
-class Event_type : public Object_type
-{
-public:
-  virtual void register_tables(Open_dictionary_tables_ctx *otx) const;
+}  // namespace dd
 
-  virtual Weak_object *create_object() const
-  { return new (std::nothrow) Event_impl(); }
-};
-
-///////////////////////////////////////////////////////////////////////////
-
-}
-
-#endif // DD__EVENT_IMPL_INCLUDED
+#endif  // DD__EVENT_IMPL_INCLUDED

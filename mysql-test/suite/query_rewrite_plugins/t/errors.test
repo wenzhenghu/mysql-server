@@ -3,6 +3,8 @@
 --echo #
 
 --source suite/query_rewrite_plugins/include/have_plugin_rewriter.inc
+--source include/not_hypergraph.inc  # Gets confused by the extra logging.
+
 SET sql_mode = 'PIPES_AS_CONCAT';
 CALL mtr.add_suppression("Plugin rewriter reported: " ||
                          "'Some rules failed to load.'");
@@ -47,6 +49,7 @@ SELECT search_error_log( '[Error]', "%Plugin Rewriter reported: 'Wrong%" );
 SHOW STATUS LIKE 'Rewriter_number_reloads';
 
 --source suite/query_rewrite_plugins/include/uninstall_rewriter.inc
+--source include/disconnect_connections.inc
 
 --echo # Create another table with insufficient number of columns.
 CREATE DATABASE query_rewrite;
@@ -65,6 +68,7 @@ SHOW STATUS LIKE 'Rewriter_reload_error';
 SHOW STATUS LIKE 'Rewriter_number_loaded_rules';
 
 --source suite/query_rewrite_plugins/include/uninstall_rewriter.inc
+--source include/disconnect_connections.inc
 
 --source suite/query_rewrite_plugins/include/install_rewriter.inc
 
@@ -130,7 +134,7 @@ DELETE FROM query_rewrite.rewrite_rules
 WHERE pattern = 'SELECT c1 FROM test.t1 WHERE c2 = ?';
 
 ALTER TABLE query_rewrite.rewrite_rules
-MODIFY COLUMN replacement VARCHAR(10000) CHARACTER SET utf8 COLLATE utf8_bin;
+MODIFY COLUMN replacement VARCHAR(10000) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin;
 
 INSERT INTO query_rewrite.rewrite_rules ( pattern )
 VALUES ( 'SELECT c1 FROM test.t1 WHERE c2 = ?' );
@@ -147,7 +151,7 @@ DELETE FROM query_rewrite.rewrite_rules
 WHERE pattern = 'SELECT c1 FROM test.t1 WHERE c2 = ?';
 
 ALTER TABLE query_rewrite.rewrite_rules
-MODIFY COLUMN pattern VARCHAR(10000) CHARACTER SET utf8 COLLATE utf8_bin;
+MODIFY COLUMN pattern VARCHAR(5000) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin;
 
 INSERT INTO query_rewrite.rewrite_rules ( replacement )
 VALUES ( 'SELECT c1 FROM test.t1 WHERE c2 = ?' );
@@ -267,6 +271,8 @@ WHERE NAME = 'statements_digest';
 --echo # script. The library will not be unloaded so we can still call the UDF
 --echo # but it should return an error.
 UNINSTALL PLUGIN rewriter;
+--source include/disconnect_connections.inc
+
 --error ER_CANT_INITIALIZE_UDF
 CALL query_rewrite.flush_rewrite_rules();
 --error ER_CANT_INITIALIZE_UDF

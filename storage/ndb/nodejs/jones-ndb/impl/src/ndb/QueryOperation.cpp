@@ -1,21 +1,25 @@
 /*
- Copyright (c) 2015, 2016, Oracle and/or its affiliates. All rights
- reserved.
+ Copyright (c) 2015, 2020 Oracle and/or its affiliates.
  
- This program is free software; you can redistribute it and/or
- modify it under the terms of the GNU General Public License
- as published by the Free Software Foundation; version 2 of
- the License.
- 
+ This program is free software; you can redistribute it and/or modify
+ it under the terms of the GNU General Public License, version 2.0,
+ as published by the Free Software Foundation.
+
+ This program is also distributed with certain software (including
+ but not limited to OpenSSL) that is licensed under separate terms,
+ as designated in a particular file or component or in included license
+ documentation.  The authors of MySQL hereby grant you an additional
+ permission to link the program and your derivative works with the
+ separately licensed software that they have included with MySQL.
+
  This program is distributed in the hope that it will be useful,
  but WITHOUT ANY WARRANTY; without even the implied warranty of
- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- GNU General Public License for more details.
- 
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License, version 2.0, for more details.
+
  You should have received a copy of the GNU General Public License
  along with this program; if not, write to the Free Software
- Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
- 02110-1301  USA
+ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
 */
 
 #include <NdbApi.hpp>
@@ -30,6 +34,7 @@
 
 #include "QueryOperation.h"
 #include "TransactionImpl.h"
+#include "SessionImpl.h"
 
 enum {
   flag_row_is_null          = 1,
@@ -72,10 +77,15 @@ void QueryOperation::levelIsJoinTable(int level) {
   buffers[level].static_flags |= flag_table_is_join_table;
 }
 
-void QueryOperation::prepare(const NdbQueryOperationDef * root) {
+void QueryOperation::prepare(const NdbQueryOperationDef * root,
+                             const SessionImpl * sessionImpl) {
   DEBUG_MARKER(UDEB_DEBUG);
   operationTree = root;
+#ifdef NDBD_SPJ_MULTIFRAG_SCAN
+  definedQuery = ndbQueryBuilder->prepare(sessionImpl->ndb);
+#else
   definedQuery = ndbQueryBuilder->prepare();
+#endif
 }
 
 int QueryOperation::prepareAndExecute() {

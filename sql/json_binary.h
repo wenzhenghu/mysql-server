@@ -1,20 +1,27 @@
 #ifndef JSON_BINARY_INCLUDED
 #define JSON_BINARY_INCLUDED
 
-/* Copyright (c) 2015, 2017, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2015, 2020, Oracle and/or its affiliates.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software Foundation,
-   51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 /**
   @file
@@ -134,17 +141,33 @@
 */
 
 #include <stddef.h>
-#include <new>
+#include <cassert>
+#include <cstdint>
+#include <string>
 
-#include "binary_log_types.h"                   // enum_field_types
-#include "my_inttypes.h"
+/*
+  This file is part of our public interface for the 'json_binary' library.
+  This means that #includes of MySQL headers here should be limited to
+  files that are INSTALLed.
+*/
+#include "field_types.h"  // enum_field_types
 
+#ifdef MYSQL_SERVER
+class Field_json;
 class Json_dom;
-class String;
+class Json_wrapper;
 class THD;
+#endif
 
-namespace json_binary
-{
+class String;
+
+#if defined(WIN32) && defined(EXPORT_JSON_FUNCTIONS)
+#define EXPORT_JSON_FUNCTION __declspec(dllexport)
+#else
+#define EXPORT_JSON_FUNCTION
+#endif
+
+namespace json_binary {
 
 /**
   Serialize the JSON document represented by dom to binary format in
@@ -157,7 +180,9 @@ namespace json_binary
   @retval false on success
   @retval true if an error occurred
 */
+#ifdef MYSQL_SERVER
 bool serialize(const THD *thd, const Json_dom *dom, String *dest);
+#endif
 
 /**
   Class used for reading JSON values that are stored in the binary
@@ -167,80 +192,242 @@ bool serialize(const THD *thd, const Json_dom *dom, String *dest);
   Object members can be looked up in O(log n) time using the lookup()
   function.
 */
-class Value
-{
-public:
-  enum enum_type : uint8
-  {
-    OBJECT, ARRAY, STRING, INT, UINT, DOUBLE,
-    LITERAL_NULL, LITERAL_TRUE, LITERAL_FALSE,
+class Value {
+ public:
+  enum enum_type : uint8_t {
+    OBJECT,
+    ARRAY,
+    STRING,
+    INT,
+    UINT,
+    DOUBLE,
+    LITERAL_NULL,
+    LITERAL_TRUE,
+    LITERAL_FALSE,
     OPAQUE,
     ERROR /* Not really a type. Used to signal that an
              error was detected. */
   };
+
   /**
     Does this value, and all of its members, represent a valid JSON
     value?
   */
+  EXPORT_JSON_FUNCTION
   bool is_valid() const;
+
+  EXPORT_JSON_FUNCTION
   enum_type type() const { return m_type; }
-  const char *get_data() const;
-  uint32 get_data_length() const;
-  int64 get_int64() const;
-  uint64 get_uint64() const;
-  double get_double() const;
-  uint32 element_count() const;
+
+  /// Does this value use the large storage format?
+  EXPORT_JSON_FUNCTION
+  bool large_format() const { return m_large; }
+
+  /**
+    Get a pointer to the beginning of the STRING or OPAQUE data
+    represented by this instance.
+  */
+  EXPORT_JSON_FUNCTION
+  const char *get_data() const {
+    assert(m_type == STRING || m_type == OPAQUE);
+    return m_data;
+  }
+
+  /**
+    Get the length in bytes of the STRING or OPAQUE value represented by
+    this instance.
+  */
+  EXPORT_JSON_FUNCTION
+  uint32_t get_data_length() const {
+    assert(m_type == STRING || m_type == OPAQUE);
+    return m_length;
+  }
+
+  /** Get the value of an INT. */
+  EXPORT_JSON_FUNCTION
+  int64_t get_int64() const {
+    assert(m_type == INT);
+    return m_int_value;
+  }
+
+  /** Get the value of a UINT. */
+  EXPORT_JSON_FUNCTION
+  uint64_t get_uint64() const {
+    assert(m_type == UINT);
+    return static_cast<uint64_t>(m_int_value);
+  }
+
+  /** Get the value of a DOUBLE. */
+  EXPORT_JSON_FUNCTION
+  double get_double() const {
+    assert(m_type == DOUBLE);
+    return m_double_value;
+  }
+
+  /**
+    Get the number of elements in an array, or the number of members in
+    an object.
+  */
+  EXPORT_JSON_FUNCTION
+  uint32_t element_count() const {
+    assert(m_type == ARRAY || m_type == OBJECT);
+    return m_element_count;
+  }
+
+  /**
+    Get the MySQL field type of an opaque value. Identifies the type of
+    the value stored in the data portion of an opaque value.
+  */
+  EXPORT_JSON_FUNCTION
+  enum_field_types field_type() const {
+    assert(m_type == OPAQUE);
+    return m_field_type;
+  }
+
+  EXPORT_JSON_FUNCTION
   Value element(size_t pos) const;
+
+  EXPORT_JSON_FUNCTION
   Value key(size_t pos) const;
-  enum_field_types field_type() const;
-  Value lookup(const char *key, size_t len) const;
+
+  EXPORT_JSON_FUNCTION
+  Value lookup(const char *key, size_t length) const;
+
+  EXPORT_JSON_FUNCTION
+  Value lookup(const std::string &key) const {
+    return lookup(key.c_str(), key.length());
+  }
+
+  EXPORT_JSON_FUNCTION
+  size_t lookup_index(const char *key, size_t length) const;
+
+  EXPORT_JSON_FUNCTION
+  size_t lookup_index(const std::string &key) const {
+    return lookup_index(key.c_str(), key.length());
+  }
+
+  EXPORT_JSON_FUNCTION
   bool is_backed_by(const String *str) const;
+
+#ifdef MYSQL_SERVER
   bool raw_binary(const THD *thd, String *buf) const;
+  bool get_free_space(const THD *thd, size_t *space) const;
+  bool update_in_shadow(const Field_json *field, size_t pos,
+                        Json_wrapper *new_value, size_t data_offset,
+                        size_t data_length, const char *original,
+                        char *destination, bool *changed) const;
+  bool remove_in_shadow(const Field_json *field, size_t pos,
+                        const char *original, char *destination) const;
+#endif
+  EXPORT_JSON_FUNCTION
+  bool has_space(size_t pos, size_t needed, size_t *offset) const;
 
   /** Constructor for values that represent literals or errors. */
-  explicit Value(enum_type t);
+  EXPORT_JSON_FUNCTION
+  explicit Value(enum_type t) : m_data(nullptr), m_type(t) {
+    assert(t == LITERAL_NULL || t == LITERAL_TRUE || t == LITERAL_FALSE ||
+           t == ERROR);
+  }
+
   /** Constructor for values that represent ints or uints. */
-  explicit Value(enum_type t, int64 val);
+  EXPORT_JSON_FUNCTION
+  explicit Value(enum_type t, int64_t val) : m_int_value(val), m_type(t) {
+    assert(t == INT || t == UINT);
+  }
+
   /** Constructor for values that represent doubles. */
-  explicit Value(double val);
+  EXPORT_JSON_FUNCTION
+  explicit Value(double val) : m_double_value(val), m_type(DOUBLE) {}
+
   /** Constructor for values that represent strings. */
-  Value(const char *data, uint32 len);
+  EXPORT_JSON_FUNCTION
+  Value(const char *data, uint32_t len)
+      : m_data(data), m_length(len), m_type(STRING) {}
+
   /**
     Constructor for values that represent arrays or objects.
 
     @param t type
     @param data pointer to the start of the binary representation
-    @param element_count the number of elements or members in the value
     @param bytes the number of bytes in the binary representation of the value
+    @param element_count the number of elements or members in the value
     @param large true if the value should be stored in the large
     storage format with 4 byte offsets instead of 2 byte offsets
   */
-  Value(enum_type t, const char *data, uint32 element_count, uint32 bytes,
-        bool large);
-  /** Constructor for values that represent opaque data. */
-  Value(enum_field_types ft, const char *data, uint32 len);
-
-  /** Empty constructor. Produces a value that represents an error condition. */
-  Value() : Value(ERROR) {}
-
-  /** Assignment operator. */
-  Value &operator=(const Value &from)
-  {
-    if (this != &from)
-    {
-      // Copy the entire from value into this.
-      new (this) Value(from);
-    }
-    return *this;
+  EXPORT_JSON_FUNCTION
+  Value(enum_type t, const char *data, uint32_t bytes, uint32_t element_count,
+        bool large)
+      : m_data(data),
+        m_element_count(element_count),
+        m_length(bytes),
+        m_type(t),
+        m_large(large) {
+    assert(t == ARRAY || t == OBJECT);
   }
 
-private:
+  /** Constructor for values that represent opaque data. */
+  EXPORT_JSON_FUNCTION
+  Value(enum_field_types ft, const char *data, uint32_t len)
+      : m_data(data), m_length(len), m_field_type(ft), m_type(OPAQUE) {}
+
+  /** Empty constructor. Produces a value that represents an error condition. */
+  EXPORT_JSON_FUNCTION
+  Value() : Value(ERROR) {}
+
+  /** Is this value an array? */
+  EXPORT_JSON_FUNCTION
+  bool is_array() const { return m_type == ARRAY; }
+
+  /** Is this value an object? */
+  EXPORT_JSON_FUNCTION
+  bool is_object() const { return m_type == OBJECT; }
+
+  /**
+    Format the JSON value to an external JSON string in buffer in
+    the format of ISO/IEC 10646.
+
+    @param[in,out] buffer      the formatted string is appended, so make sure
+                               the length is set correctly before calling
+
+    @return false formatting went well, else true
+  */
+  EXPORT_JSON_FUNCTION
+  bool to_std_string(std::string *buffer) const;
+
+  /**
+    Format the JSON value to an external JSON string in buffer in the format of
+    ISO/IEC 10646. Add newlines and indentation for readability.
+
+    @param[in,out] buffer     the buffer that receives the formatted string
+                              (the string is appended, so make sure the length
+                              is set correctly before calling)
+
+    @retval false on success
+    @retval true on error
+  */
+  EXPORT_JSON_FUNCTION
+  bool to_pretty_std_string(std::string *buffer) const;
+
+  /**
+    Compare two Values
+    @note This function is limited to scalars only, for objects/arrays it
+    asserts. The main purpose is to separate old/new scalar values for updates
+    on multi-valued indexes.
+    @returns
+      -1  this < val
+       0  this == val
+       1  this > val
+  */
+#ifdef MYSQL_SERVER
+  int eq(const Value &val) const;
+#endif
+
+ private:
   /*
     Instances use only one of m_data, m_int_value and m_double_value,
     so keep them in a union to save space in memory.
   */
-  union
-  {
+  union {
     /**
       Pointer to the start of the binary representation of the value. Only
       used by STRING, OPAQUE, OBJECT and ARRAY.
@@ -251,32 +438,42 @@ private:
     */
     const char *m_data;
     /** The value if the type is INT or UINT. */
-    const int64 m_int_value;
+    int64_t m_int_value;
     /** The value if the type is DOUBLE. */
-    const double m_double_value;
+    double m_double_value;
   };
+
   /**
     Element count for arrays and objects. Unused for other types.
   */
-  const uint32 m_element_count;
+  uint32_t m_element_count;
+
   /**
     The full length (in bytes) of the binary representation of an array or
     object, or the length of a string or opaque value. Unused for other types.
   */
-  const uint32 m_length;
+  uint32_t m_length;
+
   /**
     The MySQL field type of the value, in case the type of the value is
     OPAQUE. Otherwise, it is unused.
   */
-  const enum_field_types m_field_type;
+  enum_field_types m_field_type;
+
   /** The JSON type of the value. */
-  const enum_type m_type;
+  enum_type m_type;
+
   /**
     True if an array or an object uses the large storage format with 4
     byte offsets instead of 2 byte offsets.
   */
-  const bool m_large;
+  bool m_large;
 
+  size_t key_entry_offset(size_t pos) const;
+  size_t value_entry_offset(size_t pos) const;
+  bool first_value_offset(size_t *offset) const;
+  bool element_offsets(size_t pos, size_t *start, size_t *end,
+                       bool *inlined) const;
 };
 
 /**
@@ -286,8 +483,51 @@ private:
   @param[in] len   the size of the binary document in bytes
   @return an object that allows access to the contents of the document
 */
+EXPORT_JSON_FUNCTION
 Value parse_binary(const char *data, size_t len);
 
-}
+/**
+  How much space is needed for a JSON value when it is stored in the binary
+  format.
 
-#endif  /* JSON_BINARY_INCLUDED */
+  @param[in]  thd     THD handle
+  @param[in]  value   the JSON value to add to a document
+  @param[in]  large   true if the large storage format is used
+  @param[out] needed  gets set to the amount of bytes needed to store
+                      the value
+  @retval false if successful
+  @retval true if an error occurred while calculating the needed space
+*/
+#ifdef MYSQL_SERVER
+bool space_needed(const THD *thd, const Json_wrapper *value, bool large,
+                  size_t *needed);
+#endif
+
+/**
+  Apply a function to every value in a JSON document. That is, apply
+  the function to the root node of the JSON document, to all its
+  children, grandchildren and so on.
+
+  @param  value the root of the JSON document
+  @param  func  the function to apply
+  @retval true  if the processing was stopped
+  @retval false if the processing was completed
+
+  @tparam Func a functor type that takes a #json_binary::Value
+  parameter and returns a `bool` which is `true` if the processing
+  should stop or `false` if the processing should continue with the
+  next node
+*/
+template <typename Func>
+bool for_each_node(const Value &value, const Func &func) {
+  if (func(value)) return true;
+
+  if (value.is_array() || value.is_object())
+    for (size_t i = 0, size = value.element_count(); i < size; ++i)
+      if (for_each_node(value.element(i), func)) return true;
+
+  return false;
+}
+}  // namespace json_binary
+
+#endif /* JSON_BINARY_INCLUDED */

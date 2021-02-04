@@ -1,17 +1,24 @@
-/* Copyright (c) 2017 Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2016, 2017, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA */
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 #ifndef SQL_DD_SHOW_H
 #define SQL_DD_SHOW_H
@@ -25,8 +32,7 @@ struct YYLTYPE;
 typedef YYLTYPE POS;
 
 namespace dd {
-  namespace info_schema {
-
+namespace info_schema {
 
 /**
   Build a substitute query for SHOW CHARSETS.
@@ -55,9 +61,9 @@ namespace dd {
 
   @returns pointer to SELECT_LEX on success, NULL otherwise.
 */
-SELECT_LEX*
-build_show_character_set_query(const POS &pos, THD *thd,
-                               const String *wild, Item *where_cond);
+SELECT_LEX *build_show_character_set_query(const POS &pos, THD *thd,
+                                           const String *wild,
+                                           Item *where_cond);
 
 /**
   Build a substitute query for SHOW COLLATION.
@@ -88,9 +94,8 @@ build_show_character_set_query(const POS &pos, THD *thd,
 
   @returns pointer to SELECT_LEX on success, NULL otherwise.
 */
-SELECT_LEX*
-build_show_collation_query(const POS &pos, THD *thd,
-                           const String *wild, Item *where_cond);
+SELECT_LEX *build_show_collation_query(const POS &pos, THD *thd,
+                                       const String *wild, Item *where_cond);
 
 /**
   Build a substitute query for SHOW DATABASES.
@@ -116,11 +121,8 @@ build_show_collation_query(const POS &pos, THD *thd,
 
   @returns pointer to SELECT_LEX on success, NULL otherwise.
 */
-SELECT_LEX*
-build_show_databases_query(const POS &pos,
-                           THD *thd,
-                           String *wild,
-                           Item *where_cond);
+SELECT_LEX *build_show_databases_query(const POS &pos, THD *thd, String *wild,
+                                       Item *where_cond);
 
 /**
   Build a substitute query for SHOW TABLES / TABLE STATUS.
@@ -198,12 +200,9 @@ build_show_databases_query(const POS &pos,
 
   @returns pointer to SELECT_LEX on success, NULL otherwise.
 */
-SELECT_LEX*
-build_show_tables_query(const POS &pos,
-                        THD *thd,
-                        String *wild,
-                        Item *where_cond,
-                        bool include_status_fields);
+SELECT_LEX *build_show_tables_query(const POS &pos, THD *thd, String *wild,
+                                    Item *where_cond,
+                                    bool include_status_fields);
 
 /**
   Build a substitute query for SHOW COLUMNS/FIELDS OR DESCRIBE.
@@ -262,12 +261,9 @@ build_show_tables_query(const POS &pos,
 
   @returns pointer to SELECT_LEX on success, NULL otherwise.
 */
-SELECT_LEX*
-build_show_columns_query(const POS &pos,
-                         THD *thd,
-                         Table_ident *table_ident,
-                         const String *wild,
-                         Item *where_cond);
+SELECT_LEX *build_show_columns_query(const POS &pos, THD *thd,
+                                     Table_ident *table_ident,
+                                     const String *wild, Item *where_cond);
 
 /**
   Build a substitute query for SHOW INDEX|KEYS|INDEXES
@@ -331,12 +327,8 @@ build_show_columns_query(const POS &pos,
 
   @returns pointer to SELECT_LEX on success, NULL otherwise.
 */
-SELECT_LEX*
-build_show_keys_query(const POS &pos,
-                      THD *thd,
-                      Table_ident *table_ident,
-                      Item *where_cond);
-
+SELECT_LEX *build_show_keys_query(const POS &pos, THD *thd,
+                                  Table_ident *table_ident, Item *where_cond);
 
 /**
   Build a substitute query for SHOW TRIGGERS
@@ -391,12 +383,8 @@ build_show_keys_query(const POS &pos,
 
   @returns pointer to SELECT_LEX on success, NULL otherwise.
 */
-SELECT_LEX*
-build_show_triggers_query(const POS &pos,
-                          THD *thd,
-                          String *wild,
-                          Item *where_cond);
-
+SELECT_LEX *build_show_triggers_query(const POS &pos, THD *thd, String *wild,
+                                      Item *where_cond);
 
 /**
   Build a substitute query for SHOW PROCEDURE/FUNCTION STATUS
@@ -449,12 +437,8 @@ build_show_triggers_query(const POS &pos,
 
   @returns pointer to SELECT_LEX on success, NULL otherwise.
 */
-SELECT_LEX*
-build_show_procedures_query(const POS &pos,
-                            THD *thd,
-                            String *wild,
-                            Item *where_cond);
-
+SELECT_LEX *build_show_procedures_query(const POS &pos, THD *thd, String *wild,
+                                        Item *where_cond);
 
 /**
   Build a substitute query for SHOW EVENTS
@@ -515,13 +499,10 @@ build_show_procedures_query(const POS &pos,
 
   @returns pointer to SELECT_LEX on success, NULL otherwise.
 */
-SELECT_LEX*
-build_show_events_query(const POS &pos,
-                        THD *thd,
-                        String *wild,
-                        Item *where_cond);
+SELECT_LEX *build_show_events_query(const POS &pos, THD *thd, String *wild,
+                                    Item *where_cond);
 
-} // namespace info_schema
-} // namespace dd
+}  // namespace info_schema
+}  // namespace dd
 
 #endif /* SQL_DD_SHOW_H */

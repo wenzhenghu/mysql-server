@@ -1,17 +1,24 @@
-/* Copyright (c) 2008, 2017, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2008, 2020, Oracle and/or its affiliates. All rights reserved.
 
   This program is free software; you can redistribute it and/or modify
-  it under the terms of the GNU General Public License as published by
-  the Free Software Foundation; version 2 of the License.
+  it under the terms of the GNU General Public License, version 2.0,
+  as published by the Free Software Foundation.
+
+  This program is also distributed with certain software (including
+  but not limited to OpenSSL) that is licensed under separate terms,
+  as designated in a particular file or component or in included license
+  documentation.  The authors of MySQL hereby grant you an additional
+  permission to link the program and your derivative works with the
+  separately licensed software that they have included with MySQL.
 
   This program is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  GNU General Public License for more details.
+  GNU General Public License, version 2.0, for more details.
 
   You should have received a copy of the GNU General Public License
-  along with this program; if not, write to the Free Software Foundation,
-  51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
+  along with this program; if not, write to the Free Software
+  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 /**
   @file include/mysql/psi/mysql_file.h
@@ -32,17 +39,24 @@
 #ifndef MYSQL_FILE_H
 #define MYSQL_FILE_H
 
-/* For MY_STAT */
-#include <my_dir.h>
-/* For my_chsize */
-#include <my_sys.h>
 /* For strlen() */
 #include <string.h>
 
+/* HAVE_PSI_*_INTERFACE */
+#include "my_psi_config.h"  // IWYU pragma: keep
+
 #include "my_dbug.h"
+/* For MY_STAT */
+#include "my_dir.h"
+/* For my_chsize */
+#include "my_sys.h"
 #include "mysql/psi/psi_file.h"
 #include "mysql/service_mysql_alloc.h"
-#include "pfs_file_provider.h"
+
+#if defined(MYSQL_SERVER) || defined(PFS_DIRECT_CALL)
+/* PSI_FILE_CALL() as direct call. */
+#include "pfs_file_provider.h"  // IWYU pragma: keep
+#endif
 
 #ifndef PSI_FILE_CALL
 #define PSI_FILE_CALL(M) psi_file_service->M
@@ -273,16 +287,16 @@
 #endif
 
 /**
-  @def mysql_file_create_temp(K, T, D, P, M, F)
+  @def mysql_file_create_temp(K, T, D, P, M, U, F)
   Instrumented create_temp_file.
   @c mysql_file_create_temp is a replacement for @c create_temp_file.
 */
 #ifdef HAVE_PSI_FILE_INTERFACE
-#define mysql_file_create_temp(K, T, D, P, M, F) \
-  inline_mysql_file_create_temp(K, __FILE__, __LINE__, T, D, P, M, F)
+#define mysql_file_create_temp(K, T, D, P, M, U, F) \
+  inline_mysql_file_create_temp(K, __FILE__, __LINE__, T, D, P, M, U, F)
 #else
-#define mysql_file_create_temp(K, T, D, P, M, F) \
-  inline_mysql_file_create_temp(T, D, P, M, F)
+#define mysql_file_create_temp(K, T, D, P, M, U, F) \
+  inline_mysql_file_create_temp(T, D, P, M, U, F)
 #endif
 
 /**
@@ -412,9 +426,9 @@
   for @c my_create_with_symlink.
 */
 #ifdef HAVE_PSI_FILE_INTERFACE
-#define mysql_file_create_with_symlink(K, P1, P2, P3, P4, P5) \
-  inline_mysql_file_create_with_symlink(                      \
-    K, __FILE__, __LINE__, P1, P2, P3, P4, P5)
+#define mysql_file_create_with_symlink(K, P1, P2, P3, P4, P5)                  \
+  inline_mysql_file_create_with_symlink(K, __FILE__, __LINE__, P1, P2, P3, P4, \
+                                        P5)
 #else
 #define mysql_file_create_with_symlink(K, P1, P2, P3, P4, P5) \
   inline_mysql_file_create_with_symlink(P1, P2, P3, P4, P5)
@@ -462,10 +476,10 @@
 
 /**
   An instrumented FILE structure.
-  @sa MYSQL_FILE
+  @c MYSQL_FILE is a drop-in replacement for @c FILE.
+  @sa mysql_file_open
 */
-struct st_mysql_file
-{
+struct MYSQL_FILE {
   /** The real file. */
   FILE *m_file;
   /**
@@ -476,47 +490,31 @@ struct st_mysql_file
   struct PSI_file *m_psi;
 };
 
-/**
-  Type of an instrumented file.
-  @c MYSQL_FILE is a drop-in replacement for @c FILE.
-  @sa mysql_file_open
-*/
-typedef struct st_mysql_file MYSQL_FILE;
-
-static inline void
-inline_mysql_file_register(
+static inline void inline_mysql_file_register(
 #ifdef HAVE_PSI_FILE_INTERFACE
-  const char *category, PSI_file_info *info, int count
+    const char *category, PSI_file_info *info, int count
 #else
-  const char *category MY_ATTRIBUTE((unused)),
-  void *info MY_ATTRIBUTE((unused)),
-  int count MY_ATTRIBUTE((unused))
+    const char *category MY_ATTRIBUTE((unused)),
+    void *info MY_ATTRIBUTE((unused)), int count MY_ATTRIBUTE((unused))
 #endif
-  )
-{
+) {
 #ifdef HAVE_PSI_FILE_INTERFACE
   PSI_FILE_CALL(register_file)(category, info, count);
 #endif
 }
 
-static inline char *
-inline_mysql_file_fgets(
+static inline char *inline_mysql_file_fgets(
 #ifdef HAVE_PSI_FILE_INTERFACE
-  const char *src_file,
-  uint src_line,
+    const char *src_file, uint src_line,
 #endif
-  char *str,
-  int size,
-  MYSQL_FILE *file)
-{
+    char *str, int size, MYSQL_FILE *file) {
   char *result;
 #ifdef HAVE_PSI_FILE_INTERFACE
   struct PSI_file_locker *locker;
   PSI_file_locker_state state;
-  locker = PSI_FILE_CALL(get_thread_file_stream_locker)(
-    &state, file->m_psi, PSI_FILE_READ);
-  if (likely(locker != NULL))
-  {
+  locker = PSI_FILE_CALL(get_thread_file_stream_locker)(&state, file->m_psi,
+                                                        PSI_FILE_READ);
+  if (likely(locker != nullptr)) {
     PSI_FILE_CALL(start_file_wait)(locker, (size_t)size, src_file, src_line);
     result = fgets(str, size, file->m_file);
     PSI_FILE_CALL(end_file_wait)(locker, result ? strlen(result) : 0);
@@ -528,22 +526,18 @@ inline_mysql_file_fgets(
   return result;
 }
 
-static inline int
-inline_mysql_file_fgetc(
+static inline int inline_mysql_file_fgetc(
 #ifdef HAVE_PSI_FILE_INTERFACE
-  const char *src_file,
-  uint src_line,
+    const char *src_file, uint src_line,
 #endif
-  MYSQL_FILE *file)
-{
+    MYSQL_FILE *file) {
   int result;
 #ifdef HAVE_PSI_FILE_INTERFACE
   struct PSI_file_locker *locker;
   PSI_file_locker_state state;
-  locker = PSI_FILE_CALL(get_thread_file_stream_locker)(
-    &state, file->m_psi, PSI_FILE_READ);
-  if (likely(locker != NULL))
-  {
+  locker = PSI_FILE_CALL(get_thread_file_stream_locker)(&state, file->m_psi,
+                                                        PSI_FILE_READ);
+  if (likely(locker != nullptr)) {
     PSI_FILE_CALL(start_file_wait)(locker, (size_t)1, src_file, src_line);
     result = fgetc(file->m_file);
     PSI_FILE_CALL(end_file_wait)(locker, (size_t)1);
@@ -555,24 +549,19 @@ inline_mysql_file_fgetc(
   return result;
 }
 
-static inline int
-inline_mysql_file_fputs(
+static inline int inline_mysql_file_fputs(
 #ifdef HAVE_PSI_FILE_INTERFACE
-  const char *src_file,
-  uint src_line,
+    const char *src_file, uint src_line,
 #endif
-  const char *str,
-  MYSQL_FILE *file)
-{
+    const char *str, MYSQL_FILE *file) {
   int result;
 #ifdef HAVE_PSI_FILE_INTERFACE
   struct PSI_file_locker *locker;
   PSI_file_locker_state state;
   size_t bytes;
-  locker = PSI_FILE_CALL(get_thread_file_stream_locker)(
-    &state, file->m_psi, PSI_FILE_WRITE);
-  if (likely(locker != NULL))
-  {
+  locker = PSI_FILE_CALL(get_thread_file_stream_locker)(&state, file->m_psi,
+                                                        PSI_FILE_WRITE);
+  if (likely(locker != nullptr)) {
     bytes = str ? strlen(str) : 0;
     PSI_FILE_CALL(start_file_wait)(locker, bytes, src_file, src_line);
     result = fputs(str, file->m_file);
@@ -585,23 +574,18 @@ inline_mysql_file_fputs(
   return result;
 }
 
-static inline int
-inline_mysql_file_fputc(
+static inline int inline_mysql_file_fputc(
 #ifdef HAVE_PSI_FILE_INTERFACE
-  const char *src_file,
-  uint src_line,
+    const char *src_file, uint src_line,
 #endif
-  char c,
-  MYSQL_FILE *file)
-{
+    char c, MYSQL_FILE *file) {
   int result;
 #ifdef HAVE_PSI_FILE_INTERFACE
   struct PSI_file_locker *locker;
   PSI_file_locker_state state;
-  locker = PSI_FILE_CALL(get_thread_file_stream_locker)(
-    &state, file->m_psi, PSI_FILE_WRITE);
-  if (likely(locker != NULL))
-  {
+  locker = PSI_FILE_CALL(get_thread_file_stream_locker)(&state, file->m_psi,
+                                                        PSI_FILE_WRITE);
+  if (likely(locker != nullptr)) {
     PSI_FILE_CALL(start_file_wait)(locker, (size_t)1, src_file, src_line);
     result = fputc(c, file->m_file);
     PSI_FILE_CALL(end_file_wait)(locker, (size_t)1);
@@ -614,13 +598,11 @@ inline_mysql_file_fputc(
 }
 
 static inline int inline_mysql_file_fprintf(MYSQL_FILE *file,
-                                            const char *format,
-                                            ...)
-  MY_ATTRIBUTE((format(printf, 2, 3)));
+                                            const char *format, ...)
+    MY_ATTRIBUTE((format(printf, 2, 3)));
 
-static inline int
-inline_mysql_file_fprintf(MYSQL_FILE *file, const char *format, ...)
-{
+static inline int inline_mysql_file_fprintf(MYSQL_FILE *file,
+                                            const char *format, ...) {
   /*
     TODO: figure out how to pass src_file and src_line from the caller.
   */
@@ -629,10 +611,9 @@ inline_mysql_file_fprintf(MYSQL_FILE *file, const char *format, ...)
 #ifdef HAVE_PSI_FILE_INTERFACE
   struct PSI_file_locker *locker;
   PSI_file_locker_state state;
-  locker = PSI_FILE_CALL(get_thread_file_stream_locker)(
-    &state, file->m_psi, PSI_FILE_WRITE);
-  if (likely(locker != NULL))
-  {
+  locker = PSI_FILE_CALL(get_thread_file_stream_locker)(&state, file->m_psi,
+                                                        PSI_FILE_WRITE);
+  if (likely(locker != nullptr)) {
     PSI_FILE_CALL(start_file_wait)(locker, (size_t)0, __FILE__, __LINE__);
     va_start(args, format);
     result = vfprintf(file->m_file, format, args);
@@ -650,36 +631,27 @@ inline_mysql_file_fprintf(MYSQL_FILE *file, const char *format, ...)
 
 static inline int inline_mysql_file_vfprintf(
 #ifdef HAVE_PSI_FILE_INTERFACE
-  const char *src_file,
-  uint src_line,
+    const char *src_file, uint src_line,
 #endif
-  MYSQL_FILE *file,
-  const char *format,
-  va_list args)
+    MYSQL_FILE *file, const char *format, va_list args)
 #ifdef HAVE_PSI_FILE_INTERFACE
-  MY_ATTRIBUTE((format(printf, 4, 0)));
+    MY_ATTRIBUTE((format(printf, 4, 0)));
 #else
-  MY_ATTRIBUTE((format(printf, 2, 0)));
+    MY_ATTRIBUTE((format(printf, 2, 0)));
 #endif
 
-static inline int
-inline_mysql_file_vfprintf(
+static inline int inline_mysql_file_vfprintf(
 #ifdef HAVE_PSI_FILE_INTERFACE
-  const char *src_file,
-  uint src_line,
+    const char *src_file, uint src_line,
 #endif
-  MYSQL_FILE *file,
-  const char *format,
-  va_list args)
-{
+    MYSQL_FILE *file, const char *format, va_list args) {
   int result;
 #ifdef HAVE_PSI_FILE_INTERFACE
   struct PSI_file_locker *locker;
   PSI_file_locker_state state;
-  locker = PSI_FILE_CALL(get_thread_file_stream_locker)(
-    &state, file->m_psi, PSI_FILE_WRITE);
-  if (likely(locker != NULL))
-  {
+  locker = PSI_FILE_CALL(get_thread_file_stream_locker)(&state, file->m_psi,
+                                                        PSI_FILE_WRITE);
+  if (likely(locker != nullptr)) {
     PSI_FILE_CALL(start_file_wait)(locker, (size_t)0, src_file, src_line);
     result = vfprintf(file->m_file, format, args);
     PSI_FILE_CALL(end_file_wait)(locker, (size_t)result);
@@ -691,22 +663,18 @@ inline_mysql_file_vfprintf(
   return result;
 }
 
-static inline int
-inline_mysql_file_fflush(
+static inline int inline_mysql_file_fflush(
 #ifdef HAVE_PSI_FILE_INTERFACE
-  const char *src_file,
-  uint src_line,
+    const char *src_file, uint src_line,
 #endif
-  MYSQL_FILE *file)
-{
+    MYSQL_FILE *file) {
   int result;
 #ifdef HAVE_PSI_FILE_INTERFACE
   struct PSI_file_locker *locker;
   PSI_file_locker_state state;
-  locker = PSI_FILE_CALL(get_thread_file_stream_locker)(
-    &state, file->m_psi, PSI_FILE_FLUSH);
-  if (likely(locker != NULL))
-  {
+  locker = PSI_FILE_CALL(get_thread_file_stream_locker)(&state, file->m_psi,
+                                                        PSI_FILE_FLUSH);
+  if (likely(locker != nullptr)) {
     PSI_FILE_CALL(start_file_wait)(locker, (size_t)0, src_file, src_line);
     result = fflush(file->m_file);
     PSI_FILE_CALL(end_file_wait)(locker, (size_t)0);
@@ -718,30 +686,23 @@ inline_mysql_file_fflush(
   return result;
 }
 
-static inline int
-inline_mysql_file_feof(MYSQL_FILE *file)
-{
+static inline int inline_mysql_file_feof(MYSQL_FILE *file) {
   /* Not instrumented, there is no wait involved */
   return feof(file->m_file);
 }
 
-static inline int
-inline_mysql_file_fstat(
+static inline int inline_mysql_file_fstat(
 #ifdef HAVE_PSI_FILE_INTERFACE
-  const char *src_file,
-  uint src_line,
+    const char *src_file, uint src_line,
 #endif
-  int filenr,
-  MY_STAT *stat_area)
-{
+    int filenr, MY_STAT *stat_area) {
   int result;
 #ifdef HAVE_PSI_FILE_INTERFACE
   struct PSI_file_locker *locker;
   PSI_file_locker_state state;
-  locker = PSI_FILE_CALL(get_thread_file_descriptor_locker)(
-    &state, filenr, PSI_FILE_FSTAT);
-  if (likely(locker != NULL))
-  {
+  locker = PSI_FILE_CALL(get_thread_file_descriptor_locker)(&state, filenr,
+                                                            PSI_FILE_FSTAT);
+  if (likely(locker != nullptr)) {
     PSI_FILE_CALL(start_file_wait)(locker, (size_t)0, src_file, src_line);
     result = my_fstat(filenr, stat_area);
     PSI_FILE_CALL(end_file_wait)(locker, (size_t)0);
@@ -753,25 +714,18 @@ inline_mysql_file_fstat(
   return result;
 }
 
-static inline MY_STAT *
-inline_mysql_file_stat(
+static inline MY_STAT *inline_mysql_file_stat(
 #ifdef HAVE_PSI_FILE_INTERFACE
-  PSI_file_key key,
-  const char *src_file,
-  uint src_line,
+    PSI_file_key key, const char *src_file, uint src_line,
 #endif
-  const char *path,
-  MY_STAT *stat_area,
-  myf flags)
-{
+    const char *path, MY_STAT *stat_area, myf flags) {
   MY_STAT *result;
 #ifdef HAVE_PSI_FILE_INTERFACE
   struct PSI_file_locker *locker;
   PSI_file_locker_state state;
   locker = PSI_FILE_CALL(get_thread_file_name_locker)(
-    &state, key, PSI_FILE_STAT, path, &locker);
-  if (likely(locker != NULL))
-  {
+      &state, key, PSI_FILE_STAT, path, &locker);
+  if (likely(locker != nullptr)) {
     PSI_FILE_CALL(start_file_open_wait)(locker, src_file, src_line);
     result = my_stat(path, stat_area, flags);
     PSI_FILE_CALL(end_file_open_wait)(locker, result);
@@ -783,25 +737,18 @@ inline_mysql_file_stat(
   return result;
 }
 
-static inline int
-inline_mysql_file_chsize(
+static inline int inline_mysql_file_chsize(
 #ifdef HAVE_PSI_FILE_INTERFACE
-  const char *src_file,
-  uint src_line,
+    const char *src_file, uint src_line,
 #endif
-  File file,
-  my_off_t newlength,
-  int filler,
-  myf flags)
-{
+    File file, my_off_t newlength, int filler, myf flags) {
   int result;
 #ifdef HAVE_PSI_FILE_INTERFACE
   struct PSI_file_locker *locker;
   PSI_file_locker_state state;
-  locker = PSI_FILE_CALL(get_thread_file_descriptor_locker)(
-    &state, file, PSI_FILE_CHSIZE);
-  if (likely(locker != NULL))
-  {
+  locker = PSI_FILE_CALL(get_thread_file_descriptor_locker)(&state, file,
+                                                            PSI_FILE_CHSIZE);
+  if (likely(locker != nullptr)) {
     PSI_FILE_CALL(start_file_wait)
     (locker, (size_t)newlength, src_file, src_line);
     result = my_chsize(file, newlength, filler, flags);
@@ -814,72 +761,56 @@ inline_mysql_file_chsize(
   return result;
 }
 
-static inline MYSQL_FILE *
-inline_mysql_file_fopen(
+static inline MYSQL_FILE *inline_mysql_file_fopen(
 #ifdef HAVE_PSI_FILE_INTERFACE
-  PSI_file_key key,
-  const char *src_file,
-  uint src_line,
+    PSI_file_key key, const char *src_file, uint src_line,
 #endif
-  const char *filename,
-  int flags,
-  myf myFlags)
-{
+    const char *filename, int flags, myf myFlags) {
   MYSQL_FILE *that;
-  that = (MYSQL_FILE *)my_malloc(
-    PSI_NOT_INSTRUMENTED, sizeof(MYSQL_FILE), MYF(MY_WME));
-  if (likely(that != NULL))
-  {
+  that = (MYSQL_FILE *)my_malloc(PSI_NOT_INSTRUMENTED, sizeof(MYSQL_FILE),
+                                 MYF(MY_WME));
+  if (likely(that != nullptr)) {
 #ifdef HAVE_PSI_FILE_INTERFACE
     struct PSI_file_locker *locker;
     PSI_file_locker_state state;
     locker = PSI_FILE_CALL(get_thread_file_name_locker)(
-      &state, key, PSI_FILE_STREAM_OPEN, filename, that);
-    if (likely(locker != NULL))
-    {
+        &state, key, PSI_FILE_STREAM_OPEN, filename, that);
+    if (likely(locker != nullptr)) {
       PSI_FILE_CALL(start_file_open_wait)
       (locker, src_file, src_line);
       that->m_file = my_fopen(filename, flags, myFlags);
       that->m_psi = PSI_FILE_CALL(end_file_open_wait)(locker, that->m_file);
-      if (unlikely(that->m_file == NULL))
-      {
+      if (unlikely(that->m_file == nullptr)) {
         my_free(that);
-        return NULL;
+        return nullptr;
       }
       return that;
     }
 #endif
 
-    that->m_psi = NULL;
+    that->m_psi = nullptr;
     that->m_file = my_fopen(filename, flags, myFlags);
-    if (unlikely(that->m_file == NULL))
-    {
+    if (unlikely(that->m_file == nullptr)) {
       my_free(that);
-      return NULL;
+      return nullptr;
     }
   }
   return that;
 }
 
-static inline int
-inline_mysql_file_fclose(
+static inline int inline_mysql_file_fclose(
 #ifdef HAVE_PSI_FILE_INTERFACE
-  const char *src_file,
-  uint src_line,
+    const char *src_file, uint src_line,
 #endif
-  MYSQL_FILE *file,
-  myf flags)
-{
+    MYSQL_FILE *file, myf flags) {
   int result = 0;
-  if (likely(file != NULL))
-  {
+  if (likely(file != nullptr)) {
 #ifdef HAVE_PSI_FILE_INTERFACE
     struct PSI_file_locker *locker;
     PSI_file_locker_state state;
     locker = PSI_FILE_CALL(get_thread_file_stream_locker)(
-      &state, file->m_psi, PSI_FILE_STREAM_CLOSE);
-    if (likely(locker != NULL))
-    {
+        &state, file->m_psi, PSI_FILE_STREAM_CLOSE);
+    if (likely(locker != nullptr)) {
       PSI_FILE_CALL(start_file_close_wait)(locker, src_file, src_line);
       result = my_fclose(file->m_file, flags);
       PSI_FILE_CALL(end_file_close_wait)(locker, result);
@@ -894,34 +825,24 @@ inline_mysql_file_fclose(
   return result;
 }
 
-static inline size_t
-inline_mysql_file_fread(
+static inline size_t inline_mysql_file_fread(
 #ifdef HAVE_PSI_FILE_INTERFACE
-  const char *src_file,
-  uint src_line,
+    const char *src_file, uint src_line,
 #endif
-  MYSQL_FILE *file,
-  uchar *buffer,
-  size_t count,
-  myf flags)
-{
+    MYSQL_FILE *file, uchar *buffer, size_t count, myf flags) {
   size_t result;
 #ifdef HAVE_PSI_FILE_INTERFACE
   struct PSI_file_locker *locker;
   PSI_file_locker_state state;
   size_t bytes_read;
-  locker = PSI_FILE_CALL(get_thread_file_stream_locker)(
-    &state, file->m_psi, PSI_FILE_READ);
-  if (likely(locker != NULL))
-  {
+  locker = PSI_FILE_CALL(get_thread_file_stream_locker)(&state, file->m_psi,
+                                                        PSI_FILE_READ);
+  if (likely(locker != nullptr)) {
     PSI_FILE_CALL(start_file_wait)(locker, count, src_file, src_line);
     result = my_fread(file->m_file, buffer, count, flags);
-    if (flags & (MY_NABP | MY_FNABP))
-    {
+    if (flags & (MY_NABP | MY_FNABP)) {
       bytes_read = (result == 0) ? count : 0;
-    }
-    else
-    {
+    } else {
       bytes_read = (result != MY_FILE_ERROR) ? result : 0;
     }
     PSI_FILE_CALL(end_file_wait)(locker, bytes_read);
@@ -933,34 +854,24 @@ inline_mysql_file_fread(
   return result;
 }
 
-static inline size_t
-inline_mysql_file_fwrite(
+static inline size_t inline_mysql_file_fwrite(
 #ifdef HAVE_PSI_FILE_INTERFACE
-  const char *src_file,
-  uint src_line,
+    const char *src_file, uint src_line,
 #endif
-  MYSQL_FILE *file,
-  const uchar *buffer,
-  size_t count,
-  myf flags)
-{
+    MYSQL_FILE *file, const uchar *buffer, size_t count, myf flags) {
   size_t result;
 #ifdef HAVE_PSI_FILE_INTERFACE
   struct PSI_file_locker *locker;
   PSI_file_locker_state state;
   size_t bytes_written;
-  locker = PSI_FILE_CALL(get_thread_file_stream_locker)(
-    &state, file->m_psi, PSI_FILE_WRITE);
-  if (likely(locker != NULL))
-  {
+  locker = PSI_FILE_CALL(get_thread_file_stream_locker)(&state, file->m_psi,
+                                                        PSI_FILE_WRITE);
+  if (likely(locker != nullptr)) {
     PSI_FILE_CALL(start_file_wait)(locker, count, src_file, src_line);
     result = my_fwrite(file->m_file, buffer, count, flags);
-    if (flags & (MY_NABP | MY_FNABP))
-    {
+    if (flags & (MY_NABP | MY_FNABP)) {
       bytes_written = (result == 0) ? count : 0;
-    }
-    else
-    {
+    } else {
       bytes_written = (result != MY_FILE_ERROR) ? result : 0;
     }
     PSI_FILE_CALL(end_file_wait)(locker, bytes_written);
@@ -972,24 +883,18 @@ inline_mysql_file_fwrite(
   return result;
 }
 
-static inline my_off_t
-inline_mysql_file_fseek(
+static inline my_off_t inline_mysql_file_fseek(
 #ifdef HAVE_PSI_FILE_INTERFACE
-  const char *src_file,
-  uint src_line,
+    const char *src_file, uint src_line,
 #endif
-  MYSQL_FILE *file,
-  my_off_t pos,
-  int whence)
-{
+    MYSQL_FILE *file, my_off_t pos, int whence) {
   my_off_t result;
 #ifdef HAVE_PSI_FILE_INTERFACE
   struct PSI_file_locker *locker;
   PSI_file_locker_state state;
-  locker = PSI_FILE_CALL(get_thread_file_stream_locker)(
-    &state, file->m_psi, PSI_FILE_SEEK);
-  if (likely(locker != NULL))
-  {
+  locker = PSI_FILE_CALL(get_thread_file_stream_locker)(&state, file->m_psi,
+                                                        PSI_FILE_SEEK);
+  if (likely(locker != nullptr)) {
     PSI_FILE_CALL(start_file_wait)(locker, (size_t)0, src_file, src_line);
     result = my_fseek(file->m_file, pos, whence);
     PSI_FILE_CALL(end_file_wait)(locker, (size_t)0);
@@ -1001,22 +906,18 @@ inline_mysql_file_fseek(
   return result;
 }
 
-static inline my_off_t
-inline_mysql_file_ftell(
+static inline my_off_t inline_mysql_file_ftell(
 #ifdef HAVE_PSI_FILE_INTERFACE
-  const char *src_file,
-  uint src_line,
+    const char *src_file, uint src_line,
 #endif
-  MYSQL_FILE *file)
-{
+    MYSQL_FILE *file) {
   my_off_t result;
 #ifdef HAVE_PSI_FILE_INTERFACE
   struct PSI_file_locker *locker;
   PSI_file_locker_state state;
-  locker = PSI_FILE_CALL(get_thread_file_stream_locker)(
-    &state, file->m_psi, PSI_FILE_TELL);
-  if (likely(locker != NULL))
-  {
+  locker = PSI_FILE_CALL(get_thread_file_stream_locker)(&state, file->m_psi,
+                                                        PSI_FILE_TELL);
+  if (likely(locker != nullptr)) {
     PSI_FILE_CALL(start_file_wait)(locker, (size_t)0, src_file, src_line);
     result = my_ftell(file->m_file);
     PSI_FILE_CALL(end_file_wait)(locker, (size_t)0);
@@ -1028,26 +929,18 @@ inline_mysql_file_ftell(
   return result;
 }
 
-static inline File
-inline_mysql_file_create(
+static inline File inline_mysql_file_create(
 #ifdef HAVE_PSI_FILE_INTERFACE
-  PSI_file_key key,
-  const char *src_file,
-  uint src_line,
+    PSI_file_key key, const char *src_file, uint src_line,
 #endif
-  const char *filename,
-  int create_flags,
-  int access_flags,
-  myf myFlags)
-{
+    const char *filename, int create_flags, int access_flags, myf myFlags) {
   File file;
 #ifdef HAVE_PSI_FILE_INTERFACE
   struct PSI_file_locker *locker;
   PSI_file_locker_state state;
   locker = PSI_FILE_CALL(get_thread_file_name_locker)(
-    &state, key, PSI_FILE_CREATE, filename, &locker);
-  if (likely(locker != NULL))
-  {
+      &state, key, PSI_FILE_CREATE, filename, &locker);
+  if (likely(locker != nullptr)) {
     PSI_FILE_CALL(start_file_open_wait)(locker, src_file, src_line);
     file = my_create(filename, create_flags, access_flags, myFlags);
     PSI_FILE_CALL(end_file_open_wait_and_bind_to_descriptor)(locker, file);
@@ -1059,59 +952,44 @@ inline_mysql_file_create(
   return file;
 }
 
-static inline File
-inline_mysql_file_create_temp(
+static inline File inline_mysql_file_create_temp(
 #ifdef HAVE_PSI_FILE_INTERFACE
-  PSI_file_key key,
-  const char *src_file,
-  uint src_line,
+    PSI_file_key key, const char *src_file, uint src_line,
 #endif
-  char *to,
-  const char *dir,
-  const char *pfx,
-  int mode,
-  myf myFlags)
-{
+    char *to, const char *dir, const char *pfx, int mode,
+    UnlinkOrKeepFile unlink_or_keep, myf myFlags) {
   File file;
 #ifdef HAVE_PSI_FILE_INTERFACE
   struct PSI_file_locker *locker;
   PSI_file_locker_state state;
   locker = PSI_FILE_CALL(get_thread_file_name_locker)(
-    &state, key, PSI_FILE_CREATE, NULL, &locker);
-  if (likely(locker != NULL))
-  {
+      &state, key, PSI_FILE_CREATE, nullptr, &locker);
+  if (likely(locker != nullptr)) {
     PSI_FILE_CALL(start_file_open_wait)(locker, src_file, src_line);
     /* The file name is generated by create_temp_file(). */
-    file = create_temp_file(to, dir, pfx, mode, myFlags);
+    file = create_temp_file(to, dir, pfx, mode, unlink_or_keep, myFlags);
     PSI_FILE_CALL(end_temp_file_open_wait_and_bind_to_descriptor)
     (locker, file, (const char *)to);
     return file;
   }
 #endif
 
-  file = create_temp_file(to, dir, pfx, mode, myFlags);
+  file = create_temp_file(to, dir, pfx, mode, unlink_or_keep, myFlags);
   return file;
 }
 
-static inline File
-inline_mysql_file_open(
+static inline File inline_mysql_file_open(
 #ifdef HAVE_PSI_FILE_INTERFACE
-  PSI_file_key key,
-  const char *src_file,
-  uint src_line,
+    PSI_file_key key, const char *src_file, uint src_line,
 #endif
-  const char *filename,
-  int flags,
-  myf myFlags)
-{
+    const char *filename, int flags, myf myFlags) {
   File file;
 #ifdef HAVE_PSI_FILE_INTERFACE
   struct PSI_file_locker *locker;
   PSI_file_locker_state state;
   locker = PSI_FILE_CALL(get_thread_file_name_locker)(
-    &state, key, PSI_FILE_OPEN, filename, &locker);
-  if (likely(locker != NULL))
-  {
+      &state, key, PSI_FILE_OPEN, filename, &locker);
+  if (likely(locker != nullptr)) {
     PSI_FILE_CALL(start_file_open_wait)(locker, src_file, src_line);
     file = my_open(filename, flags, myFlags);
     PSI_FILE_CALL(end_file_open_wait_and_bind_to_descriptor)(locker, file);
@@ -1123,23 +1001,18 @@ inline_mysql_file_open(
   return file;
 }
 
-static inline int
-inline_mysql_file_close(
+static inline int inline_mysql_file_close(
 #ifdef HAVE_PSI_FILE_INTERFACE
-  const char *src_file,
-  uint src_line,
+    const char *src_file, uint src_line,
 #endif
-  File file,
-  myf flags)
-{
+    File file, myf flags) {
   int result;
 #ifdef HAVE_PSI_FILE_INTERFACE
   struct PSI_file_locker *locker;
   PSI_file_locker_state state;
-  locker = PSI_FILE_CALL(get_thread_file_descriptor_locker)(
-    &state, file, PSI_FILE_CLOSE);
-  if (likely(locker != NULL))
-  {
+  locker = PSI_FILE_CALL(get_thread_file_descriptor_locker)(&state, file,
+                                                            PSI_FILE_CLOSE);
+  if (likely(locker != nullptr)) {
     PSI_FILE_CALL(start_file_close_wait)(locker, src_file, src_line);
     result = my_close(file, flags);
     PSI_FILE_CALL(end_file_close_wait)(locker, result);
@@ -1151,34 +1024,24 @@ inline_mysql_file_close(
   return result;
 }
 
-static inline size_t
-inline_mysql_file_read(
+static inline size_t inline_mysql_file_read(
 #ifdef HAVE_PSI_FILE_INTERFACE
-  const char *src_file,
-  uint src_line,
+    const char *src_file, uint src_line,
 #endif
-  File file,
-  uchar *buffer,
-  size_t count,
-  myf flags)
-{
+    File file, uchar *buffer, size_t count, myf flags) {
   size_t result;
 #ifdef HAVE_PSI_FILE_INTERFACE
   struct PSI_file_locker *locker;
   PSI_file_locker_state state;
   size_t bytes_read;
-  locker = PSI_FILE_CALL(get_thread_file_descriptor_locker)(
-    &state, file, PSI_FILE_READ);
-  if (likely(locker != NULL))
-  {
+  locker = PSI_FILE_CALL(get_thread_file_descriptor_locker)(&state, file,
+                                                            PSI_FILE_READ);
+  if (likely(locker != nullptr)) {
     PSI_FILE_CALL(start_file_wait)(locker, count, src_file, src_line);
     result = my_read(file, buffer, count, flags);
-    if (flags & (MY_NABP | MY_FNABP))
-    {
+    if (flags & (MY_NABP | MY_FNABP)) {
       bytes_read = (result == 0) ? count : 0;
-    }
-    else
-    {
+    } else {
       bytes_read = (result != MY_FILE_ERROR) ? result : 0;
     }
     PSI_FILE_CALL(end_file_wait)(locker, bytes_read);
@@ -1190,34 +1053,24 @@ inline_mysql_file_read(
   return result;
 }
 
-static inline size_t
-inline_mysql_file_write(
+static inline size_t inline_mysql_file_write(
 #ifdef HAVE_PSI_FILE_INTERFACE
-  const char *src_file,
-  uint src_line,
+    const char *src_file, uint src_line,
 #endif
-  File file,
-  const uchar *buffer,
-  size_t count,
-  myf flags)
-{
+    File file, const uchar *buffer, size_t count, myf flags) {
   size_t result;
 #ifdef HAVE_PSI_FILE_INTERFACE
   struct PSI_file_locker *locker;
   PSI_file_locker_state state;
   size_t bytes_written;
-  locker = PSI_FILE_CALL(get_thread_file_descriptor_locker)(
-    &state, file, PSI_FILE_WRITE);
-  if (likely(locker != NULL))
-  {
+  locker = PSI_FILE_CALL(get_thread_file_descriptor_locker)(&state, file,
+                                                            PSI_FILE_WRITE);
+  if (likely(locker != nullptr)) {
     PSI_FILE_CALL(start_file_wait)(locker, count, src_file, src_line);
     result = my_write(file, buffer, count, flags);
-    if (flags & (MY_NABP | MY_FNABP))
-    {
+    if (flags & (MY_NABP | MY_FNABP)) {
       bytes_written = (result == 0) ? count : 0;
-    }
-    else
-    {
+    } else {
       bytes_written = (result != MY_FILE_ERROR) ? result : 0;
     }
     PSI_FILE_CALL(end_file_wait)(locker, bytes_written);
@@ -1229,35 +1082,24 @@ inline_mysql_file_write(
   return result;
 }
 
-static inline size_t
-inline_mysql_file_pread(
+static inline size_t inline_mysql_file_pread(
 #ifdef HAVE_PSI_FILE_INTERFACE
-  const char *src_file,
-  uint src_line,
+    const char *src_file, uint src_line,
 #endif
-  File file,
-  uchar *buffer,
-  size_t count,
-  my_off_t offset,
-  myf flags)
-{
+    File file, uchar *buffer, size_t count, my_off_t offset, myf flags) {
   size_t result;
 #ifdef HAVE_PSI_FILE_INTERFACE
   struct PSI_file_locker *locker;
   PSI_file_locker_state state;
   size_t bytes_read;
-  locker = PSI_FILE_CALL(get_thread_file_descriptor_locker)(
-    &state, file, PSI_FILE_READ);
-  if (likely(locker != NULL))
-  {
+  locker = PSI_FILE_CALL(get_thread_file_descriptor_locker)(&state, file,
+                                                            PSI_FILE_READ);
+  if (likely(locker != nullptr)) {
     PSI_FILE_CALL(start_file_wait)(locker, count, src_file, src_line);
     result = my_pread(file, buffer, count, offset, flags);
-    if (flags & (MY_NABP | MY_FNABP))
-    {
+    if (flags & (MY_NABP | MY_FNABP)) {
       bytes_read = (result == 0) ? count : 0;
-    }
-    else
-    {
+    } else {
       bytes_read = (result != MY_FILE_ERROR) ? result : 0;
     }
     PSI_FILE_CALL(end_file_wait)(locker, bytes_read);
@@ -1269,35 +1111,24 @@ inline_mysql_file_pread(
   return result;
 }
 
-static inline size_t
-inline_mysql_file_pwrite(
+static inline size_t inline_mysql_file_pwrite(
 #ifdef HAVE_PSI_FILE_INTERFACE
-  const char *src_file,
-  uint src_line,
+    const char *src_file, uint src_line,
 #endif
-  File file,
-  const uchar *buffer,
-  size_t count,
-  my_off_t offset,
-  myf flags)
-{
+    File file, const uchar *buffer, size_t count, my_off_t offset, myf flags) {
   size_t result;
 #ifdef HAVE_PSI_FILE_INTERFACE
   struct PSI_file_locker *locker;
   PSI_file_locker_state state;
   size_t bytes_written;
-  locker = PSI_FILE_CALL(get_thread_file_descriptor_locker)(
-    &state, file, PSI_FILE_WRITE);
-  if (likely(locker != NULL))
-  {
+  locker = PSI_FILE_CALL(get_thread_file_descriptor_locker)(&state, file,
+                                                            PSI_FILE_WRITE);
+  if (likely(locker != nullptr)) {
     PSI_FILE_CALL(start_file_wait)(locker, count, src_file, src_line);
     result = my_pwrite(file, buffer, count, offset, flags);
-    if (flags & (MY_NABP | MY_FNABP))
-    {
+    if (flags & (MY_NABP | MY_FNABP)) {
       bytes_written = (result == 0) ? count : 0;
-    }
-    else
-    {
+    } else {
       bytes_written = (result != MY_FILE_ERROR) ? result : 0;
     }
     PSI_FILE_CALL(end_file_wait)(locker, bytes_written);
@@ -1309,25 +1140,18 @@ inline_mysql_file_pwrite(
   return result;
 }
 
-static inline my_off_t
-inline_mysql_file_seek(
+static inline my_off_t inline_mysql_file_seek(
 #ifdef HAVE_PSI_FILE_INTERFACE
-  const char *src_file,
-  uint src_line,
+    const char *src_file, uint src_line,
 #endif
-  File file,
-  my_off_t pos,
-  int whence,
-  myf flags)
-{
+    File file, my_off_t pos, int whence, myf flags) {
   my_off_t result;
 #ifdef HAVE_PSI_FILE_INTERFACE
   struct PSI_file_locker *locker;
   PSI_file_locker_state state;
-  locker = PSI_FILE_CALL(get_thread_file_descriptor_locker)(
-    &state, file, PSI_FILE_SEEK);
-  if (likely(locker != NULL))
-  {
+  locker = PSI_FILE_CALL(get_thread_file_descriptor_locker)(&state, file,
+                                                            PSI_FILE_SEEK);
+  if (likely(locker != nullptr)) {
     PSI_FILE_CALL(start_file_wait)(locker, (size_t)0, src_file, src_line);
     result = my_seek(file, pos, whence, flags);
     PSI_FILE_CALL(end_file_wait)(locker, (size_t)0);
@@ -1339,23 +1163,18 @@ inline_mysql_file_seek(
   return result;
 }
 
-static inline my_off_t
-inline_mysql_file_tell(
+static inline my_off_t inline_mysql_file_tell(
 #ifdef HAVE_PSI_FILE_INTERFACE
-  const char *src_file,
-  uint src_line,
+    const char *src_file, uint src_line,
 #endif
-  File file,
-  myf flags)
-{
+    File file, myf flags) {
   my_off_t result;
 #ifdef HAVE_PSI_FILE_INTERFACE
   struct PSI_file_locker *locker;
   PSI_file_locker_state state;
-  locker = PSI_FILE_CALL(get_thread_file_descriptor_locker)(
-    &state, file, PSI_FILE_TELL);
-  if (likely(locker != NULL))
-  {
+  locker = PSI_FILE_CALL(get_thread_file_descriptor_locker)(&state, file,
+                                                            PSI_FILE_TELL);
+  if (likely(locker != nullptr)) {
     PSI_FILE_CALL(start_file_wait)(locker, (size_t)0, src_file, src_line);
     result = my_tell(file, flags);
     PSI_FILE_CALL(end_file_wait)(locker, (size_t)0);
@@ -1367,24 +1186,18 @@ inline_mysql_file_tell(
   return result;
 }
 
-static inline int
-inline_mysql_file_delete(
+static inline int inline_mysql_file_delete(
 #ifdef HAVE_PSI_FILE_INTERFACE
-  PSI_file_key key,
-  const char *src_file,
-  uint src_line,
+    PSI_file_key key, const char *src_file, uint src_line,
 #endif
-  const char *name,
-  myf flags)
-{
+    const char *name, myf flags) {
   int result;
 #ifdef HAVE_PSI_FILE_INTERFACE
   struct PSI_file_locker *locker;
   PSI_file_locker_state state;
   locker = PSI_FILE_CALL(get_thread_file_name_locker)(
-    &state, key, PSI_FILE_DELETE, name, &locker);
-  if (likely(locker != NULL))
-  {
+      &state, key, PSI_FILE_DELETE, name, &locker);
+  if (likely(locker != nullptr)) {
     PSI_FILE_CALL(start_file_close_wait)(locker, src_file, src_line);
     result = my_delete(name, flags);
     PSI_FILE_CALL(end_file_close_wait)(locker, result);
@@ -1396,28 +1209,22 @@ inline_mysql_file_delete(
   return result;
 }
 
-static inline int
-inline_mysql_file_rename(
+static inline int inline_mysql_file_rename(
 #ifdef HAVE_PSI_FILE_INTERFACE
-  PSI_file_key key,
-  const char *src_file,
-  uint src_line,
+    PSI_file_key key, const char *src_file, uint src_line,
 #endif
-  const char *from,
-  const char *to,
-  myf flags)
-{
+    const char *from, const char *to, myf flags) {
   int result;
 #ifdef HAVE_PSI_FILE_INTERFACE
   struct PSI_file_locker *locker;
   PSI_file_locker_state state;
   locker = PSI_FILE_CALL(get_thread_file_name_locker)(
-    &state, key, PSI_FILE_RENAME, to, &locker);
-  if (likely(locker != NULL))
-  {
-    PSI_FILE_CALL(start_file_wait)(locker, (size_t)0, src_file, src_line);
+      &state, key, PSI_FILE_RENAME, from, &locker);
+  if (likely(locker != nullptr)) {
+    PSI_FILE_CALL(start_file_rename_wait)
+    (locker, (size_t)0, from, to, src_file, src_line);
     result = my_rename(from, to, flags);
-    PSI_FILE_CALL(end_file_wait)(locker, (size_t)0);
+    PSI_FILE_CALL(end_file_rename_wait)(locker, from, to, result);
     return result;
   }
 #endif
@@ -1426,58 +1233,44 @@ inline_mysql_file_rename(
   return result;
 }
 
-static inline File
-inline_mysql_file_create_with_symlink(
+static inline File inline_mysql_file_create_with_symlink(
 #ifdef HAVE_PSI_FILE_INTERFACE
-  PSI_file_key key,
-  const char *src_file,
-  uint src_line,
+    PSI_file_key key, const char *src_file, uint src_line,
 #endif
-  const char *linkname,
-  const char *filename,
-  int create_flags,
-  int access_flags,
-  myf flags)
-{
+    const char *linkname, const char *filename, int create_flags,
+    int access_flags, myf flags) {
   File file;
 #ifdef HAVE_PSI_FILE_INTERFACE
   struct PSI_file_locker *locker;
   PSI_file_locker_state state;
   locker = PSI_FILE_CALL(get_thread_file_name_locker)(
-    &state, key, PSI_FILE_CREATE, filename, &locker);
-  if (likely(locker != NULL))
-  {
+      &state, key, PSI_FILE_CREATE, filename, &locker);
+  if (likely(locker != nullptr)) {
     PSI_FILE_CALL(start_file_open_wait)(locker, src_file, src_line);
-    file = my_create_with_symlink(
-      linkname, filename, create_flags, access_flags, flags);
+    file = my_create_with_symlink(linkname, filename, create_flags,
+                                  access_flags, flags);
     PSI_FILE_CALL(end_file_open_wait_and_bind_to_descriptor)(locker, file);
     return file;
   }
 #endif
 
-  file = my_create_with_symlink(
-    linkname, filename, create_flags, access_flags, flags);
+  file = my_create_with_symlink(linkname, filename, create_flags, access_flags,
+                                flags);
   return file;
 }
 
-static inline int
-inline_mysql_file_delete_with_symlink(
+static inline int inline_mysql_file_delete_with_symlink(
 #ifdef HAVE_PSI_FILE_INTERFACE
-  PSI_file_key key,
-  const char *src_file,
-  uint src_line,
+    PSI_file_key key, const char *src_file, uint src_line,
 #endif
-  const char *name,
-  myf flags)
-{
+    const char *name, myf flags) {
   int result;
 #ifdef HAVE_PSI_FILE_INTERFACE
   struct PSI_file_locker *locker;
   PSI_file_locker_state state;
   locker = PSI_FILE_CALL(get_thread_file_name_locker)(
-    &state, key, PSI_FILE_DELETE, name, &locker);
-  if (likely(locker != NULL))
-  {
+      &state, key, PSI_FILE_DELETE, name, &locker);
+  if (likely(locker != nullptr)) {
     PSI_FILE_CALL(start_file_close_wait)(locker, src_file, src_line);
     result = my_delete_with_symlink(name, flags);
     PSI_FILE_CALL(end_file_close_wait)(locker, result);
@@ -1489,28 +1282,22 @@ inline_mysql_file_delete_with_symlink(
   return result;
 }
 
-static inline int
-inline_mysql_file_rename_with_symlink(
+static inline int inline_mysql_file_rename_with_symlink(
 #ifdef HAVE_PSI_FILE_INTERFACE
-  PSI_file_key key,
-  const char *src_file,
-  uint src_line,
+    PSI_file_key key, const char *src_file, uint src_line,
 #endif
-  const char *from,
-  const char *to,
-  myf flags)
-{
+    const char *from, const char *to, myf flags) {
   int result;
 #ifdef HAVE_PSI_FILE_INTERFACE
   struct PSI_file_locker *locker;
   PSI_file_locker_state state;
   locker = PSI_FILE_CALL(get_thread_file_name_locker)(
-    &state, key, PSI_FILE_RENAME, to, &locker);
-  if (likely(locker != NULL))
-  {
-    PSI_FILE_CALL(start_file_wait)(locker, (size_t)0, src_file, src_line);
+      &state, key, PSI_FILE_RENAME, from, &locker);
+  if (likely(locker != nullptr)) {
+    PSI_FILE_CALL(start_file_rename_wait)
+    (locker, (size_t)0, from, to, src_file, src_line);
     result = my_rename_with_symlink(from, to, flags);
-    PSI_FILE_CALL(end_file_wait)(locker, (size_t)0);
+    PSI_FILE_CALL(end_file_rename_wait)(locker, from, to, result);
     return result;
   }
 #endif
@@ -1519,23 +1306,18 @@ inline_mysql_file_rename_with_symlink(
   return result;
 }
 
-static inline int
-inline_mysql_file_sync(
+static inline int inline_mysql_file_sync(
 #ifdef HAVE_PSI_FILE_INTERFACE
-  const char *src_file,
-  uint src_line,
+    const char *src_file, uint src_line,
 #endif
-  File fd,
-  myf flags)
-{
+    File fd, myf flags) {
   int result = 0;
 #ifdef HAVE_PSI_FILE_INTERFACE
   struct PSI_file_locker *locker;
   PSI_file_locker_state state;
-  locker =
-    PSI_FILE_CALL(get_thread_file_descriptor_locker)(&state, fd, PSI_FILE_SYNC);
-  if (likely(locker != NULL))
-  {
+  locker = PSI_FILE_CALL(get_thread_file_descriptor_locker)(&state, fd,
+                                                            PSI_FILE_SYNC);
+  if (likely(locker != nullptr)) {
     PSI_FILE_CALL(start_file_wait)(locker, (size_t)0, src_file, src_line);
     result = my_sync(fd, flags);
     PSI_FILE_CALL(end_file_wait)(locker, (size_t)0);

@@ -1,14 +1,3 @@
-########################################
-##### WL#7554 Force schema `test` to character set latin1
-##### This test should be migrated to utf8mb4
---disable_query_log
-let $testdbcs276=`select default_character_set_name from information_schema.schemata where schema_name='test'`;
-alter schema default character set latin1;
-use test;
---enable_query_log
-########################################
-
-
  #Get deafult engine value
 --let $DEFAULT_ENGINE = `select @@global.default_storage_engine`
 
@@ -32,70 +21,6 @@ show variables like 'sql_mode';
 show create table t1;
 set @@sql_mode="ansi_quotes";
 show variables like 'sql_mode';
-
-#Replace default engine value with static engine string
---replace_result $DEFAULT_ENGINE ENGINE
-show create table t1;
-set @@sql_mode="no_table_options";
-show variables like 'sql_mode';
-
-#Replace default engine value with static engine string
---replace_result $DEFAULT_ENGINE ENGINE
-show create table t1;
-set @@sql_mode="no_key_options";
-show variables like 'sql_mode';
-
-#Replace default engine value with static engine string
---replace_result $DEFAULT_ENGINE ENGINE
-show create table t1;
-set @@sql_mode="no_field_options,mysql323,mysql40";
-show variables like 'sql_mode';
-
-#Replace default engine value with static engine string
---replace_result $DEFAULT_ENGINE ENGINE
-show create table t1;
-set sql_mode="postgresql,oracle,mssql,db2,maxdb";
-select @@sql_mode;
-
-#Replace default engine value with static engine string
---replace_result $DEFAULT_ENGINE ENGINE
-show create table t1;
-drop table t1;
-
-#
-# Check that a binary collation adds 'binary'
-# suffix into a char() column definition in
-# mysql40 and mysql2323 modes. This allows
-# not to lose the column's case sensitivity
-# when loading the dump in pre-4.1 servers.
-#
-# Thus, in 4.0 and 3.23 modes we dump:
-#
-#   'char(10) collate xxx_bin' as 'char(10) binary'
-#   'binary(10)' as 'binary(10)'
-#
-# In mysql-4.1 these types are different, and they will
-# be recreated differently.
-#
-# In mysqld-4.0 the the above two types were the same,
-# so it will create a 'char(10) binary' column for both definitions.
-#
-CREATE TABLE t1 (
- a char(10),
- b char(10) collate latin1_bin,
- c binary(10)
-) character set latin1;
-set @@sql_mode="";
-
-#Replace default engine value with static engine string
---replace_result $DEFAULT_ENGINE ENGINE
-show create table t1;
-set @@sql_mode="mysql323";
-
-#Replace default engine value with static engine string
---replace_result $DEFAULT_ENGINE ENGINE
-show create table t1;
-set @@sql_mode="mysql40";
 
 #Replace default engine value with static engine string
 --replace_result $DEFAULT_ENGINE ENGINE
@@ -151,11 +76,6 @@ create table t1
 #Replace default engine value with static engine string
 --replace_result $DEFAULT_ENGINE ENGINE
 show create table t1;
-set session sql_mode=no_field_options;
-
-#Replace default engine value with static engine string
---replace_result $DEFAULT_ENGINE ENGINE
-show create table t1;
 drop table t1;
 
 # End of 4.1 tests
@@ -172,7 +92,7 @@ drop table t1;
 SET @OLD_SQL_MODE=@@SQL_MODE, @@SQL_MODE='';
 show local variables like 'SQL_MODE';
 
-CREATE TABLE t1 (p int not null auto_increment, a varchar(20), primary key(p));
+CREATE TABLE t1 (p int not null auto_increment, a varchar(20), primary key(p)) charset latin1;
 INSERT t1 (a) VALUES
 ('\\'),
 ('\n'),
@@ -214,7 +134,7 @@ DROP TABLE t1;
 SET @@SQL_MODE='NO_BACKSLASH_ESCAPES';
 show local variables like 'SQL_MODE';
 
-CREATE TABLE t1 (p int not null auto_increment, a varchar(20), primary key(p));
+CREATE TABLE t1 (p int not null auto_increment, a varchar(20), primary key(p)) charset latin1;
 INSERT t1 (a) VALUES
 ('\\'),
 ('\n'),
@@ -326,7 +246,7 @@ select @@sql_mode;
 # BUG#14675
 set sql_mode=4194304;
 select @@sql_mode;
-set sql_mode=16384+(65536*4);
+set sql_mode=32+(65536*4);
 select @@sql_mode;
 --error 1231
 set sql_mode=4294967296*2; # that mode does not exist
@@ -602,10 +522,148 @@ SELECT @@sql_mode;
 --echo # Restore sql mode
 --echo #
 SET sql_mode= @org_mode;
+--echo #
+--echo # Test for Bug#12601974 - STORED PROCEDURE SQL_MODE=NO_BACKSLASH_ESCAPES
+--echo # IGNORED AND BREAKS REPLICATION
+--echo #
 
-########################################
-##### WL#7554 set schema `test` back to what it was
---disable_query_log
---eval alter schema test default character set $testdbcs276;
---enable_query_log
-########################################
+SET @org_mode=@@sql_mode;
+
+SET @@sql_mode='';
+
+--echo # USER NAME CONTAINING BACKSLASH IN CREATE USER OPERATION
+CREATE USER 'user\'s_12601974'@'localhost';
+--error ER_CANNOT_USER
+CREATE USER 'user\'s_12601974'@'localhost';
+DROP USER 'user\'s_12601974'@'localhost';
+
+CREATE USER 'user\"s_12601974'@'localhost';
+--error ER_CANNOT_USER
+CREATE USER 'user\"s_12601974'@'localhost';
+DROP USER 'user\"s_12601974'@'localhost';
+
+CREATE USER 'user\bs_12601974'@'localhost';
+--error ER_CANNOT_USER
+CREATE USER 'user\bs_12601974'@'localhost';
+DROP USER 'user\bs_12601974'@'localhost';
+
+CREATE USER 'user\ns_12601974'@'localhost';
+--error ER_CANNOT_USER
+CREATE USER 'user\ns_12601974'@'localhost';
+DROP USER 'user\ns_12601974'@'localhost';
+
+CREATE USER 'user\rs_12601974'@'localhost';
+--error ER_CANNOT_USER
+CREATE USER 'user\rs_12601974'@'localhost';
+DROP USER 'user\rs_12601974'@'localhost';
+
+CREATE USER 'user\ts_12601974'@'localhost';
+--error ER_CANNOT_USER
+CREATE USER 'user\ts_12601974'@'localhost';
+DROP USER 'user\ts_12601974'@'localhost';
+
+CREATE USER 'user\\s_12601974'@'localhost';
+--error ER_CANNOT_USER
+CREATE USER 'user\\s_12601974'@'localhost';
+DROP USER 'user\\s_12601974'@'localhost';
+
+CREATE USER 'user\%s_12601974'@'localhost';
+--error ER_CANNOT_USER
+
+CREATE USER 'user\%s_12601974'@'localhost';
+DROP USER 'user\%s_12601974'@'localhost';
+
+CREATE USER 'user\_s_12601974'@'localhost';
+--error ER_CANNOT_USER
+CREATE USER 'user\_s_12601974'@'localhost';
+DROP USER 'user\_s_12601974'@'localhost';
+--echo
+--echo # END OF CASE - USER NAME CONTAINING BACKSLASH IN CREATE USER OPERATION
+
+SET @@sql_mode='NO_BACKSLASH_ESCAPES';
+--echo # USER NAME CONTAINING BACKSLASH IN DROP USER OPERATION
+CREATE USER 'user\"s_12601974'@'localhost';
+--error ER_CANNOT_USER
+CREATE USER 'user\"s_12601974'@'localhost';
+DROP USER 'user\"s_12601974'@'localhost';
+
+CREATE USER 'user\bs_12601974'@'localhost';
+--error ER_CANNOT_USER
+CREATE USER 'user\bs_12601974'@'localhost';
+DROP USER 'user\bs_12601974'@'localhost';
+
+CREATE USER 'user\ns_12601974'@'localhost';
+--error ER_CANNOT_USER
+CREATE USER 'user\ns_12601974'@'localhost';
+DROP USER 'user\ns_12601974'@'localhost';
+
+CREATE USER 'user\rs_12601974'@'localhost';
+--error ER_CANNOT_USER
+CREATE USER 'user\rs_12601974'@'localhost';
+DROP USER 'user\rs_12601974'@'localhost';
+
+CREATE USER 'user\ts_12601974'@'localhost';
+--error ER_CANNOT_USER
+CREATE USER 'user\ts_12601974'@'localhost';
+DROP USER 'user\ts_12601974'@'localhost';
+
+CREATE USER 'user\\s_12601974'@'localhost';
+--error ER_CANNOT_USER
+CREATE USER 'user\\s_12601974'@'localhost';
+DROP USER 'user\\s_12601974'@'localhost';
+
+CREATE USER 'user\%s_12601974'@'localhost';
+--error ER_CANNOT_USER
+CREATE USER 'user\%s_12601974'@'localhost';
+DROP USER 'user\%s_12601974'@'localhost';
+
+CREATE USER 'user\%s_12601974'@'localhost';
+--error ER_CANNOT_USER
+CREATE USER 'user\%s_12601974'@'localhost';
+DROP USER 'user\%s_12601974'@'localhost';
+
+CREATE USER 'user\_s_12601974'@'localhost';
+--error ER_CANNOT_USER
+CREATE USER 'user\_s_12601974'@'localhost';
+DROP USER 'user\_s_12601974'@'localhost';
+--echo
+--echo # END OF CASE - USER NAME CONTAINING BACKSLASH IN CREATE USER OPERATION
+SET @@sql_mode= @org_mode;
+
+--echo
+--echo #End of Test for Bug#12601974
+
+--echo
+--echo Bug#28546855 EXECUTE STATEMENT HAVE TO CHECK STRICT_TRANS_TABLES MODE
+--echo
+SELECT '\''; # restore Emacs SQL mode font lock sanity
+SET SQL_MODE=DEFAULT;
+CREATE TABLE test(id INT, count DOUBLE);
+INSERT INTO test VALUES (1,0), (2,0);
+--echo always worked
+--error ER_TRUNCATED_WRONG_VALUE
+UPDATE test SET count = count + 1 WHERE id = '1invalid';
+PREPARE stmt FROM 'UPDATE test SET count = count + 1 WHERE id = ?';
+SET @a = '1invalid';
+--echo failed to give an error
+--error ER_TRUNCATED_WRONG_VALUE
+EXECUTE stmt USING @a;
+SET SQL_MODE='';
+EXECUTE stmt USING @a;
+SELECT * FROM test;
+SET SQL_MODE=DEFAULT;
+DROP TABLE test;
+
+--echo #
+--echo # Bug#29287785: PASSWORD IS NOT UPDATED WITHOUT ERRORS WHEN
+--echo #               SQL MODE IS PAD_CHAR_TO_FULL_LENGTH
+--echo #
+
+CREATE USER 'user1'@'localhost';
+SET sql_mode= 'PAD_CHAR_TO_FULL_LENGTH';
+SET PASSWORD FOR 'user1'@'localhost'= 'abc';
+SELECT LENGTH(authentication_string) FROM mysql.user WHERE user= 'user1';
+
+#Cleanup
+DROP USER 'user1'@'localhost';
+SET sql_mode= DEFAULT;

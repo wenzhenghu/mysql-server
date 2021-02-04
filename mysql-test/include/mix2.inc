@@ -129,6 +129,7 @@ eval CREATE TABLE t1 (
 replace into t1 (gesuchnr,benutzer_id) values (2,1);
 replace into t1 (gesuchnr,benutzer_id) values (1,1);
 replace into t1 (gesuchnr,benutzer_id) values (1,1);
+--sorted_result
 select * from t1;
 drop table t1;
 
@@ -509,6 +510,7 @@ insert into t1 (a) values(1),(2),(3);
 select t1.a from t1 natural join t1 as t2 where t1.b >= @a order by t1.a;
 select a from t1 natural join t1 as t2 where b >= @a order by a;
 update t1 set a=5 where a=1;
+--sorted_result
 select a from t1;
 drop table t1;
 
@@ -567,7 +569,9 @@ insert into t1 values (0,0,0,'ABCDEFGHIJ'),(2,2,2,'BCDEFGHIJK'),(1,1,1,'CDEFGHIJ
 LOCK TABLES t1 WRITE;
 --error ER_DUP_ENTRY
 insert into t1 values (99,1,2,'D'),(1,1,2,'D');
+--sorted_result
 select id from t1;
+--sorted_result
 select id from t1;
 UNLOCK TABLES;
 DROP TABLE t1;
@@ -578,6 +582,7 @@ LOCK TABLES t1 WRITE;
 begin;
 --error ER_DUP_ENTRY
 insert into t1 values (99,1,2,'D'),(1,1,2,'D');
+--sorted_result
 select id from t1;
 insert ignore into t1 values (100,1,2,'D'),(1,1,99,'D');
 commit;
@@ -775,7 +780,7 @@ eval create table t1 (id int unsigned not null auto_increment, code tinyint unsi
 
 BEGIN;
 SET SESSION TRANSACTION ISOLATION LEVEL SERIALIZABLE;
-SELECT @@tx_isolation,@@global.tx_isolation;
+SELECT @@transaction_isolation, @@global.transaction_isolation;
 insert into t1 (code, name) values (1, 'Tim'), (1, 'Monty'), (2, 'David');
 select id, code, name from t1 order by id;
 COMMIT;
@@ -1219,9 +1224,6 @@ drop table t2;
 
 # Test error handling
 
-# Clean up filename -- embedded server reports whole path without .frm,
-# regular server reports relative path with .frm (argh!)
---replace_result \\ / $MYSQL_TEST_DIR . /var/master-data/ / t2.frm t2
 --error 1005
 eval create table t2 (id int(11) not null, id2 int(11) not null, constraint t1_id_fk foreign key (id2,id) references t1 (id)) engine = $engine_type;
 
@@ -1469,9 +1471,6 @@ source include/varchar.inc;
 # Some errors/warnings on create
 #
 SET sql_mode = 'NO_ENGINE_SUBSTITUTION';
-# Clean up filename -- embedded server reports whole path without .frm,
-# regular server reports relative path with .frm (argh!)
---replace_result \\ / $MYSQL_TEST_DIR . /var/master-data/ / t1.frm t1
 create table t1 (v varchar(65530), key(v)) charset latin1;
 drop table t1;
 create table t1 (v varchar(65536));

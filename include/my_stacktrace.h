@@ -1,20 +1,27 @@
-/* Copyright (c) 2001, 2016, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2001, 2019, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
    Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
-#ifndef _my_stacktrace_h_
-#define _my_stacktrace_h_
+#ifndef MY_STACKTRACE_INCLUDED
+#define MY_STACKTRACE_INCLUDED
 
 /**
   @file include/my_stacktrace.h
@@ -32,28 +39,23 @@
 #include "my_inttypes.h"
 #include "my_macros.h"
 
-C_MODE_START
-
 /*
-  HAVE_BACKTRACE - Linux, FreeBSD, OSX
-  HAVE_PRINTSTACK - Solaris
+  HAVE_BACKTRACE - Linux, FreeBSD, OSX, Solaris
   _WIN32 - Windows
 */
-#if defined(HAVE_BACKTRACE) || defined(HAVE_PRINTSTACK) || defined(_WIN32)
+#if defined(HAVE_BACKTRACE) || defined(_WIN32)
 #define HAVE_STACKTRACE 1
 void my_init_stacktrace();
-void my_print_stacktrace(uchar* stack_bottom, ulong thread_stack);
-void my_safe_puts_stderr(const char* val, size_t max_len);
+void my_print_stacktrace(const uchar *stack_bottom, ulong thread_stack);
+void my_safe_puts_stderr(const char *val, size_t max_len);
 
 #ifdef _WIN32
 void my_set_exception_pointers(EXCEPTION_POINTERS *ep);
 void my_create_minidump(const char *name, HANDLE process, DWORD pid);
 #endif
-#endif /* HAVE_BACKTRACE || HAVE_PRINTSTACK || _WIN32 */
+#endif /* HAVE_BACKTRACE || _WIN32 */
 
 void my_write_core(int sig);
-
-
 
 /**
   Async-signal-safe utility functions used by signal handler routines.
@@ -94,8 +96,8 @@ char *my_safe_utoa(int base, ulonglong val, char *buf);
   Does not support any width/precision.
   Implemented with simplicity, and async-signal-safety in mind.
 */
-size_t my_safe_snprintf(char* to, size_t n, const char* fmt, ...)
-  MY_ATTRIBUTE((format(printf, 3, 4)));
+size_t my_safe_snprintf(char *to, size_t n, const char *fmt, ...)
+    MY_ATTRIBUTE((format(printf, 3, 4)));
 
 /**
   A (very) limited version of snprintf, which writes the result to STDERR.
@@ -104,8 +106,8 @@ size_t my_safe_snprintf(char* to, size_t n, const char* fmt, ...)
   @note Has an internal buffer capacity of 512 bytes,
   which should suffice for our signal handling routines.
 */
-size_t my_safe_printf_stderr(const char* fmt, ...)
-  MY_ATTRIBUTE((format(printf, 1, 2)));
+size_t my_safe_printf_stderr(const char *fmt, ...)
+    MY_ATTRIBUTE((format(printf, 1, 2)));
 
 /**
   Writes up to count bytes from buffer to STDERR.
@@ -121,6 +123,4 @@ size_t my_write_stderr(const void *buf, size_t count);
 */
 void my_safe_print_system_time();
 
-C_MODE_END
-
-#endif /* _my_stacktrace_h_ */
+#endif  // MY_STACKTRACE_INCLUDED

@@ -25,11 +25,15 @@
 # ==== References ====
 # WL#9556: Writeset-based MTS dependency tracking on master
 ################################################################################
+
+--source include/have_binlog_format_row.inc
 --let $rpl_extra_connections_per_server= 7
 --source include/master-slave.inc
---source include/have_binlog_format_row.inc
 
 --connection master
+
+SET @binlog_transaction_dependency_tracking_save = @@GLOBAL.binlog_transaction_dependency_tracking;
+
 # Loop between binlog_transaction_dependency_tracking modes
 --let $type= 0
 while ($type < 3)
@@ -69,16 +73,16 @@ while ($type < 3)
   # [0 1] {0 1} Case 1
   --connection server_1_1
   INSERT INTO tab1 VALUES (NULL); # 0 + 1 = 1
-  # [0 2] {1 2} Case 1
+  # [1 2] {1 2} Case 1
   --connection server_1_2
   INSERT INTO tab1 VALUES (NULL); # 1 + 1 = 2
-  # [0 3] {2 3} Case 2
+  # [1 3] {2 3} Case 2
   --connection server_1_3
   INSERT INTO tab1 VALUES (NULL); # 2 + 1 = 3
   # [3 4] {3 4} Case 5
   --connection server_1_4
   INSERT INTO tab2 VALUES (1);    # 3 + 0 = 3
-  # [0 5] {4 5} Verify case 5 + 4.1: this should be scheduled in parallel with previous transactions.
+  # [1 5] {4 5} Verify case 5 + 4.1: this should be scheduled in parallel with previous transactions.
   --connection server_1_5
   INSERT INTO tab1 VALUES (NULL); # 3 + 1 = 4 -> reset to 0
   # [5 6] {5 6} Verify case 4.2 + 4.3: this should not be scheduled in parallel with previous transactions.
@@ -120,7 +124,7 @@ while ($type < 3)
 
   --echo # Processing binlog...
   # For WRITESET and WRITESET_SESSION
-  --let $logical_timestamps=0 1;0 2;0 3;3 4;0 5;5 6;5 7;7 8;7 9;7 10;7 11;11 12;9 13;13 14
+  --let $logical_timestamps=0 1;1 2;1 3;3 4;1 5;5 6;5 7;7 8;7 9;7 10;7 11;11 12;9 13;13 14
   if ($type == 3)
   { # For COMMIT_ORDER
     --let $logical_timestamps=0 1;1 2;2 3;3 4;4 5;5 6;6 7;7 8;8 9;9 10;10 11;11 12;9 13;13 14
@@ -132,4 +136,7 @@ while ($type < 3)
 }
 
 --connection master
+
+SET GLOBAL binlog_transaction_dependency_tracking = @binlog_transaction_dependency_tracking_save;
+
 --source include/rpl_end.inc

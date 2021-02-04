@@ -3,16 +3,6 @@
 #
 --source include/no_valgrind_without_big.inc
 
-########################################
-##### WL#7554 Force schema `test` to character set latin1
-##### This test should be migrated to utf8mb4
---disable_query_log
-let $testdbcs82=`select default_character_set_name from information_schema.schemata where schema_name='test'`;
-alter schema default character set latin1;
-use test;
---enable_query_log
-########################################
-
 #########################################################################
 #									#
 # Will test following scenarios:					#
@@ -191,6 +181,7 @@ drop table t2;
 #
 # 6. Creating temp-table with large prefix.				#
 #
+
 SET sql_mode = 'NO_ENGINE_SUBSTITUTION';
 # This will lead to warnings on innodb_page_size=8k or 4k:
 # 8k: Specified key was too long; max key length is 1536 bytes
@@ -218,13 +209,19 @@ create temporary table t (
 	) row_format = dynamic engine=innodb;
 drop table t;
 #
+# Enabling the default 'strict' mode since as part of fix for bug#26848813, an
+# error is reported when index> 767 bytes and in non-strict mode only a warning
+# is reported
+SET sql_mode = 'NO_ENGINE_SUBSTITUTION,STRICT_TRANS_TABLES';
 SET innodb_strict_mode=OFF;
---error ER_INDEX_COLUMN_TOO_LONG
+--error ER_TOO_LONG_KEY
 create temporary table t (
 	a int not null,
 	b blob not null,
 	index sk (b(3021))
 	) row_format = compact engine=innodb;
+
+SET sql_mode = 'NO_ENGINE_SUBSTITUTION';
 #
 create temporary table t (
 	a int not null,
@@ -240,13 +237,19 @@ create temporary table t (
 	) row_format = compressed engine=innodb;
 drop table t;
 #
---error ER_INDEX_COLUMN_TOO_LONG
+#
+# Enabling the default 'strict' mode since as part of fix for bug#26848813, an
+# error is reported when index> 767 bytes and in non-strict mode only a warning
+# is reported
+SET sql_mode = 'NO_ENGINE_SUBSTITUTION,STRICT_TRANS_TABLES';
+--error ER_TOO_LONG_KEY
 create temporary table t (
 	a int not null,
 	b blob not null,
 	index sk (b(3021))
 	) row_format = compact engine=innodb;
 #
+SET sql_mode = 'NO_ENGINE_SUBSTITUTION';
 create temporary table t (
 	a int not null,
 	b blob not null,
@@ -268,23 +271,16 @@ CREATE TABLE t6469_1 ( i INT ) ENGINE = Innodb;
 CREATE TEMPORARY TABLE t6469_2 ( i INT ) ENGINE = Innodb;
 CREATE TEMPORARY table t6469_3 ( i INT ) ENGINE = Innodb ROW_FORMAT=compressed;
 SELECT count(*) FROM information_schema.files WHERE file_name LIKE '%t6469%';
-SELECT count(*) FROM information_schema.INNODB_SYS_DATAFILES WHERE PATH LIKE '%t6469%';
-SELECT count(*) FROM information_schema.INNODB_SYS_TABLES WHERE NAME LIKE '%t6469%';
+SELECT count(*) FROM information_schema.INNODB_DATAFILES WHERE PATH LIKE '%t6469%';
+SELECT count(*) FROM information_schema.INNODB_TABLES WHERE NAME LIKE '%t6469%';
 
 DROP TABLE t6469_1,t6469_2,t6469_3;
 SELECT * FROM information_schema.files WHERE file_name LIKE '%t6469%';
-SELECT * FROM information_schema.INNODB_SYS_DATAFILES WHERE PATH LIKE '%t6469%';
-SELECT * FROM information_schema.INNODB_SYS_TABLES WHERE NAME LIKE '%t6469%';
+SELECT * FROM information_schema.INNODB_DATAFILES WHERE PATH LIKE '%t6469%';
+SELECT * FROM information_schema.INNODB_TABLES WHERE NAME LIKE '%t6469%';
 
 #-------------------------------------------------------------
 #
 # remove test-bed.
 #
 SET sql_mode=default;
-
-########################################
-##### WL#7554 set schema `test` back to what it was
---disable_query_log
---eval alter schema test default character set $testdbcs82;
---enable_query_log
-########################################

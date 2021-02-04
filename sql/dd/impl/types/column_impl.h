@@ -1,397 +1,435 @@
-/* Copyright (c) 2014, 2017, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2014, 2020, Oracle and/or its affiliates.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software Foundation,
-   51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 #ifndef DD__COLUMN_IMPL_INCLUDED
 #define DD__COLUMN_IMPL_INCLUDED
 
 #include <stddef.h>
 #include <sys/types.h>
-#include <memory>   // std::unique_ptr
+#include <memory>  // std::unique_ptr
 #include <new>
-#include <string>
 
-#include "dd/impl/types/entity_object_impl.h" // dd::Entity_object_impl
-#include "dd/impl/types/weak_object_impl.h"
-#include "dd/object_id.h"
-#include "dd/properties.h"                    // dd::Properties
-#include "dd/sdi_fwd.h"
-#include "dd/types/column.h"                  // dd::Column
-#include "dd/types/column_type_element.h"     // dd::Column_type_element
-#include "dd/types/object_type.h"             // dd::Object_type
 #include "my_dbug.h"
+#include "nullable.h"
+#include "sql/dd/impl/properties_impl.h"           // Properties_impl
+#include "sql/dd/impl/types/entity_object_impl.h"  // dd::Entity_object_impl
+#include "sql/dd/impl/types/weak_object_impl.h"
+#include "sql/dd/object_id.h"
+#include "sql/dd/properties.h"
+#include "sql/dd/sdi_fwd.h"
+#include "sql/dd/string_type.h"
+#include "sql/dd/types/column.h"               // dd::Column
+#include "sql/dd/types/column_type_element.h"  // IWYU pragma: keep
+#include "sql/gis/srid.h"                      // gis::srid_t
+#include "sql/strfunc.h"
+
+using Mysql::Nullable;
 
 namespace dd {
 
 ///////////////////////////////////////////////////////////////////////////
 
-class Abstract_table_impl;
-class Open_dictionary_tables_ctx;
-class Raw_record;
 class Abstract_table;
-class Column_type_element;
+class Abstract_table_impl;
 class Object_table;
+class Open_dictionary_tables_ctx;
 class Properties;
+class Raw_record;
 class Sdi_rcontext;
 class Sdi_wcontext;
 class Weak_object;
 
 ///////////////////////////////////////////////////////////////////////////
 
-class Column_impl : public Entity_object_impl,
-                    public Column
-{
-public:
+class Column_impl : public Entity_object_impl, public Column {
+ public:
   Column_impl();
 
   Column_impl(Abstract_table_impl *table);
 
   Column_impl(const Column_impl &src, Abstract_table_impl *parent);
 
-  virtual ~Column_impl();
+  ~Column_impl() override;
 
-public:
-  virtual const Object_table &object_table() const
-  { return Column::OBJECT_TABLE(); }
+ public:
+  const Object_table &object_table() const override;
 
-  virtual bool validate() const;
+  static void register_tables(Open_dictionary_tables_ctx *otx);
 
-  virtual bool restore_children(Open_dictionary_tables_ctx *otx);
+  bool validate() const override;
 
-  virtual bool store_children(Open_dictionary_tables_ctx *otx);
+  bool restore_children(Open_dictionary_tables_ctx *otx) override;
 
-  virtual bool drop_children(Open_dictionary_tables_ctx *otx) const;
+  bool store_children(Open_dictionary_tables_ctx *otx) override;
 
-  virtual bool restore_attributes(const Raw_record &r);
+  bool drop_children(Open_dictionary_tables_ctx *otx) const override;
 
-  virtual bool store_attributes(Raw_record *r);
+  bool restore_attributes(const Raw_record &r) override;
 
-  void serialize(Sdi_wcontext *wctx, Sdi_writer *w) const;
+  bool store_attributes(Raw_record *r) override;
 
-  bool deserialize(Sdi_rcontext *rctx, const RJ_Value &val);
+  void serialize(Sdi_wcontext *wctx, Sdi_writer *w) const override;
 
-  void debug_print(String_type &outb) const;
+  bool deserialize(Sdi_rcontext *rctx, const RJ_Value &val) override;
 
-  void set_ordinal_position(uint ordinal_position)
-  { m_ordinal_position= ordinal_position; }
+  void debug_print(String_type &outb) const override;
 
-public:
+  void set_ordinal_position(uint ordinal_position) {
+    m_ordinal_position = ordinal_position;
+  }
+
+ public:
   /////////////////////////////////////////////////////////////////////////
   // table.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual const Abstract_table &table() const;
+  const Abstract_table &table() const override;
 
-  virtual Abstract_table &table();
+  Abstract_table &table() override;
 
   /////////////////////////////////////////////////////////////////////////
   // type.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual enum_column_types type() const
-  { return m_type; }
+  enum_column_types type() const override { return m_type; }
 
-  virtual void set_type(enum_column_types type)
-  { m_type= type; }
+  void set_type(enum_column_types type) override { m_type = type; }
 
   /////////////////////////////////////////////////////////////////////////
   // collation.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual Object_id collation_id() const
-  { return m_collation_id; }
+  Object_id collation_id() const override { return m_collation_id; }
 
-  virtual void set_collation_id(Object_id collation_id)
-  { m_collation_id= collation_id; }
+  void set_collation_id(Object_id collation_id) override {
+    m_collation_id = collation_id;
+  }
+
+  void set_is_explicit_collation(bool is_explicit_collation) override {
+    m_is_explicit_collation = is_explicit_collation;
+  }
+
+  bool is_explicit_collation() const override {
+    return m_is_explicit_collation;
+  }
 
   /////////////////////////////////////////////////////////////////////////
   // nullable.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual bool is_nullable() const
-  { return m_is_nullable; }
+  bool is_nullable() const override { return m_is_nullable; }
 
-  virtual void set_nullable(bool nullable)
-  { m_is_nullable= nullable; }
+  void set_nullable(bool nullable) override { m_is_nullable = nullable; }
 
   /////////////////////////////////////////////////////////////////////////
   // is_zerofill.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual bool is_zerofill() const
-  { return m_is_zerofill; }
+  bool is_zerofill() const override { return m_is_zerofill; }
 
-  virtual void set_zerofill(bool zerofill)
-  { m_is_zerofill= zerofill; }
+  void set_zerofill(bool zerofill) override { m_is_zerofill = zerofill; }
 
   /////////////////////////////////////////////////////////////////////////
   // is_unsigned.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual bool is_unsigned() const
-  { return m_is_unsigned; }
+  bool is_unsigned() const override { return m_is_unsigned; }
 
-  virtual void set_unsigned(bool unsigned_flag)
-  { m_is_unsigned= unsigned_flag; }
+  void set_unsigned(bool unsigned_flag) override {
+    m_is_unsigned = unsigned_flag;
+  }
 
   /////////////////////////////////////////////////////////////////////////
   // auto increment.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual bool is_auto_increment() const
-  { return m_is_auto_increment; }
+  bool is_auto_increment() const override { return m_is_auto_increment; }
 
-  virtual void set_auto_increment(bool auto_increment)
-  { m_is_auto_increment= auto_increment; }
+  void set_auto_increment(bool auto_increment) override {
+    m_is_auto_increment = auto_increment;
+  }
 
   /////////////////////////////////////////////////////////////////////////
   // ordinal_position.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual uint ordinal_position() const
-  { return m_ordinal_position; }
+  uint ordinal_position() const override { return m_ordinal_position; }
 
   /////////////////////////////////////////////////////////////////////////
   // char_length.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual size_t char_length() const
-  { return m_char_length; }
+  size_t char_length() const override { return m_char_length; }
 
-  virtual void set_char_length(size_t char_length)
-  { m_char_length= char_length; }
+  void set_char_length(size_t char_length) override {
+    m_char_length = char_length;
+  }
 
   /////////////////////////////////////////////////////////////////////////
   // numeric_precision.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual uint numeric_precision() const
-  { return m_numeric_precision; }
+  uint numeric_precision() const override { return m_numeric_precision; }
 
-  virtual void set_numeric_precision(uint numeric_precision)
-  { m_numeric_precision= numeric_precision; }
+  void set_numeric_precision(uint numeric_precision) override {
+    m_numeric_precision = numeric_precision;
+  }
 
   /////////////////////////////////////////////////////////////////////////
   // numeric_scale.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual uint numeric_scale() const
-  { return m_numeric_scale; }
+  uint numeric_scale() const override { return m_numeric_scale; }
 
-  virtual void set_numeric_scale(uint numeric_scale)
-  {
-    m_numeric_scale_null= false;
-    m_numeric_scale= numeric_scale;
+  void set_numeric_scale(uint numeric_scale) override {
+    m_numeric_scale_null = false;
+    m_numeric_scale = numeric_scale;
   }
 
-  virtual void set_numeric_scale_null(bool is_null)
-  { m_numeric_scale_null= is_null; }
+  void set_numeric_scale_null(bool is_null) override {
+    m_numeric_scale_null = is_null;
+  }
 
-  virtual bool is_numeric_scale_null() const
-  { return m_numeric_scale_null; }
+  bool is_numeric_scale_null() const override { return m_numeric_scale_null; }
 
   /////////////////////////////////////////////////////////////////////////
   // datetime_precision.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual uint datetime_precision() const
-  { return m_datetime_precision; }
+  uint datetime_precision() const override { return m_datetime_precision; }
 
-  virtual void set_datetime_precision(uint datetime_precision)
-  {
-    m_datetime_precision_null= false;
-    m_datetime_precision= datetime_precision;
+  void set_datetime_precision(uint datetime_precision) override {
+    m_datetime_precision_null = false;
+    m_datetime_precision = datetime_precision;
   }
 
-  virtual void set_datetime_precision_null(bool is_null)
-  { m_datetime_precision_null= is_null; }
+  void set_datetime_precision_null(bool is_null) override {
+    m_datetime_precision_null = is_null;
+  }
 
-  virtual bool is_datetime_precision_null() const
-  { return m_datetime_precision_null; }
+  bool is_datetime_precision_null() const override {
+    return m_datetime_precision_null;
+  }
 
   /////////////////////////////////////////////////////////////////////////
   // has_no_default.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual bool has_no_default() const
-  { return m_has_no_default; }
+  bool has_no_default() const override { return m_has_no_default; }
 
-  virtual void set_has_no_default(bool has_no_default)
-  { m_has_no_default= has_no_default; }
+  void set_has_no_default(bool has_no_default) override {
+    m_has_no_default = has_no_default;
+  }
 
   /////////////////////////////////////////////////////////////////////////
   // default_value (binary).
   /////////////////////////////////////////////////////////////////////////
 
-  virtual const String_type &default_value() const
-  { return m_default_value; }
+  const String_type &default_value() const override { return m_default_value; }
 
-  virtual void set_default_value(const String_type &default_value)
-  {
-    m_default_value_null= false;
-    m_default_value= default_value;
+  void set_default_value(const String_type &default_value) override {
+    m_default_value_null = false;
+    m_default_value = default_value;
   }
 
-  virtual void set_default_value_null(bool is_null)
-  { m_default_value_null= is_null; }
+  void set_default_value_null(bool is_null) override {
+    m_default_value_null = is_null;
+  }
 
-  virtual bool is_default_value_null() const
-  { return m_default_value_null; }
+  bool is_default_value_null() const override { return m_default_value_null; }
 
   /////////////////////////////////////////////////////////////////////////
   // default_value_utf8
   /////////////////////////////////////////////////////////////////////////
 
-  virtual const String_type &default_value_utf8() const
-  { return m_default_value_utf8; }
-
-  virtual void set_default_value_utf8(const String_type &default_value_utf8)
-  {
-    m_default_value_utf8_null= false;
-    m_default_value_utf8= default_value_utf8;
+  const String_type &default_value_utf8() const override {
+    return m_default_value_utf8;
   }
 
-  virtual void set_default_value_utf8_null(bool is_null)
-  { m_default_value_utf8_null= is_null; }
+  void set_default_value_utf8(const String_type &default_value_utf8) override {
+    m_default_value_utf8_null = false;
+    m_default_value_utf8 = default_value_utf8;
+  }
+
+  void set_default_value_utf8_null(bool is_null) override {
+    m_default_value_utf8_null = is_null;
+  }
 
   /* purecov: begin deadcode */
-  virtual bool is_default_value_utf8_null() const
-  { return m_default_value_utf8_null; }
+  bool is_default_value_utf8_null() const override {
+    return m_default_value_utf8_null;
+  }
   /* purecov: end */
 
   /////////////////////////////////////////////////////////////////////////
   // is virtual ?
   /////////////////////////////////////////////////////////////////////////
 
-  virtual bool is_virtual() const
-  { return m_is_virtual; }
+  bool is_virtual() const override { return m_is_virtual; }
 
-  virtual void set_virtual(bool is_virtual)
-  { m_is_virtual= is_virtual; }
+  void set_virtual(bool is_virtual) override { m_is_virtual = is_virtual; }
 
   /////////////////////////////////////////////////////////////////////////
   // generation_expression (binary).
   /////////////////////////////////////////////////////////////////////////
 
-  virtual const String_type &generation_expression() const
-  { return m_generation_expression; }
+  const String_type &generation_expression() const override {
+    return m_generation_expression;
+  }
 
-  virtual void set_generation_expression(const String_type
-                                         &generation_expression)
-  { m_generation_expression= generation_expression; }
+  void set_generation_expression(
+      const String_type &generation_expression) override {
+    m_generation_expression = generation_expression;
+  }
 
-  virtual bool is_generation_expression_null() const
-  { return m_generation_expression.empty(); }
+  bool is_generation_expression_null() const override {
+    return m_generation_expression.empty();
+  }
 
   /////////////////////////////////////////////////////////////////////////
   // generation_expression_utf8
   /////////////////////////////////////////////////////////////////////////
 
-  virtual const String_type &generation_expression_utf8() const
-  { return m_generation_expression_utf8; }
+  const String_type &generation_expression_utf8() const override {
+    return m_generation_expression_utf8;
+  }
 
-  virtual void set_generation_expression_utf8(const String_type
-                                              &generation_expression_utf8)
-  { m_generation_expression_utf8= generation_expression_utf8; }
+  void set_generation_expression_utf8(
+      const String_type &generation_expression_utf8) override {
+    m_generation_expression_utf8 = generation_expression_utf8;
+  }
 
-  virtual bool is_generation_expression_utf8_null() const
-  { return m_generation_expression_utf8.empty(); }
+  bool is_generation_expression_utf8_null() const override {
+    return m_generation_expression_utf8.empty();
+  }
 
   /////////////////////////////////////////////////////////////////////////
   // default_option.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual const String_type &default_option() const
-  { return m_default_option; }
+  const String_type &default_option() const override {
+    return m_default_option;
+  }
 
-  virtual void set_default_option(const String_type &default_option)
-  { m_default_option= default_option; }
+  void set_default_option(const String_type &default_option) override {
+    m_default_option = default_option;
+  }
 
   /////////////////////////////////////////////////////////////////////////
   // update_option.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual const String_type &update_option() const
-  { return m_update_option; }
+  const String_type &update_option() const override { return m_update_option; }
 
-  virtual void set_update_option(const String_type &update_option)
-  { m_update_option= update_option; }
+  void set_update_option(const String_type &update_option) override {
+    m_update_option = update_option;
+  }
 
   /////////////////////////////////////////////////////////////////////////
   // Comment.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual const String_type &comment() const
-  { return m_comment; }
+  const String_type &comment() const override { return m_comment; }
 
-  virtual void set_comment(const String_type &comment)
-  { m_comment= comment; }
+  void set_comment(const String_type &comment) override { m_comment = comment; }
 
   /////////////////////////////////////////////////////////////////////////
-  // is_hidden.
+  // Hidden.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual bool is_hidden() const
-  { return m_hidden; }
+  enum_hidden_type hidden() const override { return m_hidden; }
 
-  virtual void set_hidden(bool hidden)
-  { m_hidden= hidden; }
+  void set_hidden(enum_hidden_type hidden) override { m_hidden = hidden; }
 
   /////////////////////////////////////////////////////////////////////////
   // Options.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual const Properties &options() const
-  { return *m_options; }
+  const Properties &options() const override { return m_options; }
 
-  virtual Properties &options()
-  { return *m_options; }
+  Properties &options() override { return m_options; }
 
-  virtual bool set_options_raw(const String_type &options_raw);
+  bool set_options(const String_type &options_raw) override {
+    return m_options.insert_values(options_raw);
+  }
 
   /////////////////////////////////////////////////////////////////////////
   // se_private_data.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual const Properties &se_private_data() const
-  { return *m_se_private_data; }
+  const Properties &se_private_data() const override {
+    return m_se_private_data;
+  }
 
-  virtual Properties &se_private_data()
-  { return *m_se_private_data; }
+  Properties &se_private_data() override { return m_se_private_data; }
 
-  virtual bool set_se_private_data_raw(const String_type &se_private_data_raw);
+  bool set_se_private_data(const Properties &se_private_data) override {
+    return m_se_private_data.insert_values(se_private_data);
+  }
+
+  bool set_se_private_data(const String_type &se_private_data_raw) override {
+    return m_se_private_data.insert_values(se_private_data_raw);
+  }
+
+  LEX_CSTRING engine_attribute() const override {
+    return lex_cstring_handle(m_engine_attribute);
+  }
+
+  void set_engine_attribute(LEX_CSTRING a) override {
+    m_engine_attribute.assign(a.str, a.length);
+  }
+
+  LEX_CSTRING secondary_engine_attribute() const override {
+    return lex_cstring_handle(m_secondary_engine_attribute);
+  }
+
+  void set_secondary_engine_attribute(LEX_CSTRING a) override {
+    m_secondary_engine_attribute.assign(a.str, a.length);
+  }
 
   /////////////////////////////////////////////////////////////////////////
   // Column key type.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual void set_column_key(enum_column_key column_key)
-  {
-    m_column_key= column_key;
+  void set_column_key(enum_column_key column_key) override {
+    m_column_key = column_key;
   }
 
-  virtual enum_column_key column_key() const
-  { return m_column_key; }
+  enum_column_key column_key() const override { return m_column_key; }
+
+  /////////////////////////////////////////////////////////////////////////
+  // Spatial reference system ID
+  /////////////////////////////////////////////////////////////////////////
+  void set_srs_id(Nullable<gis::srid_t> srs_id) override { m_srs_id = srs_id; }
+
+  Nullable<gis::srid_t> srs_id() const override { return m_srs_id; }
 
   /////////////////////////////////////////////////////////////////////////
   // Elements.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual Column_type_element *add_element();
+  Column_type_element *add_element() override;
 
-  virtual const Column_type_element_collection &elements() const
-  {
+  const Column_type_element_collection &elements() const override {
     DBUG_ASSERT(type() == enum_column_types::ENUM ||
                 type() == enum_column_types::SET);
     return m_elements;
@@ -401,47 +439,57 @@ public:
   // Column display type
   /////////////////////////////////////////////////////////////////////////
 
-  virtual const String_type &column_type_utf8() const
-  { return m_column_type_utf8; }
+  const String_type &column_type_utf8() const override {
+    return m_column_type_utf8;
+  }
 
-  virtual void set_column_type_utf8(const String_type &column_type_utf8)
-  { m_column_type_utf8= column_type_utf8; }
+  void set_column_type_utf8(const String_type &column_type_utf8) override {
+    m_column_type_utf8 = column_type_utf8;
+  }
 
-  virtual size_t elements_count() const
-  { return m_elements.size(); }
+  size_t elements_count() const override { return m_elements.size(); }
 
   // Fix "inherits ... via dominance" warnings
-  virtual Weak_object_impl *impl()
-  { return Weak_object_impl::impl(); }
-  virtual const Weak_object_impl *impl() const
-  { return Weak_object_impl::impl(); }
-  virtual Object_id id() const
-  { return Entity_object_impl::id(); }
-  virtual bool is_persistent() const
-  { return Entity_object_impl::is_persistent(); }
-  virtual const String_type &name() const
-  { return Entity_object_impl::name(); }
-  virtual void set_name(const String_type &name)
-  { Entity_object_impl::set_name(name); }
+  Entity_object_impl *impl() override { return Entity_object_impl::impl(); }
+  const Entity_object_impl *impl() const override {
+    return Entity_object_impl::impl();
+  }
+  Object_id id() const override { return Entity_object_impl::id(); }
+  bool is_persistent() const override {
+    return Entity_object_impl::is_persistent();
+  }
+  const String_type &name() const override {
+    return Entity_object_impl::name();
+  }
+  void set_name(const String_type &name) override {
+    Entity_object_impl::set_name(name);
+  }
 
-public:
-  static Column_impl *restore_item(Abstract_table_impl *table)
-  {
+  bool is_array() const override {
+    // Is this a typed array field?
+    if (options().exists("is_array")) {
+      bool is_array;
+      if (!options().get("is_array", &is_array)) return is_array;
+    }
+
+    return false;
+  }
+
+ public:
+  static Column_impl *restore_item(Abstract_table_impl *table) {
     return new (std::nothrow) Column_impl(table);
   }
 
   static Column_impl *clone(const Column_impl &other,
-                            Abstract_table_impl *table)
-  {
+                            Abstract_table_impl *table) {
     return new (std::nothrow) Column_impl(other, table);
   }
 
-  Column_impl *clone(Abstract_table_impl *parent) const
-  {
+  Column_impl *clone(Abstract_table_impl *parent) const {
     return new Column_impl(*this, parent);
   }
 
-private:
+ private:
   // Fields.
 
   enum_column_types m_type;
@@ -451,7 +499,7 @@ private:
   bool m_is_unsigned;
   bool m_is_auto_increment;
   bool m_is_virtual;
-  bool m_hidden;
+  enum_hidden_type m_hidden;
 
   uint m_ordinal_position;
   size_t m_char_length;
@@ -475,8 +523,12 @@ private:
   String_type m_generation_expression;
   String_type m_generation_expression_utf8;
 
-  std::unique_ptr<Properties> m_options;
-  std::unique_ptr<Properties> m_se_private_data;
+  Properties_impl m_options;
+  Properties_impl m_se_private_data;
+
+  // Se-specific json attributes
+  String_type m_engine_attribute;
+  String_type m_secondary_engine_attribute;
 
   // References to tightly-coupled objects.
 
@@ -489,26 +541,18 @@ private:
   // References to loosely-coupled objects.
 
   Object_id m_collation_id;
+  bool m_is_explicit_collation;
 
   // TODO-WIKI21 should the columns.name be defined utf8_general_cs ?
   // instead of utf8_general_ci.
 
   enum_column_key m_column_key;
+
+  Nullable<gis::srid_t> m_srs_id;
 };
 
 ///////////////////////////////////////////////////////////////////////////
 
-class Column_type : public Object_type
-{
-public:
-  virtual void register_tables(Open_dictionary_tables_ctx *otx) const;
+}  // namespace dd
 
-  virtual Weak_object *create_object() const
-  { return new (std::nothrow) Column_impl(); }
-};
-
-///////////////////////////////////////////////////////////////////////////
-
-}
-
-#endif // DD__COLUMN_IMPL_INCLUDED
+#endif  // DD__COLUMN_IMPL_INCLUDED

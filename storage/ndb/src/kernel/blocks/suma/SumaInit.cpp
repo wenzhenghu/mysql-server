@@ -1,14 +1,21 @@
 /*
-   Copyright (c) 2003, 2016, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2003, 2018, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -28,6 +35,7 @@ Suma::Suma(Block_context& ctx) :
   c_tables(c_tablePool),
   c_subscriptions(c_subscriptionPool),
   c_gcp_list(c_gcp_pool),
+  b_dti_buf_ref_count(0),
   m_current_gci(~(Uint64)0)
 {
   BLOCK_CONSTRUCTOR(Suma);
@@ -149,9 +157,13 @@ Suma::Suma(Block_context& ctx) :
   bzero(c_subscriber_per_node, sizeof(c_subscriber_per_node));
 
   m_gcp_rep_cnt = getLqhWorkers();
+  m_snd_gcp_rep_counter_index = 0;
   m_min_gcp_rep_counter_index = 0;
   m_max_gcp_rep_counter_index = 0;
   bzero(m_gcp_rep_counter, sizeof(m_gcp_rep_counter));
+  m_oldest_gcp_inflight_index = 0;
+  m_newest_gcp_inflight_index = 0;
+  bzero(m_gcp_inflight, sizeof(m_gcp_inflight));
 }
 
 Suma::~Suma()

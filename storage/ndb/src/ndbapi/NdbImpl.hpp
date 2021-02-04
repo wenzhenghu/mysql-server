@@ -1,14 +1,21 @@
 /*
-   Copyright (c) 2003, 2016, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2003, 2020, Oracle and/or its affiliates.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -25,6 +32,7 @@
 #include <NdbTick.h>
 #include <stat_utils.hpp>
 
+#include "AssembleFragments.hpp"
 #include "NdbQueryOperationImpl.hpp"
 #include "ndb_cluster_connection_impl.hpp"
 #include "NdbDictionaryImpl.hpp"
@@ -90,7 +98,7 @@ class NdbImpl : public trp_client
 {
 public:
   NdbImpl(Ndb_cluster_connection *, Ndb&);
-  ~NdbImpl();
+  ~NdbImpl() override;
 
   int send_event_report(bool is_poll_owner, Uint32 *data, Uint32 length);
   int send_dump_state_all(Uint32 *dumpStateCodeArray, Uint32 len);
@@ -136,6 +144,7 @@ public:
 
   WakeupHandler* wakeHandler;
 
+  AssembleBatchedFragments m_suma_fragmented_signals[MAX_NDB_NODES];
   NdbEventOperationImpl *m_ev_op;
 
   int m_optimized_node_selection;
@@ -166,6 +175,7 @@ public:
   }
 
   bool forceShortRequests;
+  bool forceAccTableScans;
 
   static inline void setForceShortRequests(Ndb* ndb, bool val)
   {
@@ -189,19 +199,19 @@ public:
     assert(stat < Ndb::NumClientStatistics);
     if (likely(stat < Ndb::NumClientStatistics))
       clientStats[ stat ] += inc;
-  };
+  }
 
   inline void decClientStat(const Ndb::ClientStatistics stat, const Uint64 dec) {
     assert(stat < Ndb::NumClientStatistics);
     if (likely(stat < Ndb::NumClientStatistics))
       clientStats[ stat ] -= dec;
-  };
+  }
   
   inline void setClientStat(const Ndb::ClientStatistics stat, const Uint64 val) {
     assert(stat < Ndb::NumClientStatistics);
     if (likely(stat < Ndb::NumClientStatistics))
       clientStats[ stat ] = val;
-  };
+  }
 
   /* We don't record the sent/received bytes of some GSNs as they are 
    * generated constantly and are not targetted to specific
@@ -252,13 +262,17 @@ public:
   /**
    * trp_client interface
    */
-  virtual void trp_deliver_signal(const NdbApiSignal*,
-                                  const LinearSectionPtr p[3]);
-  virtual void trp_wakeup();
-  virtual void recordWaitTimeNanos(Uint64 nanos);
+  void trp_deliver_signal(const NdbApiSignal*,
+                          const LinearSectionPtr p[3]) override;
+  void trp_wakeup() override;
+  void recordWaitTimeNanos(Uint64 nanos) override;
+
+  void drop_batched_fragments(AssembleBatchedFragments* batched_fragments);
+  Int32 assemble_data_event_signal(AssembleBatchedFragments* batched_fragments, NdbApiSignal* signal, LinearSectionPtr ptr[3]);
   // Is node available for running transactions
   bool   get_node_alive(NodeId nodeId) const;
   bool   get_node_stopping(NodeId nodeId) const;
+  bool   get_node_available(NodeId nodeId) const;
   bool   getIsDbNode(NodeId nodeId) const;
   bool   getIsNodeSendable(NodeId nodeId) const;
   Uint32 getNodeGrp(NodeId nodeId) const;
@@ -276,11 +290,13 @@ public:
                            const LinearSectionPtr ptr[3], Uint32 secs);
   int sendFragmentedSignal(NdbApiSignal*, Uint32 nodeId,
                            const GenericSectionPtr ptr[3], Uint32 secs);
+
+  Uint32 mapRecipient(void * object);
+  void* unmapRecipient(Uint32 id, void *object);
+
   void* int2void(Uint32 val);
   static NdbReceiver* void2rec(void* val);
   static NdbTransaction* void2con(void* val);
-  static NdbOperation* void2rec_op(void* val);
-  static NdbIndexOperation* void2rec_iop(void* val);
   NdbTransaction* lookupTransactionFromOperation(const TcKeyConf* conf);
   Uint32 select_node(NdbTableImpl *table_impl, const Uint16 *nodes, Uint32 cnt);
 };
@@ -300,6 +316,31 @@ public:
 #define CHECK_STATUS_MACRO_NULL \
    {if (checkInitState() == -1) { theError.code = 4100; DBUG_RETURN(NULL);}}
 
+/**
+ * theNdbObjectIdMap offers the translation between the object id
+ * used in the API protocol, and the object which a received signal
+ * should be delivered into.
+ * Objects are mapped using mapRecipient() function below and can be unmapped
+ * by calling unmapRecipient().
+ */
+
+inline
+Uint32
+NdbImpl::mapRecipient(void * object)
+{
+  return theNdbObjectIdMap.map(object);
+}
+
+inline
+void*
+NdbImpl::unmapRecipient(Uint32 id, void * object)
+{
+  return theNdbObjectIdMap.unmap(id, object);
+}
+
+/**
+ * Lookup of a previous mapped 'receiver'
+ */
 inline
 void *
 NdbImpl::int2void(Uint32 val)
@@ -319,20 +360,6 @@ NdbTransaction*
 NdbImpl::void2con(void* val)
 {
   return (NdbTransaction*)val;
-}
-
-inline
-NdbOperation*
-NdbImpl::void2rec_op(void* val)
-{
-  return (NdbOperation*)(void2rec(val)->getOwner());
-}
-
-inline
-NdbIndexOperation*
-NdbImpl::void2rec_iop(void* val)
-{
-  return (NdbIndexOperation*)(void2rec(val)->getOwner());
 }
 
 inline 
@@ -580,6 +607,17 @@ inline
 bool
 NdbImpl::get_node_alive(NodeId n) const {
   return getNodeInfo(n).m_alive;
+}
+
+inline
+bool
+NdbImpl::get_node_available(NodeId n) const
+{
+  const trp_node & node = getNodeInfo(n);
+  assert(node.m_info.getType() == NodeInfo::DB);
+  return (node.m_alive &&
+          !node.m_state.getSingleUserMode() &&
+          node.m_state.startLevel == NodeState::SL_STARTED);
 }
 
 inline

@@ -1,14 +1,21 @@
 /*
-   Copyright (c) 2016 Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2016, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -49,52 +56,42 @@
     than once.
 */
 template <typename TVertex, typename TVisit_start, typename TVisit_end,
-    typename TGet_neighbors, typename TVertex_less= std::less<TVertex>>
-  void depth_first_search(
-  TVertex start_vertex, TVisit_start visitor_start, TVisit_end visitor_end,
-    TGet_neighbors get_neighbors,
-    std::set<TVertex>& visited_set= std::set<TVertex>{})
-{
+          typename TGet_neighbors, typename TVertex_less = std::less<TVertex>>
+void depth_first_search(TVertex start_vertex, TVisit_start visitor_start,
+                        TVisit_end visitor_end, TGet_neighbors get_neighbors,
+                        std::set<TVertex> &visited_set = std::set<TVertex>{}) {
   /* A constant for a index denoting if the search from specified vertex has
     just been started of just ends. */
-  constexpr int START_VISITING= 0;
+  constexpr int START_VISITING = 0;
   /* A constant for a index denoting the vertex. */
-  constexpr int CURRENT_VERTEX= 1;
+  constexpr int CURRENT_VERTEX = 1;
 
   /* An actual stack for search. */
   std::stack<std::tuple<bool, TVertex>> stack;
   /* Check if this vertex was not already visited - this may happen if
     the visited_set was returned by another DFS run. */
-  if (!visited_set.insert(start_vertex).second)
-  {
+  if (!visited_set.insert(start_vertex).second) {
     return;
   }
   stack.emplace(true, start_vertex);
 
-  while (!stack.empty())
-  {
-    std::tuple<bool, TVertex>& elem= stack.top();
-    if (std::get<START_VISITING>(elem))
-    {
+  while (!stack.empty()) {
+    std::tuple<bool, TVertex> &elem = stack.top();
+    if (std::get<START_VISITING>(elem)) {
       visitor_start(std::get<CURRENT_VERTEX>(elem));
 
-      std::get<START_VISITING>(elem)= false;
-      for (TVertex neighbor : get_neighbors(std::get<CURRENT_VERTEX>(elem)))
-      {
+      std::get<START_VISITING>(elem) = false;
+      for (TVertex neighbor : get_neighbors(std::get<CURRENT_VERTEX>(elem))) {
         /* Check if this vertex was not visited yet in this or previous runs. */
-        if (visited_set.insert(neighbor).second)
-        {
+        if (visited_set.insert(neighbor).second) {
           stack.emplace(true, neighbor);
         }
       }
-    }
-    else
-    {
+    } else {
       visitor_end(std::get<CURRENT_VERTEX>(elem));
       stack.pop();
     }
   }
 }
-
 
 #endif

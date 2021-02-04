@@ -1,5 +1,4 @@
-# Skipping the test when log-bin is enabled due to Bug#22508362
---source include/not_log_bin.inc
+--source include/not_hypergraph.inc  # Optimizer hints are not supported.
 
 --echo # WL#8017 Infrastructure for Optimizer Hints
 
@@ -40,11 +39,13 @@ set optimizer_switch=default;
 --echo # Check statistics with no hint
 FLUSH STATUS;
 SELECT f1 FROM t3 WHERE f1 > 30 AND f1 < 33;
+--skip_if_hypergraph  # Does not support hints yet.
 SHOW STATUS LIKE 'handler_read%';
 
 --echo # Check statistics with hint
 FLUSH STATUS;
-SELECT /*+ NO_RANGE_OPTIMIZATION(t3 PRIMARY, f2_idx) */ f1 FROM t3 WHERE f1 > 30 AND f1 < 33;
+SELECT /*+ NO_RANGE_OPTIMIZATION(t3) */ f1 FROM t3 WHERE f1 > 30 AND f1 < 33;
+--skip_if_hypergraph  # Does not support hints yet.
 SHOW STATUS LIKE 'handler_read%';
 
 EXPLAIN SELECT f1 FROM t3 WHERE f1 > 30 AND f1 < 33;
@@ -52,7 +53,7 @@ EXPLAIN SELECT f1 FROM t3 WHERE f1 > 30 AND f1 < 33;
 --echo # Should use range access by f2_idx key
 EXPLAIN SELECT /*+ NO_RANGE_OPTIMIZATION(t3 PRIMARY) */ f1 FROM t3 WHERE f1 > 30 AND f1 < 33;
 --echo # Turn off range access for PRIMARY & f2_idx keys
---echo # Should use index access
+--echo # Should use skip scan for f3_idx index
 EXPLAIN SELECT /*+ NO_RANGE_OPTIMIZATION(t3 PRIMARY, f2_idx) */ f1 FROM t3 WHERE f1 > 30 AND f1 < 33;
 --echo # Turn off range access for all keys
 --echo # Should use index access
@@ -92,14 +93,18 @@ set optimizer_switch='batched_key_access=off,mrr_cost_based=off';
 
 --echo # Check statistics without hint
 FLUSH STATUS;
+--sorted_result
 SELECT t2.f1, t2.f2, t2.f3 FROM t1,t2
 WHERE t1.f1=t2.f1 AND t2.f2 BETWEEN t1.f1 and t1.f2 and t2.f2 + 1 >= t1.f1 + 1;
+--skip_if_hypergraph  # Does not support hints yet.
 SHOW STATUS LIKE 'handler_read%';
 
 --echo # Check statistics with hint
 FLUSH STATUS;
+--sorted_result
 SELECT /*+ BKA() */ t2.f1, t2.f2, t2.f3 FROM t1,t2
 WHERE t1.f1=t2.f1 AND t2.f2 BETWEEN t1.f1 and t1.f2 and t2.f2 + 1 >= t1.f1 + 1;
+--skip_if_hypergraph  # Does not support hints yet.
 SHOW STATUS LIKE 'handler_read%';
 
 EXPLAIN SELECT t2.f1, t2.f2, t2.f3 FROM t1,t2
@@ -165,7 +170,7 @@ EXPLAIN SELECT /*+ QB_NAME(QB1) NO_BKA(t2@QB1) */ t2.f1, t2.f2, t2.f3 FROM t1,t2
 WHERE t1.f1=t2.f1 AND t2.f2 BETWEEN t1.f1 and t1.f2 and t2.f2 + 1 >= t1.f1 + 1;
 
 --echo # UPDATE|DELETE|INSERT|REPLACE hint testing
-set optimizer_switch='batched_key_access=off,mrr_cost_based=off';
+set optimizer_switch='batched_key_access=off,mrr_cost_based=off,semijoin=off,materialization=off';
 
 EXPLAIN UPDATE t3
 SET f3 = 'mnbv' WHERE f1 > 30 AND f1 < 33 AND (t3.f1, t3.f2, t3.f3) IN
@@ -276,19 +281,20 @@ WHERE tb1.f1=tb2.f1 AND tb2.f2 BETWEEN tb1.f1 and tb1.f2 and tb2.f2 + 1 >= tb1.f
 FLUSH STATUS;
 SELECT /*+ BKA(@qb1 t2) */ * FROM (SELECT /*+ QB_NAME(QB1) */ t2.f1, t2.f2, t2.f3 FROM t1,t2
 WHERE t1.f1=t2.f1 AND t2.f2 BETWEEN t1.f1 and t1.f2 and t2.f2 + 1 >= t1.f1 + 1) AS s1;
+--skip_if_hypergraph  # Does not support hints yet.
 SHOW STATUS LIKE 'handler_read%';
 
 PREPARE stmt1 FROM "SELECT /*+ BKA(@qb1 t2) */ * FROM (SELECT /*+ QB_NAME(QB1) */ t2.f1, t2.f2, t2.f3 FROM t1,t2
 WHERE t1.f1=t2.f1 AND t2.f2 BETWEEN t1.f1 and t1.f2 and t2.f2 + 1 >= t1.f1 + 1) AS s1";
 
-RESET QUERY CACHE;
 FLUSH STATUS;
 EXECUTE stmt1;
+--skip_if_hypergraph  # Does not support hints yet.
 SHOW STATUS LIKE 'handler_read%';
 
-RESET QUERY CACHE;
 FLUSH STATUS;
 EXECUTE stmt1;
+--skip_if_hypergraph  # Does not support hints yet.
 SHOW STATUS LIKE 'handler_read%';
 
 DEALLOCATE PREPARE stmt1;
@@ -309,12 +315,15 @@ INSERT INTO t3 VALUES (1,1),(2,2);
 
 --echo # Check statistics without hint
 FLUSH STATUS;
+--sorted_result
 SELECT t1.* FROM t1,t2,t3;
+--skip_if_hypergraph  # Does not support hints yet.
 SHOW STATUS LIKE 'handler_read%';
 
 --echo # Check statistics with hint
 FLUSH STATUS;
 SELECT /*+ NO_BNL() */t1.* FROM t1,t2,t3;
+--skip_if_hypergraph  # Does not support hints yet.
 SHOW STATUS LIKE 'handler_read%';
 
 EXPLAIN SELECT t1.* FROM t1,t2,t3;
@@ -393,6 +402,7 @@ set optimizer_switch='mrr=on,mrr_cost_based=off';
 --echo # Check statistics without hint
 FLUSH STATUS;
 SELECT * FROM t1 WHERE f2 <= 3 AND 3 <= f3;
+--skip_if_hypergraph  # Does not support hints yet.
 SHOW STATUS LIKE 'handler_read%';
 
 --echo # Check statistics with hint
@@ -658,7 +668,9 @@ b`) */ 1;
 EXPLAIN SELECT /*+ QB_NAME(``) */ 1;
 
 SET NAMES utf8;
+--character_set latin1
 EXPLAIN SELECT /*+ QB_NAME(`�``�`) */ 1;
+--character_set utf8mb4
 
 CREATE TABLE tableТ (i INT);
 SELECT /*+ BKA(tableТ) */ 1 FROM t1;
@@ -675,6 +687,8 @@ SELECT /*+ BKA(test@таблица) */ 1 FROM t1;
 SELECT /*+ NO_ICP(`�`) */ 1 FROM t1;
 
 DROP TABLE таблица;
+
+SET NAMES DEFAULT;
 
 --echo
 --echo # derived tables and other subqueries:
@@ -994,10 +1008,8 @@ drop view v1;
 drop table t1,t2,t3;
 
 --echo #
---echo # Unbalanced commentary test
+--echo # Non-terminated comment test
 --echo #
 
 --error ER_PARSE_ERROR
-SELECT /*+ 10;
-# PLEASE DON'T INSERT NEW STUFF TREE: WE ARE TESTING UNBALANCED COMMENTARY
-# END OF FILE
+PREPARE stmt FROM 'SELECT /*+ 10';

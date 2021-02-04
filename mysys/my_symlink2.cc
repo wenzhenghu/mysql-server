@@ -1,13 +1,25 @@
-/* Copyright (c) 2000, 2016, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2000, 2019, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
+
+   Without limiting anything contained in the foregoing, this file,
+   which is part of C Driver for MySQL (Connector/C), is also subject to the
+   Universal FOSS Exception, version 1.0, a copy of which can be found at
+   http://oss.oracle.com/licenses/universal-foss-exception.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -24,8 +36,9 @@
 #include "my_config.h"
 
 #include <errno.h>
-#include <m_string.h>
 #include <string.h>
+
+#include "m_string.h"
 #ifdef HAVE_UNISTD_H
 #include <unistd.h>
 #endif
@@ -38,20 +51,14 @@
 #include "mysys_err.h"
 
 File my_create_with_symlink(const char *linkname, const char *filename,
-			    int createflags, int access_flags, myf MyFlags)
-{
+                            int createflags, int access_flags, myf MyFlags) {
 #ifdef _WIN32
-  if (linkname)
-    filename= linkname;
-  if (!(MyFlags & MY_DELETE_OLD))
-  {
-    if (!access(filename,F_OK))
-    {
-      char errbuf[MYSYS_STRERROR_SIZE];
-      errno= EEXIST;
+  if (linkname) filename = linkname;
+  if (!(MyFlags & MY_DELETE_OLD)) {
+    if (!access(filename, F_OK)) {
+      errno = EEXIST;
       set_my_errno(EEXIST);
-      my_error(EE_CANTCREATEFILE, MYF(0), filename,
-               EEXIST, my_strerror(errbuf, sizeof(errbuf), EEXIST));
+      MyOsError(my_errno(), EE_CANTCREATEFILE, MYF(0), filename);
       return -1;
     }
   }
@@ -62,69 +69,53 @@ File my_create_with_symlink(const char *linkname, const char *filename,
   /* Test if we should create a link */
   int create_link;
   char abs_linkname[FN_REFLEN];
-  DBUG_ENTER("my_create_with_symlink");
-  DBUG_PRINT("enter", ("linkname: %s  filename: %s",
-                       linkname ? linkname : "(null)",
-                       filename ? filename : "(null)"));
+  DBUG_TRACE;
+  DBUG_PRINT("enter",
+             ("linkname: %s  filename: %s", linkname ? linkname : "(null)",
+              filename ? filename : "(null)"));
 
-  if (!my_enable_symlinks)
-  {
+  if (!my_enable_symlinks) {
     DBUG_PRINT("info", ("Symlinks disabled"));
     /* Create only the file, not the link and file */
-    create_link= 0;
-    if (linkname)
-      filename= linkname;
-  }
-  else
-  {
-    if (linkname)
-      my_realpath(abs_linkname, linkname, MYF(0));
-    create_link= (linkname && strcmp(abs_linkname,filename));
+    create_link = 0;
+    if (linkname) filename = linkname;
+  } else {
+    if (linkname) my_realpath(abs_linkname, linkname, MYF(0));
+    create_link = (linkname && strcmp(abs_linkname, filename));
   }
 
-  if (!(MyFlags & MY_DELETE_OLD))
-  {
-    if (!access(filename,F_OK))
-    {
-      char errbuf[MYSYS_STRERROR_SIZE];
-      errno= EEXIST;
+  if (!(MyFlags & MY_DELETE_OLD)) {
+    if (!access(filename, F_OK)) {
+      errno = EEXIST;
       set_my_errno(EEXIST);
-      my_error(EE_CANTCREATEFILE, MYF(0), filename,
-               EEXIST, my_strerror(errbuf, sizeof(errbuf), EEXIST));
-      DBUG_RETURN(-1);
+      MyOsError(my_errno(), EE_CANTCREATEFILE, MYF(0), filename);
+      return -1;
     }
-    if (create_link && !access(linkname,F_OK))
-    {
-      char errbuf[MYSYS_STRERROR_SIZE];
-      errno= EEXIST;
+    if (create_link && !access(linkname, F_OK)) {
+      errno = EEXIST;
       set_my_errno(EEXIST);
-      my_error(EE_CANTCREATEFILE, MYF(0), linkname,
-               EEXIST, my_strerror(errbuf, sizeof(errbuf), EEXIST));
-      DBUG_RETURN(-1);
+      MyOsError(my_errno(), EE_CANTCREATEFILE, MYF(0), linkname);
+      return -1;
     }
   }
 
-  if ((file=my_create(filename, createflags, access_flags, MyFlags)) >= 0)
-  {
-    if (create_link)
-    {
+  if ((file = my_create(filename, createflags, access_flags, MyFlags)) >= 0) {
+    if (create_link) {
       /* Delete old link/file */
-      if (MyFlags & MY_DELETE_OLD)
-	my_delete(linkname, MYF(0));
+      if (MyFlags & MY_DELETE_OLD) my_delete(linkname, MYF(0));
       /* Create link */
-      if (my_symlink(filename, linkname, MyFlags))
-      {
-	/* Fail, remove everything we have done */
-	tmp_errno=my_errno();
-	my_close(file,MYF(0));
-	my_delete(filename, MYF(0));
-	file= -1;
-	set_my_errno(tmp_errno);
+      if (my_symlink(filename, linkname, MyFlags)) {
+        /* Fail, remove everything we have done */
+        tmp_errno = my_errno();
+        my_close(file, MYF(0));
+        my_delete(filename, MYF(0));
+        file = -1;
+        set_my_errno(tmp_errno);
       }
     }
   }
-  DBUG_RETURN(file);
-#endif // !_WIN32
+  return file;
+#endif  // !_WIN32
 }
 
 /*
@@ -132,24 +123,21 @@ File my_create_with_symlink(const char *linkname, const char *filename,
   symlink pointed to.
 */
 
-int my_delete_with_symlink(const char *name, myf MyFlags)
-{
+int my_delete_with_symlink(const char *name, myf MyFlags) {
 #ifdef _WIN32
   return my_delete(name, MyFlags);
 #else
   char link_name[FN_REFLEN];
-  int was_symlink= (my_enable_symlinks &&
-		    !my_readlink(link_name, name, MYF(0)));
+  int was_symlink =
+      (my_enable_symlinks && !my_readlink(link_name, name, MYF(0)));
   int result;
-  DBUG_ENTER("my_delete_with_symlink");
+  DBUG_TRACE;
 
-  if (!(result=my_delete(name, MyFlags)))
-  {
-    if (was_symlink)
-      result=my_delete(link_name, MyFlags);
+  if (!(result = my_delete(name, MyFlags))) {
+    if (was_symlink) result = my_delete(link_name, MyFlags);
   }
-  DBUG_RETURN(result);
-#endif // _WIN32
+  return result;
+#endif  // _WIN32
 }
 
 /*
@@ -162,40 +150,33 @@ int my_delete_with_symlink(const char *name, myf MyFlags)
    If something goes wrong, restore everything.
 */
 
-int my_rename_with_symlink(const char *from, const char *to, myf MyFlags)
-{
+int my_rename_with_symlink(const char *from, const char *to, myf MyFlags) {
 #ifdef _WIN32
   return my_rename(from, to, MyFlags);
 #else
   char link_name[FN_REFLEN], tmp_name[FN_REFLEN];
-  int was_symlink= (my_enable_symlinks &&
-		    !my_readlink(link_name, from, MYF(0)));
-  int result=0;
+  int was_symlink =
+      (my_enable_symlinks && !my_readlink(link_name, from, MYF(0)));
+  int result = 0;
   int name_is_different;
-  DBUG_ENTER("my_rename_with_symlink");
+  DBUG_TRACE;
 
-  if (!was_symlink)
-    DBUG_RETURN(my_rename(from, to, MyFlags));
+  if (!was_symlink) return my_rename(from, to, MyFlags);
 
   /* Change filename that symlink pointed to */
   my_stpcpy(tmp_name, to);
-  fn_same(tmp_name,link_name,1);		/* Copy dir */
-  name_is_different= strcmp(link_name, tmp_name);
-  if (name_is_different && !access(tmp_name, F_OK))
-  {
+  fn_same(tmp_name, link_name, 1); /* Copy dir */
+  name_is_different = strcmp(link_name, tmp_name);
+  if (name_is_different && !access(tmp_name, F_OK)) {
     set_my_errno(EEXIST);
-    if (MyFlags & MY_WME)
-    {
-      char errbuf[MYSYS_STRERROR_SIZE];
-      my_error(EE_CANTCREATEFILE, MYF(0), tmp_name,
-               EEXIST, my_strerror(errbuf, sizeof(errbuf), EEXIST));
+    if (MyFlags & MY_WME) {
+      MyOsError(my_errno(), EE_CANTCREATEFILE, MYF(0), tmp_name);
     }
-    DBUG_RETURN(1);
+    return 1;
   }
 
   /* Create new symlink */
-  if (my_symlink(tmp_name, to, MyFlags))
-    DBUG_RETURN(1);
+  if (my_symlink(tmp_name, to, MyFlags)) return 1;
 
   /*
     Rename symlinked file if the base name didn't change.
@@ -203,26 +184,24 @@ int my_rename_with_symlink(const char *from, const char *to, myf MyFlags)
     the same basename and different directories.
    */
 
-  if (name_is_different && my_rename(link_name, tmp_name, MyFlags))
-  {
-    int save_errno=my_errno();
-    my_delete(to, MyFlags);			/* Remove created symlink */
+  if (name_is_different && my_rename(link_name, tmp_name, MyFlags)) {
+    int save_errno = my_errno();
+    my_delete(to, MyFlags); /* Remove created symlink */
     set_my_errno(save_errno);
-    DBUG_RETURN(1);
+    return 1;
   }
 
   /* Remove original symlink */
-  if (my_delete(from, MyFlags))
-  {
-    int save_errno=my_errno();
+  if (my_delete(from, MyFlags)) {
+    int save_errno = my_errno();
     /* Remove created link */
     my_delete(to, MyFlags);
     /* Rename file back */
     if (strcmp(link_name, tmp_name))
-      (void) my_rename(tmp_name, link_name, MyFlags);
+      (void)my_rename(tmp_name, link_name, MyFlags);
     set_my_errno(save_errno);
-    result= 1;
+    result = 1;
   }
-  DBUG_RETURN(result);
+  return result;
 #endif /* !_WIN32 */
 }

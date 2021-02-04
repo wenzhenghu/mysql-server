@@ -1,21 +1,25 @@
 /*
- Copyright (c) 2012, 2016, Oracle and/or its affiliates. All rights
- reserved.
+ Copyright (c) 2012, 2020 Oracle and/or its affiliates.
  
- This program is free software; you can redistribute it and/or
- modify it under the terms of the GNU General Public License
- as published by the Free Software Foundation; version 2 of
- the License.
- 
+ This program is free software; you can redistribute it and/or modify
+ it under the terms of the GNU General Public License, version 2.0,
+ as published by the Free Software Foundation.
+
+ This program is also distributed with certain software (including
+ but not limited to OpenSSL) that is licensed under separate terms,
+ as designated in a particular file or component or in included license
+ documentation.  The authors of MySQL hereby grant you an additional
+ permission to link the program and your derivative works with the
+ separately licensed software that they have included with MySQL.
+
  This program is distributed in the hope that it will be useful,
  but WITHOUT ANY WARRANTY; without even the implied warranty of
- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- GNU General Public License for more details.
- 
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License, version 2.0, for more details.
+
  You should have received a copy of the GNU General Public License
  along with this program; if not, write to the Free Software
- Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
- 02110-1301  USA
+ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
  */
 
 #include <stdio.h>
@@ -30,6 +34,7 @@
 #include "adapter_global.h"
 #include "JsWrapper.h"
 #include "js_wrapper_macros.h"
+#include "JsValueAccess.h"
 
 /* Undefine UNIFIED_DEBUG here so macros are not expanded 
    and uni_debug is not declared as an extern
@@ -41,8 +46,6 @@ int udeb_per_file    = 0;
 
 #undef UNIFIED_DEBUG
 #include "unified_debug.h"
-
-using namespace v8;
 
 Persistent<Object> JSLoggerFunction;
 
@@ -160,7 +163,9 @@ void udeb_setLogger(const Arguments &args) {
   EscapableHandleScope scope(args.GetIsolate());
 
   if(! udeb_initialized) {
-    JSLoggerFunction.Reset(args.GetIsolate(), args[0]->ToObject());
+    Isolate * iso = args.GetIsolate();
+    Local<Context> ctx = iso->GetCurrentContext();
+    JSLoggerFunction.Reset(iso, args[0]->ToObject(ctx).ToLocalChecked());
     // JSLoggerFunction.Reset(Function::Cast(* (args[0])));
     // Local<Function> f = Function::Cast(* (args[0]));
     // JSLoggerFunction = Persistent<Function>::New(f);
@@ -174,7 +179,7 @@ void udeb_setLogger(const Arguments &args) {
 
 
 void udeb_setLevel(const Arguments &args) {
-  udeb_level = args[0]->Int32Value();
+  udeb_level = GetInt32Arg(args, 0);
   // C code cannot log below UDEB_INFO
   uni_debug = (udeb_per_file || (udeb_level > UDEB_NOTICE)) ? 1 : 0;
   
@@ -186,15 +191,16 @@ void udeb_setLevel(const Arguments &args) {
 
 void udeb_setFileLevel(const Arguments &args) {
   unsigned char filename[250];
-  
-  args[0]->ToString()->WriteOneByte(filename, 0, 250);
+  Isolate * iso = args.GetIsolate();
+  Local<Context> ctx = iso->GetCurrentContext();
+  args[0]->ToString(ctx).ToLocalChecked()->WriteOneByte(iso, filename, 0, 250);
   index_set(udeb_hash(udeb_basename((const char *) filename)));
   uni_debug = udeb_per_file = 1;
 
   args.GetReturnValue().Set(true);
 }
 
-void udebug_initOnLoad(Handle<Object> target) {
+void udebug_initOnLoad(Local<Object> target) {
   DEFINE_JS_FUNCTION(target, "setLogger", udeb_setLogger);
   DEFINE_JS_FUNCTION(target, "setLevel" , udeb_setLevel );
   DEFINE_JS_FUNCTION(target, "setFileLevel", udeb_setFileLevel);

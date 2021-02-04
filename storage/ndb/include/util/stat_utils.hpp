@@ -1,14 +1,21 @@
 /*
-   Copyright (c) 2016, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2016, 2020, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -80,12 +87,11 @@ public:
       if (m_noOfSamples == m_maxSamples)
       {
         /**
-         * An 'exponentially weighted moving average' effectively 
-         * expires an average sample from the moving average window.
-         * Then the most recent 'sample' can later be added in the
-         * same way as calculating a 'simple moving average'.
+         * An 'exponentially weighted moving average' need to expire
+         * an average 'sumSquare' sample from the moving average window.
+         * Then the most recent 'sumSquare' sample can later be added in
+         * the same way as calculating it in a 'simple moving average'.
          */
-        m_mean      -= (m_mean      / m_noOfSamples);
         m_sumSquare -= (m_sumSquare / m_noOfSamples);
         m_noOfSamples--;
       }
@@ -113,7 +119,7 @@ private:
   // Size of 'window' we calculate over
   const Uint32 m_maxSamples;
 
-  // Current number of samples taken
+  // Current number of samples used, <= m_maxSamples
   Uint32 m_noOfSamples;
 
   // Moving average of all current samples

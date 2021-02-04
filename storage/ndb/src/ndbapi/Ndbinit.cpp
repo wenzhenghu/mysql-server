@@ -1,14 +1,21 @@
 /*
-   Copyright (c) 2003, 2016, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2003, 2020, Oracle and/or its affiliates.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -35,6 +42,7 @@ extern EventLogger * g_eventLogger;
 #ifdef VM_TRACE
 static bool g_first_create_ndb = true;
 static bool g_force_short_signals = false;
+static bool g_force_acc_table_scans = false;
 #endif
 
 Ndb::Ndb( Ndb_cluster_connection *ndb_cluster_connection,
@@ -214,17 +222,6 @@ Ndb::~Ndb()
   DBUG_VOID_RETURN;
 }
 
-NdbWaiter::NdbWaiter(trp_client* clnt)
-  : m_clnt(clnt)
-{
-  m_node = 0;
-  m_state = NO_WAIT;
-}
-
-NdbWaiter::~NdbWaiter()
-{
-  m_clnt = NULL;
-}
 
 NdbImpl::NdbImpl(Ndb_cluster_connection *ndb_cluster_connection,
 		 Ndb& ndb)
@@ -235,7 +232,15 @@ NdbImpl::NdbImpl(Ndb_cluster_connection *ndb_cluster_connection,
     m_transporter_facade(ndb_cluster_connection->m_impl.m_transporter_facade),
     m_dictionary(ndb),
     theCurrentConnectIndex(0),
-    theNdbObjectIdMap(1024,1024),
+    /**
+     * m_mutex is passed to theNdbObjectIdMap since it's needed to guard
+     * expand() of theNdbObjectIdMap.
+     */
+#ifdef TEST_MAP_REALLOC
+    theNdbObjectIdMap(1, 1, m_mutex),
+#else
+    theNdbObjectIdMap(1024, 1024, m_mutex),
+#endif
     theNoOfDBnodes(0),
     theWaiter(this),
     wakeHandler(0),
@@ -264,7 +269,14 @@ NdbImpl::NdbImpl(Ndb_cluster_connection *ndb_cluster_connection,
     {
       g_force_short_signals = true;
     }
+
+    f= NdbEnv_GetEnv("NDB_FORCE_ACC_TABLE_SCANS", (char*)0, 0);
+    if (f != 0 && *f != 0 && *f != '0' && *f != 'n' && *f != 'N')
+    {
+      g_force_acc_table_scans = true;
+    }
   }
+  forceAccTableScans = g_force_acc_table_scans;
   forceShortRequests = g_force_short_signals;
 #endif
 
@@ -276,7 +288,6 @@ NdbImpl::~NdbImpl()
 {
   m_next_ndb_object = NULL;
   m_prev_ndb_object = NULL;
-  theWaiter = NULL;
   wakeHandler = NULL;
   m_ev_op = NULL;
 }

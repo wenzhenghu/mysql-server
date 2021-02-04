@@ -1,17 +1,24 @@
-/* Copyright (c) 2008, 2017, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2008, 2020, Oracle and/or its affiliates. All rights reserved.
 
   This program is free software; you can redistribute it and/or modify
-  it under the terms of the GNU General Public License as published by
-  the Free Software Foundation; version 2 of the License.
+  it under the terms of the GNU General Public License, version 2.0,
+  as published by the Free Software Foundation.
+
+  This program is also distributed with certain software (including
+  but not limited to OpenSSL) that is licensed under separate terms,
+  as designated in a particular file or component or in included license
+  documentation.  The authors of MySQL hereby grant you an additional
+  permission to link the program and your derivative works with the
+  separately licensed software that they have included with MySQL.
 
   This program is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  GNU General Public License for more details.
+  GNU General Public License, version 2.0, for more details.
 
   You should have received a copy of the GNU General Public License
-  along with this program; if not, write to the Free Software Foundation,
-  51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
+  along with this program; if not, write to the Free Software
+  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 #ifndef PFS_SERVER_H
 #define PFS_SERVER_H
@@ -36,8 +43,10 @@
 #include "mysql/psi/psi_socket.h"
 #include "mysql/psi/psi_stage.h"
 #include "mysql/psi/psi_statement.h"
+#include "mysql/psi/psi_system.h"
 #include "mysql/psi/psi_table.h"
 #include "mysql/psi/psi_thread.h"
+#include "mysql/psi/psi_tls_channel.h"
 #include "mysql/psi/psi_transaction.h"
 
 #ifdef HAVE_PSI_INTERFACE
@@ -46,16 +55,16 @@
 #define PFS_AUTOSIZE_VALUE (-1)
 
 #ifndef PFS_MAX_MUTEX_CLASS
-#define PFS_MAX_MUTEX_CLASS 220
+#define PFS_MAX_MUTEX_CLASS 300
 #endif
 #ifndef PFS_MAX_RWLOCK_CLASS
-#define PFS_MAX_RWLOCK_CLASS 50
+#define PFS_MAX_RWLOCK_CLASS 60
 #endif
 #ifndef PFS_MAX_COND_CLASS
-#define PFS_MAX_COND_CLASS 80
+#define PFS_MAX_COND_CLASS 100
 #endif
 #ifndef PFS_MAX_THREAD_CLASS
-#define PFS_MAX_THREAD_CLASS 50
+#define PFS_MAX_THREAD_CLASS 100
 #endif
 #ifndef PFS_MAX_FILE_CLASS
 #define PFS_MAX_FILE_CLASS 80
@@ -67,7 +76,7 @@
 #define PFS_MAX_SOCKET_CLASS 10
 #endif
 #ifndef PFS_MAX_STAGE_CLASS
-#define PFS_MAX_STAGE_CLASS 150
+#define PFS_MAX_STAGE_CLASS 175
 #endif
 #ifndef PFS_STATEMENTS_STACK_SIZE
 #define PFS_STATEMENTS_STACK_SIZE 10
@@ -76,13 +85,17 @@
 #define PFS_MAX_MEMORY_CLASS 450
 #endif
 
-#ifndef PFS_MAX_SERVER_ERRORS
-#define PFS_MAX_SERVER_ERRORS ((total_error_count - obsolete_error_count) + 1)
+#ifndef PFS_MAX_GLOBAL_SERVER_ERRORS
+#define PFS_MAX_GLOBAL_SERVER_ERRORS \
+  (1 + pfs_session_error_stat_count + pfs_global_error_stat_count)
+#endif
+
+#ifndef PFS_MAX_SESSION_SERVER_ERRORS
+#define PFS_MAX_SESSION_SERVER_ERRORS (1 + pfs_session_error_stat_count)
 #endif
 
 /** Sizing hints, from the server configuration. */
-struct PFS_sizing_hints
-{
+struct PFS_sizing_hints {
   /** Value of @c Sys_table_def_size */
   ulong m_table_definition_cache;
   /** Value of @c Sys_table_cache_size */
@@ -96,8 +109,7 @@ struct PFS_sizing_hints
 };
 
 /** Performance schema global sizing parameters. */
-struct PFS_global_param
-{
+struct PFS_global_param {
   /** True if the performance schema is enabled. */
   bool m_enabled;
   /** Default values for SETUP_CONSUMERS. */
@@ -116,6 +128,9 @@ struct PFS_global_param
   bool m_consumer_global_instrumentation_enabled;
   bool m_consumer_thread_instrumentation_enabled;
   bool m_consumer_statement_digest_enabled;
+
+  /** True if SHOW PROCESSLIST is enabeld in the performance schema. */
+  bool m_processlist_enabled;
 
   /** Default instrument configuration option. */
   char *m_pfs_instrument;
@@ -264,6 +279,9 @@ struct PFS_global_param
   long m_max_digest_length;
   ulong m_max_sql_text_length;
 
+  /** Maximum age in seconds for a query sample. */
+  ulong m_max_digest_sample_age;
+
   /** Maximum number of error instrumented */
   ulong m_error_sizing;
 
@@ -276,6 +294,14 @@ struct PFS_global_param
   This global variable is set when parsing server startup options.
 */
 extern PFS_global_param pfs_param;
+
+/**
+  Global flag used to enable and disable SHOW PROCESSLIST in the
+  performance schema. This flag only takes effect if the performance schema
+  is configured to support SHOW PROCESSLIST.
+  @sa performance-schema-enable-processlist
+*/
+extern bool pfs_processlist_enabled;
 
 /**
   Null initialization.
@@ -307,26 +333,27 @@ void pre_initialize_performance_schema();
   @param [out] memory_bootstrap Memory instrumentation service bootstrap
   @param [out] error_bootstrap Error instrumentation service bootstrap
   @param [out] data_lock_bootstrap Data Lock instrumentation service bootstrap
+  @param [out] system_bootstrap System instrumentation service bootstrap
+  @param [out] tls_channel_bootstrap TLS channel instrumentation service
+  bootstrap
   @returns
-    @retval 0 success
+  @retval 0 success
 */
 int initialize_performance_schema(
-  PFS_global_param *param,
-  PSI_thread_bootstrap **thread_bootstrap,
-  PSI_mutex_bootstrap **mutex_bootstrap,
-  PSI_rwlock_bootstrap **rwlock_bootstrap,
-  PSI_cond_bootstrap **cond_bootstrap,
-  PSI_file_bootstrap **file_bootstrap,
-  PSI_socket_bootstrap **socket_bootstrap,
-  PSI_table_bootstrap **table_bootstrap,
-  PSI_mdl_bootstrap **mdl_bootstrap,
-  PSI_idle_bootstrap **idle_bootstrap,
-  PSI_stage_bootstrap **stage_bootstrap,
-  PSI_statement_bootstrap **statement_bootstrap,
-  PSI_transaction_bootstrap **transaction_bootstrap,
-  PSI_memory_bootstrap **memory_bootstrap,
-  PSI_error_bootstrap **error_bootstrap,
-  PSI_data_lock_bootstrap **data_lock_bootstrap);
+    PFS_global_param *param, PSI_thread_bootstrap **thread_bootstrap,
+    PSI_mutex_bootstrap **mutex_bootstrap,
+    PSI_rwlock_bootstrap **rwlock_bootstrap,
+    PSI_cond_bootstrap **cond_bootstrap, PSI_file_bootstrap **file_bootstrap,
+    PSI_socket_bootstrap **socket_bootstrap,
+    PSI_table_bootstrap **table_bootstrap, PSI_mdl_bootstrap **mdl_bootstrap,
+    PSI_idle_bootstrap **idle_bootstrap, PSI_stage_bootstrap **stage_bootstrap,
+    PSI_statement_bootstrap **statement_bootstrap,
+    PSI_transaction_bootstrap **transaction_bootstrap,
+    PSI_memory_bootstrap **memory_bootstrap,
+    PSI_error_bootstrap **error_bootstrap,
+    PSI_data_lock_bootstrap **data_lock_bootstrap,
+    PSI_system_bootstrap **system_bootstrap,
+    PSI_tls_channel_bootstrap **tls_channel_bootstrap);
 
 void pfs_automated_sizing(PFS_global_param *param);
 
@@ -340,8 +367,6 @@ void pfs_automated_sizing(PFS_global_param *param);
   @param bootstrap True if the server is starting in bootstrap mode.
 */
 void initialize_performance_schema_acl(bool bootstrap);
-
-void check_performance_schema();
 
 /**
   Reset the aggregated status counter stats.
@@ -358,6 +383,18 @@ void init_pfs_instrument_array();
   Process one PFS_INSTRUMENT configuration string.
 */
 int add_pfs_instr_to_array(const char *name, const char *value);
+
+/**
+  Register/unregister notification service.
+*/
+int register_pfs_notification_service();
+int unregister_pfs_notification_service();
+
+/**
+  Register/unregister resource group service.
+*/
+int register_pfs_resource_group_service();
+int unregister_pfs_resource_group_service();
 
 /**
   Shutdown the performance schema.

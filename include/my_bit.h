@@ -1,14 +1,21 @@
 /*
-   Copyright (c) 2007, 2016, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2007, 2020, Oracle and/or its affiliates.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -28,8 +35,6 @@
 #include "my_inttypes.h"
 #include "my_macros.h"
 
-C_MODE_START
-
 extern const char _my_bits_nbits[256];
 extern const uchar _my_bits_reverse_table[256];
 
@@ -38,43 +43,35 @@ extern const uchar _my_bits_reverse_table[256];
   This can be used to divide a number with value by doing a shift instead
 */
 
-static inline uint my_bit_log2(ulong value)
-{
+static inline uint my_bit_log2(ulong value) {
   uint bit;
-  for (bit=0 ; value > 1 ; value>>=1, bit++) ;
+  for (bit = 0; value > 1; value >>= 1, bit++)
+    ;
   return bit;
 }
 
-static inline uint my_count_bits(ulonglong v)
-{
+static inline uint my_count_bits(ulonglong v) {
 #if SIZEOF_LONG_LONG > 4
   /* The following code is a bit faster on 16 bit machines than if we would
      only shift v */
-  ulong v2=(ulong) (v >> 32);
-  return (uint) (uchar) (_my_bits_nbits[(uchar)  v] +
-                         _my_bits_nbits[(uchar) (v >> 8)] +
-                         _my_bits_nbits[(uchar) (v >> 16)] +
-                         _my_bits_nbits[(uchar) (v >> 24)] +
-                         _my_bits_nbits[(uchar) (v2)] +
-                         _my_bits_nbits[(uchar) (v2 >> 8)] +
-                         _my_bits_nbits[(uchar) (v2 >> 16)] +
-                         _my_bits_nbits[(uchar) (v2 >> 24)]);
+  ulong v2 = (ulong)(v >> 32);
+  return (uint)(uchar)(
+      _my_bits_nbits[(uchar)v] + _my_bits_nbits[(uchar)(v >> 8)] +
+      _my_bits_nbits[(uchar)(v >> 16)] + _my_bits_nbits[(uchar)(v >> 24)] +
+      _my_bits_nbits[(uchar)(v2)] + _my_bits_nbits[(uchar)(v2 >> 8)] +
+      _my_bits_nbits[(uchar)(v2 >> 16)] + _my_bits_nbits[(uchar)(v2 >> 24)]);
 #else
-  return (uint) (uchar) (_my_bits_nbits[(uchar)  v] +
-                         _my_bits_nbits[(uchar) (v >> 8)] +
-                         _my_bits_nbits[(uchar) (v >> 16)] +
-                         _my_bits_nbits[(uchar) (v >> 24)]);
+  return (uint)(uchar)(
+      _my_bits_nbits[(uchar)v] + _my_bits_nbits[(uchar)(v >> 8)] +
+      _my_bits_nbits[(uchar)(v >> 16)] + _my_bits_nbits[(uchar)(v >> 24)]);
 #endif
 }
 
-static inline uint my_count_bits_uint32(uint32 v)
-{
-  return (uint) (uchar) (_my_bits_nbits[(uchar)  v] +
-                         _my_bits_nbits[(uchar) (v >> 8)] +
-                         _my_bits_nbits[(uchar) (v >> 16)] +
-                         _my_bits_nbits[(uchar) (v >> 24)]);
+static inline uint my_count_bits_uint32(uint32 v) {
+  return (uint)(uchar)(
+      _my_bits_nbits[(uchar)v] + _my_bits_nbits[(uchar)(v >> 8)] +
+      _my_bits_nbits[(uchar)(v >> 16)] + _my_bits_nbits[(uchar)(v >> 24)]);
 }
-
 
 /*
   Next highest power of two
@@ -95,40 +92,33 @@ static inline uint my_count_bits_uint32(uint32 v)
     Comments shows how this works with 01100000000000000000000000001011
 */
 
-static inline uint32 my_round_up_to_next_power(uint32 v)
-{
-  v--;			/* 01100000000000000000000000001010 */
-  v|= v >> 1;		/* 01110000000000000000000000001111 */
-  v|= v >> 2;		/* 01111100000000000000000000001111 */
-  v|= v >> 4;		/* 01111111110000000000000000001111 */
-  v|= v >> 8;		/* 01111111111111111100000000001111 */
-  v|= v >> 16;		/* 01111111111111111111111111111111 */
-  return v+1;		/* 10000000000000000000000000000000 */
+static inline uint32 my_round_up_to_next_power(uint32 v) {
+  v--;          /* 01100000000000000000000000001010 */
+  v |= v >> 1;  /* 01110000000000000000000000001111 */
+  v |= v >> 2;  /* 01111100000000000000000000001111 */
+  v |= v >> 4;  /* 01111111110000000000000000001111 */
+  v |= v >> 8;  /* 01111111111111111100000000001111 */
+  v |= v >> 16; /* 01111111111111111111111111111111 */
+  return v + 1; /* 10000000000000000000000000000000 */
 }
 
-static inline uint32 my_clear_highest_bit(uint32 v)
-{
-  uint32 w=v >> 1;
-  w|= w >> 1;
-  w|= w >> 2;
-  w|= w >> 4;
-  w|= w >> 8;
-  w|= w >> 16;
+static inline uint32 my_clear_highest_bit(uint32 v) {
+  uint32 w = v >> 1;
+  w |= w >> 1;
+  w |= w >> 2;
+  w |= w >> 4;
+  w |= w >> 8;
+  w |= w >> 16;
   return v & w;
 }
 
-static inline uint32 my_reverse_bits(uint32 key)
-{
-  return
-    (_my_bits_reverse_table[ key      & 255] << 24) |
-    (_my_bits_reverse_table[(key>> 8) & 255] << 16) |
-    (_my_bits_reverse_table[(key>>16) & 255] <<  8) |
-     _my_bits_reverse_table[(key>>24)      ];
+static inline uint32 my_reverse_bits(uint32 key) {
+  return (_my_bits_reverse_table[key & 255] << 24) |
+         (_my_bits_reverse_table[(key >> 8) & 255] << 16) |
+         (_my_bits_reverse_table[(key >> 16) & 255] << 8) |
+         _my_bits_reverse_table[(key >> 24)];
 }
 
-C_MODE_END
-
-#ifdef __cplusplus
 /**
   Determine if a single bit is set among some bits.
   @tparam IntType   an integer type
@@ -137,9 +127,8 @@ C_MODE_END
   @retval false     otherwise
 */
 
-template<typename IntType>
-constexpr bool is_single_bit(IntType bits)
-{
+template <typename IntType>
+constexpr bool is_single_bit(IntType bits) {
   /*
     Proof of correctness:
     (1) is_single_bit(0)==false is left as an exercise to the reader.
@@ -159,6 +148,5 @@ constexpr bool is_single_bit(IntType bits)
   */
   return bits != 0 && (bits & (bits - 1)) == 0;
 }
-#endif /* __cplusplus */
 
 #endif /* MY_BIT_INCLUDED */

@@ -1,15 +1,5 @@
 --source include/no_valgrind_without_big.inc
 
-########################################
-##### WL#7554 Force schema `test` to character set latin1
-##### This test should be migrated to utf8mb4
---disable_query_log
-let $testdbcs312=`select default_character_set_name from information_schema.schemata where schema_name='test'`;
-alter schema default character set latin1;
-use test;
---enable_query_log
-########################################
-
 --disable_warnings
 drop table if exists t1,t2,t3,t4,t9,`t1a``b`,v1,v2,v3,v4,v5,v6;
 drop view if exists t1,t2,`t1a``b`,v1,v2,v3,v4,v5,v6;
@@ -83,12 +73,12 @@ analyze table t1;
 
 # view with different algorithms (explain output differs)
 --replace_column 10 # 11 #
-explain extended select c from v1;
+explain select c from v1;
 create algorithm=temptable view v2 (c) as select b+1 from t1;
 show create view v2;
 select c from v2;
 --replace_column 10 # 11 #
-explain extended select c from v2;
+explain select c from v2;
 
 # try to use underlying table fields in VIEW creation process
 -- error ER_BAD_FIELD_ERROR
@@ -101,19 +91,19 @@ create view v3 (c) as select b+1 from v1;
 create view v3 (c) as select c+1 from v1;
 select c from v3;
 --replace_column 10 # 11 #
-explain extended select c from v3;
+explain select c from v3;
 create algorithm=temptable view v4 (c) as select c+1 from v2;
 select c from v4;
 --replace_column 10 # 11 #
-explain extended select c from v4;
+explain select c from v4;
 create view v5 (c) as select c+1 from v2;
 select c from v5;
 --replace_column 10 # 11 #
-explain extended select c from v5;
+explain select c from v5;
 create algorithm=temptable view v6 (c) as select c+1 from v1;
 select c from v6;
 --replace_column 10 # 11 #
-explain extended select c from v6;
+explain select c from v6;
 
 # show table/table status test
 show tables;
@@ -314,12 +304,13 @@ create view v1 (c) as select b from t1 where a<3;
 # simple select and explaint to be sure that it is MERGE
 select * from v1;
 --replace_column 10 # 11 #
-explain extended select * from v1;
+explain select * from v1;
 # update test
 update v1 set c=c+1;
 select * from t1;
 # join of such VIEWs test
 create view v2 (c) as select b from t1 where a>=3;
+--sorted_result
 select * from v1, v2;
 drop view v1, v2;
 drop table t1;
@@ -641,6 +632,7 @@ create table t2 (s2 int);
 insert into t1 values (1), (2);
 insert into t2 values (2), (3);
 create view v1 as select * from t1,t2 union all select * from t1,t2;
+--sorted_result
 select * from v1;
 drop view v1;
 drop tables t1, t2;
@@ -1033,7 +1025,7 @@ drop table t1, t2;
 #
 # Collation with view update
 #
-create table t1 (s1 char);
+create table t1 (s1 char) charset latin1;
 create view v1 as select s1 collate latin1_german1_ci as s1 from t1;
 insert into v1 values ('a');
 select * from v1;
@@ -1201,6 +1193,7 @@ select * from t2;
 prepare stmt1 from "select * from v2;";
 execute stmt1;
 insert into t1 values (0);
+--sorted_result
 execute stmt1;
 deallocate prepare stmt1;
 drop view v2;
@@ -1273,20 +1266,7 @@ drop table t1;
 # LOAD DATA with view and CHECK OPTION
 #
 # fixed length fields
-# Following scenario is to test the functionality of MyISAM
 
-create table t1 (a int, b char(10)) engine=Myisam;
-create view v1 as select * from t1 where a != 0 with check option;
--- error ER_VIEW_CHECK_FAILED
-load data infile '../../std_data/loaddata3.dat' into table v1 fields terminated by '' enclosed by '' ignore 1 lines;
-select * from t1;
-select * from v1;
-delete from t1;
-load data infile '../../std_data/loaddata3.dat' ignore into table v1 fields terminated by '' enclosed by '' ignore 1 lines;
-select * from t1 order by a,b;
-select * from v1 order by a,b;
-drop view v1;
-drop table t1;
 # variable length fields
 create table t1 (a text, b text);
 create view v1 as select * from t1 where a <> 'Field A' with check option;
@@ -1303,7 +1283,7 @@ drop table t1;
 
 # Following scenario is to test the functionality of InnoDB
 
-create table t1 (a int, b char(10)) ;
+create table t1 (a int, b char(10)) charset latin1;
 create view v1 as select * from t1 where a != 0 with check option;
 -- error ER_TRUNCATED_WRONG_VALUE_FOR_FIELD
 load data infile '../../std_data/loaddata3.dat' into table v1 fields terminated by '' enclosed by '' ignore 1 lines;
@@ -1373,14 +1353,14 @@ analyze table t1,t2,t3;
 create view v3 (a,b) as select t1.a as a, t2.a as b from t1 left join t2 on (t1.a=t2.a);
 select * from t3 left join v3 on (t3.a = v3.a);
 --replace_column 10 # 11 #
-explain extended select * from t3 left join v3 on (t3.a = v3.a);
+explain select * from t3 left join v3 on (t3.a = v3.a);
 # view over views
 create view v1 (a) as select a from t1;
 create view v2 (a) as select a from t2;
 create view v4 (a,b) as select v1.a as a, v2.a as b from v1 left join v2 on (v1.a=v2.a);
 select * from t3 left join v4 on (t3.a = v4.a);
 --replace_column 10 # 11 #
-explain extended select * from t3 left join v4 on (t3.a = v4.a);
+explain select * from t3 left join v4 on (t3.a = v4.a);
 # PS with view over views
 --replace_column 10 # 11 #
 prepare stmt1 from "select * from t3 left join v4 on (t3.a = v4.a);";
@@ -1411,75 +1391,24 @@ set updatable_views_with_limit=NO;
 update v2 set a= 10 where a=200 limit 1;
 set updatable_views_with_limit=DEFAULT;
 # just view selects
+--sorted_result
 select * from v3;
+--sorted_result
 select * from v2;
 # prepare statement with updating join view
 set @a= 10;
 set @b= 100;
 prepare stmt1 from "update v3 set a= ? where a=?";
 execute stmt1 using @a,@b;
+--sorted_result
 select * from v3;
 set @a= 300;
 set @b= 10;
 execute stmt1 using @a,@b;
+--sorted_result
 select * from v3;
 deallocate prepare stmt1;
 drop view v3,v2;
-drop tables t1,t2;
-
-#
-# inserting/deleting join view
-#
-
-# Following scenario is to test the functionality of MyISAM
-
-create table t1 (a int, primary key (a), b int) engine=myisam;
-create table t2 (a int, primary key (a), b int) engine=myisam;
-insert into t2 values (1000, 2000);
-create view v3 (a,b) as select t1.a as a, t2.a as b from t1, t2;
-# inserting into join view without field list
--- error ER_VIEW_NO_INSERT_FIELD_LIST
-insert into v3 values (1,2);
--- error ER_VIEW_NO_INSERT_FIELD_LIST
-insert into v3 select * from t2;
-# inserting in several tables of join view
--- error ER_VIEW_MULTIUPDATE
-insert into v3(a,b) values (1,2);
--- error ER_VIEW_MULTIUPDATE
-insert into v3(a,b) select * from t2;
-# correct inserts into join view
-insert into v3(a) values (1);
-insert into v3(b) values (10);
-insert into v3(a) select a from t2;
-insert into v3(b) select b from t2;
-insert into v3(a) values (1) on duplicate key update a=a+10000+VALUES(a);
-select * from t1 ;
-select * from t2 ;
-# try delete from join view
--- error ER_VIEW_DELETE_MERGE_VIEW
-delete from v3;
--- error ER_VIEW_DELETE_MERGE_VIEW
-delete v3,t1 from v3,t1;
--- error ER_VIEW_DELETE_MERGE_VIEW
-delete t1,v3 from t1,v3;
-# delete from t1 just to reduce result set size
-delete from t1;
-# prepare statement with insert join view
-prepare stmt1 from "insert into v3(a) values (?);";
-set @a= 100;
-execute stmt1 using @a;
-set @a= 300;
-execute stmt1 using @a;
-deallocate prepare stmt1;
-prepare stmt1 from "insert into v3(a) select ?;";
-set @a= 101;
-execute stmt1 using @a;
-set @a= 301;
-execute stmt1 using @a;
-deallocate prepare stmt1;
-select * from v3 ;
-
-drop view v3;
 drop tables t1,t2;
 
 # Following scenario is to test the functionality of InnoDB
@@ -1498,6 +1427,8 @@ insert into v3 select * from t2;
 insert into v3(a,b) values (1,2);
 -- error ER_VIEW_MULTIUPDATE
 insert into v3(a,b) select * from t2;
+-- error ER_VIEW_MULTIUPDATE
+update v3 set a=1,b=2; # just to verify that UPDATE behaves the same
 # correct inserts into join view
 insert into v3(a) values (1);
 insert into v3(b) values (10);
@@ -1713,8 +1644,10 @@ INSERT INTO t1 VALUES (1), (2), (3), (4);
 INSERT INTO t2 VALUES (4), (2);
 
 CREATE VIEW v1 AS SELECT * FROM t1,t2 WHERE t1.a=t2.b;
+--sorted_result
 SELECT * FROM v1;
 CREATE VIEW v2 AS SELECT * FROM v1;
+--sorted_result
 SELECT * FROM v2;
 
 DROP VIEW v2,v1;
@@ -1805,10 +1738,10 @@ create view v1 as select 's1', s1 from t1;
 select * from v1;
 drop view v1;
 # set name as one of expected autogenerated
-create view v1 as select 's1', s1, 1 as My_exp_s1 from t1;
+create view v1 as select 's1', s1, 1 as Name_exp_s1 from t1;
 select * from v1;
 drop view v1;
-create view v1 as select 1 as My_exp_s1, 's1', s1  from t1;
+create view v1 as select 1 as Name_exp_s1, 's1', s1  from t1;
 select * from v1;
 drop view v1;
 # set name conflict with autogenerated names
@@ -1918,11 +1851,6 @@ drop table t1;
 #
 # using encrypt & substring_index in view (Bug#7024)
 #
-CREATE VIEW v1 AS SELECT ENCRYPT("dhgdhgd");
-disable_result_log;
-SELECT * FROM v1;
-enable_result_log;
-drop view v1;
 CREATE VIEW v1 AS SELECT SUBSTRING_INDEX("dkjhgd:kjhdjh", ":", 1);
 SELECT * FROM v1;
 drop view v1;
@@ -2898,7 +2826,7 @@ DROP TABLE t1;
 # Bug#21086 server crashes when VIEW defined with a SELECT with COLLATE
 #           clause is called
 #
-CREATE TABLE t1 (s1 char);
+CREATE TABLE t1 (s1 char) charset latin1;
 INSERT INTO t1 VALUES ('Z');
 
 CREATE VIEW v1 AS SELECT s1 collate latin1_german1_ci AS col FROM t1;
@@ -2925,7 +2853,6 @@ SHOW TABLES;
 DROP VIEW v2,v1;
 SHOW TABLES;
 
-CREATE VIEW v1 AS SELECT id FROM t1;
 --error ER_WRONG_OBJECT
 DROP VIEW t1,v1;
 SHOW TABLES;
@@ -3004,7 +2931,7 @@ CREATE DEFINER=1234567890abcdefGHIKL1234567890abcdefGHIKL@localhost
   VIEW v1 AS SELECT a FROM t1;
 
 --error ER_WRONG_STRING_LENGTH
-CREATE DEFINER=some_user_name@1234567890abcdefghij1234567890abcdefghij1234567890abcdefghijQWERTY
+CREATE DEFINER=some_user_name@host_1234567890abcdefghij1234567890abcdefghij1234567890abcdefghij1234567890abcdefghij1234567890abcdefghij1234567890abcdefghij1234567890abcdefghij1234567890abcdefghij1234567890abcdefghij1234567890abcdefghij1234567890abcdefghij1234567890abcdefghij1234567890X
   VIEW v2 AS SELECT b FROM t1;
 
 # Cleanup.
@@ -3279,10 +3206,10 @@ select * from t1;
 create view v1 as select * from t1 order by f2;
 select * from v1;
 --replace_column 10 #
-explain extended select * from v1;
+explain select * from v1;
 select * from v1 order by f1;
 --replace_column 10 #
-explain extended select * from v1 order by f1;
+explain select * from v1 order by f1;
 drop view v1;
 drop table t1;
 
@@ -3877,25 +3804,31 @@ INSERT INTO t1 VALUES (1), (2);
 
 --error ER_VIEW_DELETE_MERGE_VIEW
 REPLACE INTO v1(a) SELECT 1 FROM t1,t1 AS c;
+--sorted_result
 SELECT * FROM v1;
 --error ER_VIEW_DELETE_MERGE_VIEW
 REPLACE INTO v1(a) SELECT 3 FROM t1,t1 AS c;
+--sorted_result
 SELECT * FROM v1;
 DELETE FROM t1 WHERE a=3;
 INSERT INTO v1(a) SELECT 1 FROM t1,t1 AS c
 ON DUPLICATE KEY UPDATE `v1`.`a`= 1;
+--sorted_result
 SELECT * FROM v1;
 
 CREATE VIEW v2 AS SELECT t1.a FROM t1, v1 AS a;
 
 --error ER_VIEW_DELETE_MERGE_VIEW
 REPLACE INTO v2(a) SELECT 1 FROM t1,t1 AS c;
+--sorted_result
 SELECT * FROM v2;
 --error ER_VIEW_DELETE_MERGE_VIEW
 REPLACE INTO v2(a) SELECT 3 FROM t1,t1 AS c;
+--sorted_result
 SELECT * FROM v2;
 INSERT INTO v2(a) SELECT 1 FROM t1,t1 AS c
 ON DUPLICATE KEY UPDATE `v2`.`a`= 1;
+--sorted_result
 SELECT * FROM v2;
 
 DROP VIEW v1;
@@ -4055,6 +3988,7 @@ SELECT * FROM v1 WHERE c2 = 'text2';
 --echo
 
 DROP VIEW v1;
+SET NAMES DEFAULT;
 
 --echo
 --echo # -- End of test case for Bug#32538.
@@ -4289,54 +4223,6 @@ DROP PROCEDURE p1;
 disconnect con2;
 disconnect con3;
 
-# Tables are created using MyISAM since this is test for a bug that is specific to MyISAM.
-
---echo #
---echo # Bug#11757397 49437: CANNOT DO SHOW FIELDS FOR BIG VIEW 
---echo #
-
---disable_warnings
-DROP TABLE IF EXISTS t1, t2, t3, table_broken;
-DROP VIEW IF EXISTS view_broken;
---enable_warnings
-
-let $colnum= 1500;
-let $str= a text;
-while ($colnum)
-{
-  let $str= a$colnum int, $str;
-  dec $colnum;
-}
---eval CREATE TABLE t1 ($str) ENGINE=MyiSAM
-
-let $colnum= 1500;
-let $str= b text;
-while ($colnum)
-{
-  let $str= b$colnum int, $str;
-  dec $colnum;
-}
---eval CREATE TABLE t2 ($str) ENGINE=MyiSAM
-
-let $colnum= 1500;
-let $str= c text;
-while ($colnum)
-{
-  let $str= c$colnum int, $str;
-  dec $colnum;
-}
---eval CREATE TABLE t3 ($str) ENGINE=MyiSAM
- 
-# New behavior
---error ER_TOO_MANY_FIELDS
-CREATE VIEW view_broken AS SELECT * FROM t1, t2, t3;
-
-# Existing behavior
---error ER_TOO_MANY_FIELDS
-CREATE TABLE table_broken AS SELECT * FROM t1, t2, t3;
-
-DROP TABLE t1, t2, t3;
-
 --echo #
 --echo # Bug#11766440 59546: Assertion m_sp == __null fails in
 --echo # Item_func_sp::init_result_field with functions
@@ -4567,6 +4453,7 @@ eval explain $query;
 let $query=
 SELECT *
 FROM t1 JOIN vu_1 AS dt ON t1.a=dt.a;
+--sorted_result
 eval $query;
 --replace_column 10 # 11 #
 eval explain $query;
@@ -4574,6 +4461,7 @@ eval explain $query;
 let $query=
 SELECT *
 FROM t1 JOIN vu_2 AS dt ON t1.a=dt.a;
+--sorted_result
 eval $query;
 --replace_column 10 # 11 #
 eval explain $query;
@@ -4581,6 +4469,7 @@ eval explain $query;
 let $query=
 SELECT *
 FROM t1 JOIN vd_1 AS dt ON t1.a=dt.a;
+--sorted_result
 eval $query;
 --replace_column 10 # 11 #
 eval explain $query;
@@ -4588,6 +4477,7 @@ eval explain $query;
 let $query=
 SELECT *
 FROM t1 JOIN va_1 AS dt ON t1.a=dt.a;
+--sorted_result
 eval $query;
 --replace_column 10 # 11 #
 eval explain $query;
@@ -4595,6 +4485,7 @@ eval explain $query;
 let $query=
 SELECT *
 FROM t1 JOIN vg_1 AS dt ON t1.a=dt.a;
+--sorted_result
 eval $query;
 --replace_column 10 # 11 #
 eval explain $query;
@@ -4602,6 +4493,7 @@ eval explain $query;
 let $query=
 SELECT *
 FROM t1 JOIN vh_1 AS dt ON t1.a=dt.a;
+--sorted_result
 eval $query;
 --replace_column 10 # 11 #
 eval explain $query;
@@ -4609,6 +4501,7 @@ eval explain $query;
 let $query=
 SELECT *
 FROM t1 JOIN vl_1 AS dt ON t1.a=dt.a;
+--sorted_result
 eval $query;
 --replace_column 10 # 11 #
 eval explain $query;
@@ -4616,6 +4509,7 @@ eval explain $query;
 let $query=
 SELECT *
 FROM t1 JOIN vlo_1 AS dt ON t1.a=dt.a;
+--sorted_result
 eval $query;
 --replace_column 10 # 11 #
 eval explain $query;
@@ -4623,6 +4517,7 @@ eval explain $query;
 let $query=
 SELECT *
 FROM t1 JOIN vrow AS dt ON t1.a=dt.a;
+--sorted_result
 eval $query;
 --replace_column 10 # 11 #
 eval explain $query;
@@ -4986,7 +4881,9 @@ SELECT * FROM v1;
 let $q=
 SELECT * FROM $derived;
 
+--sorted_result
 eval $qv;
+--sorted_result
 eval $q;
 --replace_column 10 # 11 #
 eval explain $qv;
@@ -6028,7 +5925,7 @@ EXECUTE X;
 DROP VIEW bug22108567_v1;
 
 # Check that all connections opened by test cases in this file are really
-# gone so execution of other tests won't be affected by their presence.
+# gone so execution of other tests will not be affected by their presence.
 --source include/wait_until_count_sessions.inc
 
 --echo #
@@ -6058,6 +5955,7 @@ CREATE TABLE t1_base_N3 (pk INT, col_int INT);
 CREATE VIEW t1_view_N3 AS SELECT * FROM t1_base_N3 WHERE `pk` BETWEEN 1 AND
 2;
 CREATE VIEW t1_view_N4 AS SELECT * FROM ( SELECT * FROM t1_view_N3 ) AS A;
+--error ER_NON_UPDATABLE_TABLE
 UPDATE t1_view_N3 AS A JOIN t1_view_N4 B SET A. col_int = 1 , B. col_int = 2;
 DROP VIEW t1_view_N3, t1_view_N4;
 DROP TABLE t1_base_N3;
@@ -6097,9 +5995,228 @@ RENAME TABLE t3 TO t1, t4 TO t2;
 DROP VIEW v1;
 DROP TABLE t1, t2;
 
-########################################
-##### WL#7554 set schema `test` back to what it was
---disable_query_log
---eval alter schema test default character set $testdbcs312;
---enable_query_log
-########################################
+--echo #
+--echo # BUG#25634576: DATABASE NAME IN SHOW CREATE VIEW
+--echo #
+
+CREATE DATABASE db;
+CREATE TABLE db.t1(fld1 INT);
+CREATE TABLE db.t2(fld2 INT);
+CREATE TABLE t1(fld1 INT);
+CREATE TABLE t2(fld2 INT);
+
+--echo # With patch, db name is appended only to those tables
+--echo # which are not present in the current database.
+
+--echo # Test cases with reference to table within current
+--echo # db and outside current db.
+CREATE VIEW v1 AS SELECT * FROM t1 UNION SELECT * FROM t2;
+SHOW CREATE VIEW v1;
+
+CREATE VIEW v2 AS SELECT * FROM t1 UNION SELECT * FROM db.t2;
+SHOW CREATE VIEW v2;
+
+CREATE VIEW v3 AS SELECT fld1 FROM t1 UNION SELECT * FROM db.t2;
+SHOW CREATE VIEW v3;
+
+CREATE VIEW v4 AS SELECT t1.fld1 FROM t1 UNION SELECT * FROM db.t2;
+SHOW CREATE VIEW v4;
+
+CREATE VIEW v5 AS SELECT * FROM db.t1 UNION SELECT * FROM db.t2;
+SHOW CREATE VIEW v5;
+
+--echo # Test cases with subquery.
+CREATE VIEW v6 AS SELECT * FROM t2 WHERE fld2 IN (SELECT fld1 FROM t1);
+SHOW CREATE VIEW v6;
+
+CREATE VIEW v7 AS SELECT * FROM db.t2 WHERE fld2 IN (SELECT fld1 FROM t1);
+SHOW CREATE VIEW v7;
+
+CREATE VIEW v8 AS SELECT * FROM t1 where fld1 NOT IN (SELECT fld2 FROM db.t2);
+SHOW CREATE VIEW v8;
+
+CREATE VIEW v9 AS SELECT fld1 FROM t1 where fld1 NOT IN (SELECT fld2 FROM db.t2);
+SHOW CREATE VIEW v9;
+
+CREATE VIEW v10 AS SELECT t1.fld1 FROM t1 where fld1 NOT IN (SELECT fld2 FROM db.t2);
+SHOW CREATE VIEW v10;
+
+CREATE VIEW v11 AS SELECT * FROM db.t1 WHERE fld1 NOT IN
+                  (SELECT fld2 FROM db.t2);
+SHOW CREATE VIEW v11;
+
+--echo # Test cases which uses derived table in sub query.
+CREATE VIEW v12 AS SELECT * FROM (SELECT fld1 FROM t1) dummy;
+SHOW CREATE VIEW v12;
+
+CREATE VIEW v13 AS SELECT * FROM (SELECT fld1 FROM db.t1) dummy;
+SHOW CREATE VIEW v13;
+
+CREATE VIEW v14 AS SELECT * FROM db.t2, (SELECT fld1 FROM t1) dummy;
+SHOW CREATE VIEW v14;
+
+CREATE VIEW v15 AS SELECT * FROM db.t2, (SELECT fld1 FROM db.t1) dummy;
+SHOW CREATE VIEW v15;
+
+CREATE VIEW v16 AS SELECT db.t2.fld2 FROM db.t2, (SELECT t1.fld1 FROM db.t1) dummy;
+SHOW CREATE VIEW v16;
+
+--echo # Test cases using CTE.
+CREATE VIEW v17 AS WITH cte AS (SELECT * FROM t1) SELECT * FROM cte; 
+SHOW CREATE VIEW v17;
+
+CREATE VIEW v18 AS WITH cte AS (SELECT fld1 FROM t1) SELECT * FROM cte;
+SHOW CREATE VIEW v18;
+
+CREATE VIEW v19 AS WITH cte AS (SELECT db.t2.fld2 FROM db.t2) SELECT * FROM cte;
+SHOW CREATE VIEW v19;
+
+--echo # Test case added for coverage where view is created in different db.
+CREATE VIEW db.v1 AS SELECT * FROM db.t1 UNION SELECT * FROM t2;
+SHOW CREATE VIEW db.v1;
+
+CREATE VIEW db.v2 AS SELECT * FROM t1 where fld1 NOT IN (SELECT fld2 FROM db.t2);
+SHOW CREATE VIEW db.v2;
+
+CREATE VIEW db.v3 AS SELECT * FROM (SELECT fld1 FROM t1) dummy;
+SHOW CREATE VIEW db.v3;
+
+--echo # Cleanup.
+DROP VIEW v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15,
+v16, v17, v18, v19;
+DROP TABLE t1, t2;
+DROP DATABASE db;
+
+--echo #
+--echo # Bug#25832861: TABLE_SHARE->TMP_TABLE != NO_TMP_TABLE || M_LOCK_TYPE == 1' AT HANDLER::HA_UPDAT
+--echo #
+
+CREATE TABLE t1 (a INTEGER);
+INSERT INTO t1 VALUES (1), (2);
+
+CREATE VIEW v1 AS SELECT a FROM t1;
+CREATE VIEW v2 AS SELECT 1;
+CREATE VIEW v3 AS SELECT a FROM (SELECT a FROM v1) AS dt;
+CREATE VIEW v4 AS SELECT a FROM (SELECT a FROM t1) AS dt;
+CREATE VIEW v5 AS SELECT a FROM (SELECT a FROM v3) AS dt2;
+
+# Ensure both single table and multi table updates give the same error message.
+--error ER_NON_UPDATABLE_TABLE
+UPDATE v3 SET v3.a=3;
+--error ER_NON_UPDATABLE_TABLE
+UPDATE v3, v2 SET v3.a=3;
+UPDATE v3, v1 SET v1.a=3;
+SELECT * FROM t1;
+UPDATE v3, t1 SET t1.a=4;
+SELECT * FROM t1;
+--error ER_NON_UPDATABLE_TABLE
+UPDATE v4 SET v4.a=6;
+SELECT * FROM t1;
+--error ER_NON_UPDATABLE_TABLE
+UPDATE v4, v2 SET v4.a=6;
+UPDATE v4, v1 SET v1.a=6;
+SELECT * FROM t1;
+UPDATE v4, t1 SET t1.a=7;
+SELECT * FROM t1;
+--error ER_NON_UPDATABLE_TABLE
+UPDATE v5 SET v5.a=9;
+--error ER_NON_UPDATABLE_TABLE
+UPDATE v5, v2 SET v5.a=9;
+UPDATE v5, v1 SET v1.a=9;
+SELECT * FROM t1;
+UPDATE v5, t1 SET t1.a=10;
+SELECT * FROM t1;
+
+DROP TABLE t1;
+DROP VIEW v1, v2, v3, v4, v5;
+
+--echo # Bug#26659699 Assertion !(thd->lex->context_analysis_only & 2) failed
+
+CREATE TABLE t1(pk INTEGER, cik INTEGER, UNIQUE KEY(cik))
+PARTITION BY KEY(cik) PARTITIONS 10;
+
+CREATE TABLE t2(pk INTEGER, cvk VARCHAR(20), cik INTEGER, UNIQUE KEY(cik))
+PARTITION BY KEY(cik) PARTITIONS 10;
+
+CREATE VIEW v1 AS
+SELECT MAX(t2.pk) AS field1
+FROM t1, t2
+WHERE (SELECT 7 FROM DUAL) IS NOT NULL AND
+      t1.pk BETWEEN 123 AND (123 + 128) AND
+      t2.cvk <= 'p'
+ORDER BY t1.pk DESC;
+
+DROP VIEW v1;
+DROP TABLE t1, t2;
+
+
+--echo #
+--echo # BUG#26266789: ON SERVER 8.0 CREATE OR REPLACE VIEW FAILS FOR COLUMN SIZE > 64
+--echo #
+
+CREATE TABLE t1(fld1 INT, fld2 INT);
+INSERT INTO t1 VALUES(1, 1);
+
+--echo # Without patch, a dictionary store error is triggered on release
+--echo # build and an assert on debug build.
+
+--error ER_WRONG_COLUMN_NAME
+CREATE OR REPLACE VIEW v1
+(`x12345678901234567890123456789012345678901234567890123456789012322`) AS
+SELECT fld1 FROM t1;
+
+--echo # Clean up.
+DROP TABLE t1;
+
+--echo #
+--echo # Bug#26360114 WRONG RESULT WITH AGGREGATE AND HAVING CLAUSE IN VIEW
+--echo #
+
+CREATE TABLE t1 (
+  col_date_key DATE,
+  KEY col_date_key (col_date_key)
+);
+
+INSERT INTO t1 VALUES ('2007-02-08');
+INSERT INTO t1 VALUES ('2007-02-08');
+INSERT INTO t1 VALUES ('2008-11-04');
+INSERT INTO t1 VALUES ('2008-11-04');
+INSERT INTO t1 VALUES ('2009-01-14');
+INSERT INTO t1 VALUES ('2009-01-14');
+
+SELECT MAX(col_date_key) AS x
+ FROM t1
+ HAVING x >= CAST('2009-01-01' AS DATE)
+;
+
+CREATE VIEW v1 AS
+ SELECT MAX(col_date_key) AS x
+  FROM t1
+  HAVING x >= CAST('2009-01-01' AS DATE)
+;
+
+SELECT * FROM v1;
+DROP VIEW v1;
+DROP TABLE t1;
+
+--echo #
+--echo # Bug#27121663: SIG 11 IN FILL_DD_VIEW_TABLES | SQL/DD/DD_VIEW.CC
+--echo #
+
+CREATE TABLE t1 (pk INT);
+
+CREATE VIEW v1 AS SELECT COUNT(*) FROM t1
+ORDER BY (SELECT 1 FROM t1 WHERE 1 IN (SELECT * FROM (SELECT 1 as field) AS dt));
+
+DROP TABLE t1;
+DROP VIEW v1;
+
+
+--echo #
+--echo # Bug #28278220 - WRONG COLUMN TYPE , VIEW , BINARY
+--echo #
+CREATE VIEW v AS SELECT null AS 'c' UNION SELECT 'a' AS 'c';
+--echo # Without fix, type for field c is listed as binary instead of
+--echo # varchar(1). With fix type is listed correctly.
+SHOW FIELDS FROM v;
+DROP VIEW v;

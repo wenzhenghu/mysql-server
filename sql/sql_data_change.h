@@ -1,39 +1,48 @@
 #ifndef SQL_DATA_CHANGE_INCLUDED
 #define SQL_DATA_CHANGE_INCLUDED
-/* Copyright (c) 2000, 2017, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2000, 2020, Oracle and/or its affiliates.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software Foundation,
-   51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 /**
   @file sql_data_change.h
 
   Contains classes representing SQL-data change statements. The
   actual implementions of the functionality are found in files
-  sql_{insert, update}.{h,cc} 
+  sql_{insert, update}.{h,cc}
 */
 
 #include <stddef.h>
 #include <sys/types.h>
 
-#include "my_base.h"        // ha_rows
-#include "my_bitmap.h"      // MY_BITMAP
+#include "my_base.h"    // ha_rows
+#include "my_bitmap.h"  // MY_BITMAP
 #include "my_dbug.h"
-#include "sql_alloc.h"      // Sql_alloc
 
 class Item;
 struct TABLE;
-template <class T> class List;
+template <class T>
+class List;
+template <class T>
+class mem_root_deque;
 
 enum enum_duplicates { DUP_ERROR, DUP_REPLACE, DUP_UPDATE };
 
@@ -61,15 +70,17 @@ enum enum_duplicates { DUP_ERROR, DUP_REPLACE, DUP_UPDATE };
       of the INSERT ... ON DUPLICATE KEY UPDATE no matter whether the row
       was actually changed or not.
 */
-class COPY_INFO: public Sql_alloc
-{
-public:
-  class Statistics
-  {
-  public:
-    Statistics() :
-      records(0), deleted(0), updated(0), copied(0), error_count(0), touched(0)
-    {}
+class COPY_INFO {
+ public:
+  class Statistics {
+   public:
+    Statistics()
+        : records(0),
+          deleted(0),
+          updated(0),
+          copied(0),
+          error_count(0),
+          touched(0) {}
 
     ha_rows records; /**< Number of processed records */
     ha_rows deleted; /**< Number of deleted records */
@@ -81,9 +92,9 @@ public:
 
   enum operation_type { INSERT_OPERATION, UPDATE_OPERATION };
 
-private:
-  COPY_INFO(const COPY_INFO &other);            ///< undefined
-  void operator=(COPY_INFO &);                  ///< undefined
+ private:
+  COPY_INFO(const COPY_INFO &other);  ///< undefined
+  void operator=(COPY_INFO &);        ///< undefined
 
   /// Describes the data change operation that this object represents.
   const operation_type m_optype;
@@ -93,25 +104,24 @@ private:
      fill; and thus we must not set a function default for them.
      NULL means "empty list".
   */
-  List<Item> *m_changed_columns;
+  mem_root_deque<Item *> *m_changed_columns;
 
   /**
      A second list of columns like m_changed_columns. See the constructor
      specific of LOAD DATA INFILE, below.
   */
-  List<Item> *m_changed_columns2;
-
+  mem_root_deque<Item *> *m_changed_columns2;
 
   /** Whether this object must manage function defaults */
   const bool m_manage_defaults;
-  /** Bitmap: bit is set if we should set column number i to its function default */
+  /** Bitmap: bit is set if we should set column number i to its function
+   * default */
   MY_BITMAP *m_function_default_columns;
 
   /// Policy for handling insertion of duplicate values.
   const enum enum_duplicates handle_duplicates;
 
-protected:
-
+ protected:
   /**
      This function will, unless done already, calculate and keep the set of
      function default columns.
@@ -138,11 +148,11 @@ protected:
    */
   MY_BITMAP *get_cached_bitmap() const { return m_function_default_columns; }
 
-public:
+ public:
   Statistics stats;
   int escape_char, last_errno;
   /** Values for UPDATE; needed by write_record() if INSERT with DUP_UPDATE */
-  List<Item> *update_values;
+  mem_root_deque<Item *> *update_values;
 
   /**
      Initializes this data change operation as an SQL @c INSERT (with all
@@ -158,21 +168,18 @@ public:
      @param duplicate_handling The policy for handling duplicates.
 
   */
-  COPY_INFO(operation_type optype,
-            List<Item> *inserted_columns,
-            bool manage_defaults,
-            enum_duplicates duplicate_handling) :
-    m_optype(optype),
-    m_changed_columns(inserted_columns),
-    m_changed_columns2(NULL),
-    m_manage_defaults(manage_defaults),
-    m_function_default_columns(NULL),
-    handle_duplicates(duplicate_handling),
-    stats(),
-    escape_char(0),
-    last_errno(0),
-    update_values(NULL)
-  {
+  COPY_INFO(operation_type optype, mem_root_deque<Item *> *inserted_columns,
+            bool manage_defaults, enum_duplicates duplicate_handling)
+      : m_optype(optype),
+        m_changed_columns(inserted_columns),
+        m_changed_columns2(nullptr),
+        m_manage_defaults(manage_defaults),
+        m_function_default_columns(nullptr),
+        handle_duplicates(duplicate_handling),
+        stats(),
+        escape_char(0),
+        last_errno(0),
+        update_values(nullptr) {
     DBUG_ASSERT(optype == INSERT_OPERATION);
   }
 
@@ -198,23 +205,19 @@ public:
      @param duplicates_handling How to handle duplicates.
      @param escape_character    The escape character.
   */
-  COPY_INFO(operation_type optype,
-            List<Item> *inserted_columns,
-            List<Item> *inserted_columns2,
-            bool manage_defaults,
-            enum_duplicates duplicates_handling,
-            int escape_character) :
-    m_optype(optype),
-    m_changed_columns(inserted_columns),
-    m_changed_columns2(inserted_columns2),
-    m_manage_defaults(manage_defaults),
-    m_function_default_columns(NULL),
-    handle_duplicates(duplicates_handling),
-    stats(),
-    escape_char(escape_character),
-    last_errno(0),
-    update_values(NULL)
-  {
+  COPY_INFO(operation_type optype, mem_root_deque<Item *> *inserted_columns,
+            mem_root_deque<Item *> *inserted_columns2, bool manage_defaults,
+            enum_duplicates duplicates_handling, int escape_character)
+      : m_optype(optype),
+        m_changed_columns(inserted_columns),
+        m_changed_columns2(inserted_columns2),
+        m_manage_defaults(manage_defaults),
+        m_function_default_columns(nullptr),
+        handle_duplicates(duplicates_handling),
+        stats(),
+        escape_char(escape_character),
+        last_errno(0),
+        update_values(nullptr) {
     DBUG_ASSERT(optype == INSERT_OPERATION);
   }
 
@@ -228,50 +231,58 @@ public:
      @note that UPDATE always lists columns, so non-listed columns may need a
      default thus m_manage_defaults is always true.
   */
-  COPY_INFO(operation_type optype, List<Item> *fields, List<Item> *values) :
-    m_optype(optype),
-    m_changed_columns(fields),
-    m_changed_columns2(NULL),
-    m_manage_defaults(true),
-    m_function_default_columns(NULL),
-    handle_duplicates(DUP_ERROR),
-    stats(),
-    escape_char(0),
-    last_errno(0),
-    update_values(values)
-  {
+  COPY_INFO(operation_type optype, mem_root_deque<Item *> *fields,
+            mem_root_deque<Item *> *values)
+      : m_optype(optype),
+        m_changed_columns(fields),
+        m_changed_columns2(nullptr),
+        m_manage_defaults(true),
+        m_function_default_columns(nullptr),
+        handle_duplicates(DUP_ERROR),
+        stats(),
+        escape_char(0),
+        last_errno(0),
+        update_values(values) {
     DBUG_ASSERT(optype == UPDATE_OPERATION);
   }
 
   operation_type get_operation_type() const { return m_optype; }
 
-  List<Item> *get_changed_columns() const { return m_changed_columns; }
+  mem_root_deque<Item *> *get_changed_columns() const {
+    return m_changed_columns;
+  }
 
-  const List<Item> *get_changed_columns2() const { return m_changed_columns2; }
+  const mem_root_deque<Item *> *get_changed_columns2() const {
+    return m_changed_columns2;
+  }
 
   bool get_manage_defaults() const { return m_manage_defaults; }
 
   enum_duplicates get_duplicate_handling() const { return handle_duplicates; }
 
   /**
-     Assigns function default values to columns of the supplied table. This
-     function cannot fail, but COPY_INFO::get_function_default_columns() must
-     be called beforehand.
+     Assigns function default values to columns of the supplied table.
 
-     @note COPY_INFO::add_function_default_columns() must be called prior to
-     invoking this function.
+     @note COPY_INFO::get_function_default_columns() and
+     COPY_INFO::add_function_default_columns() must be called prior to invoking
+     this function.
 
      @param table  The table to which columns belong.
 
      @note It is assumed that all columns in this COPY_INFO are resolved to the
      table.
+
+     @retval false Success.
+     @retval true Some error happened while executing the default expression.
+                  my_error has already been called so the calling function
+                  only needs to bail out.
   */
-  virtual void set_function_defaults(TABLE *table);
+  bool set_function_defaults(TABLE *table);
 
   /**
      Adds the columns that are bound to receive default values from a function
-     (e.g. CURRENT_TIMESTAMP) to the set columns. Uses lazy instantiation of the set
-     of function default columns.
+     (e.g. CURRENT_TIMESTAMP) to the set columns. Uses lazy instantiation of the
+     set of function default columns.
 
      @param      table    The table on which the operation is performed.
      @param[out] columns  The function default columns are added to this set.
@@ -279,10 +290,8 @@ public:
      @retval false Success.
      @retval true Memory allocation error during lazy instantiation.
   */
-  bool add_function_default_columns(TABLE *table, MY_BITMAP *columns)
-  {
-    if (get_function_default_columns(table))
-      return true;
+  bool add_function_default_columns(TABLE *table, MY_BITMAP *columns) {
+    if (get_function_default_columns(table)) return true;
     bitmap_union(columns, m_function_default_columns);
     return false;
   }
@@ -294,9 +303,8 @@ public:
      @note COPY_INFO::add_function_default_columns() must be called prior to
      invoking this function.
   */
-  bool function_defaults_apply(const TABLE*) const
-  {
-    DBUG_ASSERT(m_function_default_columns != NULL);
+  bool function_defaults_apply(const TABLE *) const {
+    DBUG_ASSERT(m_function_default_columns != nullptr);
     return !bitmap_is_clear_all(m_function_default_columns);
   }
 
@@ -304,11 +312,23 @@ public:
     True if any of the columns set in the bitmap have default functions
     that may set the column.
   */
-  bool function_defaults_apply_on_columns(MY_BITMAP *map)
-  {
-    DBUG_ASSERT(m_function_default_columns != NULL);
+  bool function_defaults_apply_on_columns(MY_BITMAP *map) {
+    DBUG_ASSERT(m_function_default_columns != nullptr);
     return bitmap_is_overlapping(m_function_default_columns, map);
   }
+
+  /// Reset counters before the next execution
+  void reset_counters() {
+    stats.records = 0;
+    stats.deleted = 0;
+    stats.updated = 0;
+    stats.copied = 0;
+    stats.error_count = 0;
+    stats.touched = 0;
+  }
+
+  /// Cleanup memory allocated by this object.
+  void cleanup() { m_function_default_columns = nullptr; }
 
   /**
      Tells the object to not manage function defaults for the last 'count'
@@ -324,5 +344,4 @@ public:
   virtual ~COPY_INFO() {}
 };
 
-
-#endif // SQL_DATA_CHANGE_INCLUDED
+#endif  // SQL_DATA_CHANGE_INCLUDED

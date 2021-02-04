@@ -1,72 +1,77 @@
-/* Copyright (c) 2016, 2017, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2016, 2020, Oracle and/or its affiliates.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software Foundation,
-   51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 #ifndef DD__EVENT_INCLUDED
 #define DD__EVENT_INCLUDED
 
-#include "dd/types/dictionary_object.h"   // dd::Dictionary_object
 #include "my_inttypes.h"
+#include "sql/dd/impl/raw/object_keys.h"  // IWYU pragma: keep
+#include "sql/dd/types/entity_object.h"   // dd::Entity_object
 
 typedef long my_time_t;
+struct MDL_key;
 
 namespace dd {
 
 ///////////////////////////////////////////////////////////////////////////
 
-class Object_type;
-class Primary_id_key;
+class Event_impl;
 class Void_key;
 class Item_name_key;
 
 namespace tables {
-  class Events;
+class Events;
 }
 
 ///////////////////////////////////////////////////////////////////////////
 
-class Event : public Dictionary_object
-{
-public:
-  static const Object_type &TYPE();
-  static const Dictionary_object_table &OBJECT_TABLE();
-
-  typedef Event cache_partition_type;
-  typedef tables::Events cache_partition_table_type;
-  typedef Primary_id_key id_key_type;
-  typedef Item_name_key name_key_type;
-  typedef Void_key aux_key_type;
+class Event : virtual public Entity_object {
+ public:
+  typedef Event_impl Impl;
+  typedef Event Cache_partition;
+  typedef tables::Events DD_table;
+  typedef Primary_id_key Id_key;
+  typedef Item_name_key Name_key;
+  typedef Void_key Aux_key;
 
   // We need a set of functions to update a preallocated key.
-  virtual bool update_id_key(id_key_type *key) const
-  { return update_id_key(key, id()); }
+  virtual bool update_id_key(Id_key *key) const {
+    return update_id_key(key, id());
+  }
 
-  static bool update_id_key(id_key_type *key, Object_id id);
+  static bool update_id_key(Id_key *key, Object_id id);
 
-  virtual bool update_name_key(name_key_type *key) const
-  { return update_name_key(key, schema_id(), name()); }
+  virtual bool update_name_key(Name_key *key) const {
+    return update_name_key(key, schema_id(), name());
+  }
 
-  static bool update_name_key(name_key_type *key, Object_id schema_id,
+  static bool update_name_key(Name_key *key, Object_id schema_id,
                               const String_type &name);
 
-  virtual bool update_aux_key(aux_key_type*) const
-  { return true; }
+  virtual bool update_aux_key(Aux_key *) const { return true; }
 
-public:
-  enum enum_interval_field
-  {
-    IF_YEAR= 1,
+ public:
+  enum enum_interval_field {
+    IF_YEAR = 1,
     IF_QUARTER,
     IF_MONTH,
     IF_DAY,
@@ -88,24 +93,14 @@ public:
     IF_SECOND_MICROSECOND
   };
 
-  enum enum_event_status
-  {
-    ES_ENABLED= 1,
-    ES_DISABLED,
-    ES_SLAVESIDE_DISABLED
-  };
+  enum enum_event_status { ES_ENABLED = 1, ES_DISABLED, ES_SLAVESIDE_DISABLED };
 
-  enum enum_on_completion
-  {
-    OC_DROP= 1,
-    OC_PRESERVE
-  };
+  enum enum_on_completion { OC_DROP = 1, OC_PRESERVE };
 
-public:
-  virtual ~Event()
-  { };
+ public:
+  ~Event() override {}
 
-public:
+ public:
   /////////////////////////////////////////////////////////////////////////
   // schema.
   /////////////////////////////////////////////////////////////////////////
@@ -217,14 +212,14 @@ public:
   // created.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual ulonglong created() const = 0;
+  virtual ulonglong created(bool convert_time) const = 0;
   virtual void set_created(ulonglong created) = 0;
 
   /////////////////////////////////////////////////////////////////////////
   // last altered.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual ulonglong last_altered() const = 0;
+  virtual ulonglong last_altered(bool convert_time) const = 0;
   virtual void set_last_altered(ulonglong last_altered) = 0;
 
   /////////////////////////////////////////////////////////////////////////
@@ -260,7 +255,7 @@ public:
 
   virtual Object_id connection_collation_id() const = 0;
   virtual void set_connection_collation_id(
-                 Object_id connection_collation_id) = 0;
+      Object_id connection_collation_id) = 0;
 
   virtual Object_id schema_collation_id() const = 0;
   virtual void set_schema_collation_id(Object_id schema_collation_id) = 0;
@@ -272,10 +267,13 @@ public:
     @return pointer to dynamically allocated copy
   */
   virtual Event *clone() const = 0;
+
+  static void create_mdl_key(const String_type &schema_name,
+                             const String_type &name, MDL_key *key);
 };
 
 ///////////////////////////////////////////////////////////////////////////
 
-}
+}  // namespace dd
 
-#endif // DD__EVENT_INCLUDED
+#endif  // DD__EVENT_INCLUDED

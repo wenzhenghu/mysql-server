@@ -1,36 +1,35 @@
-# Copyright (c) 2009, 2017, Oracle and/or its affiliates. All rights reserved.
+# Copyright (c) 2009, 2020, Oracle and/or its affiliates.
 #
 # This program is free software; you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; version 2 of the License.
+# it under the terms of the GNU General Public License, version 2.0,
+# as published by the Free Software Foundation.
+#
+# This program is also distributed with certain software (including
+# but not limited to OpenSSL) that is licensed under separate terms,
+# as designated in a particular file or component or in included license
+# documentation.  The authors of MySQL hereby grant you an additional
+# permission to link the program and your derivative works with the
+# separately licensed software that they have included with MySQL.
 #
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
+# GNU General Public License, version 2.0, for more details.
 #
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
-# Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+# Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
 
-INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR}/include
-                    ${CMAKE_SOURCE_DIR}/include/mysql
-                    ${CMAKE_SOURCE_DIR}/extra/regex
-                    ${CMAKE_SOURCE_DIR}/sql
-                    ${SSL_INCLUDE_DIRS}
-                    ${CMAKE_SOURCE_DIR}/unittest/mytap
-                    ${CMAKE_SOURCE_DIR}/storage/perfschema)
+ADD_DEFINITIONS(-DMYSQL_SERVER)
 
-ADD_DEFINITIONS(-DMYSQL_SERVER ${SSL_DEFINES})
-
-ADD_CONVENIENCE_LIBRARY(pfs_server_stubs pfs_server_stubs.cc)
+ADD_LIBRARY(pfs_server_stubs STATIC pfs_server_stubs.cc)
 
 ADD_DEPENDENCIES(pfs_server_stubs GenError)
 
 MACRO (PFS_ADD_TEST name)
-  ADD_EXECUTABLE(${name}-t ${name}-t.cc)
-  TARGET_LINK_LIBRARIES(${name}-t mytap perfschema mysys pfs_server_stubs)
-  ADD_TEST(${name} ${name}-t)
+  MYSQL_ADD_EXECUTABLE(${name}-t ${name}-t.cc ADD_TEST ${name})
+  TARGET_LINK_LIBRARIES(${name}-t
+    mytap perfschema mysys pfs_server_stubs strings ${ICU_LIBRARIES})
 ENDMACRO()
 
 SET(tests
@@ -55,27 +54,25 @@ ENDIF()
 
 # We need the server libs to test the blob parser.
 # Add sql_builtin.cc here, to force linkage of plugins below.
-# Also add mysys/my_string.cc (see Bug#45488)
-ADD_EXECUTABLE(pfs_connect_attr-t
+MYSQL_ADD_EXECUTABLE(pfs_connect_attr-t
   pfs_connect_attr-t.cc
   ${CMAKE_BINARY_DIR}/sql/sql_builtin.cc
-  ${CMAKE_SOURCE_DIR}/mysys/my_string.cc
   ${MYSQLD_EXTRA_SOURCES}
+  EXCLUDE_ON_SOLARIS
+  ADD_TEST pfs_connect_attr
 )
+IF(WITH_LTO OR CMAKE_COMPILER_FLAG_WITH_LTO)
+  # We get ODR violations because of multiple bison parsers.
+  MY_CHECK_CXX_COMPILER_WARNING("error=odr" HAS_WARN_FLAG)
+  IF(HAS_WARN_FLAG)
+    MY_TARGET_LINK_OPTIONS(pfs_connect_attr-t "${HAS_WARN_FLAG}")
+  ENDIF()
+ENDIF()
+
 ADD_DEPENDENCIES(pfs_connect_attr-t GenServerSource)
-TARGET_LINK_LIBRARIES(pfs_connect_attr-t mytap perfschema)
 # We need to explicitly link in everything referenced in sql/sql_builtin.cc
-TARGET_LINK_LIBRARIES(pfs_connect_attr-t ${MYSQLD_STATIC_PLUGIN_LIBS})
-TARGET_LINK_LIBRARIES(pfs_connect_attr-t sql_main binlog rpl master slave)
-TARGET_LINK_LIBRARIES(pfs_connect_attr-t sql_main sql_gis sql_main)
-TARGET_LINK_LIBRARIES(pfs_connect_attr-t mysys mysys_ssl)
-TARGET_LINK_LIBRARIES(pfs_connect_attr-t vio ${SSL_LIBRARIES})
-TARGET_LINK_LIBRARIES(pfs_connect_attr-t strings dbug regex mysys ${ZLIB_LIBRARY})
-ADD_TEST(pfs_connect_attr pfs_connect_attr-t)
-
-# ADD_EXECUTABLE(pfs_benchmark-t pfs_benchmark-t.cc pfs_benchmark_helper.cc)
-# TARGET_LINK_LIBRARIES(pfs_benchmark-t mytap perfschema mysys pfs_server_stubs)
-# ADD_TEST(pfs_benchmark pfs_benchmark-t)
-
-# On windows, pfs_connect_attr-t may depend on openssl dlls.
-COPY_OPENSSL_DLLS(copy_openssl_pfs_unittest)
+TARGET_LINK_LIBRARIES(pfs_connect_attr-t
+  mytap
+  server_unittest_library
+  ${MYSQLD_STATIC_PLUGIN_LIBS}
+  )

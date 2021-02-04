@@ -497,16 +497,16 @@ INSERT INTO t2 VALUES ('a',1),('a',2),('a',3),('b',1),('c',1),('c',4),('e',2);
 ANALYZE TABLE t1;
 ANALYZE TABLE t2;
 
-# Uses "access_type_changed" to use range over ref
+# range uses more keyparts than ref, so range is chosen.
 EXPLAIN SELECT * FROM t1 WHERE a='a' AND b in (1,2);
 SELECT TRACE into @trace FROM INFORMATION_SCHEMA.OPTIMIZER_TRACE;
-SELECT @trace RLIKE "access_type_changed";
+--skip_if_hypergraph  # Does not support the same optimizer trace.
+SELECT @trace RLIKE "range_uses_more_keyparts";
 
-# Uses "unreliable_ref_cost_and_range_uses_more_keyparts" to ignore ref access
-# on index with overly optimistic cost-estimate
 EXPLAIN SELECT * FROM t2 WHERE a='a' AND b in (1,2);
 SELECT TRACE into @trace FROM INFORMATION_SCHEMA.OPTIMIZER_TRACE;
-SELECT @trace RLIKE "unreliable_ref_cost_and_range_uses_more_keyparts";
+--skip_if_hypergraph  # Does not support the same optimizer trace.
+SELECT @trace RLIKE "range_uses_more_keyparts";
 
 DROP TABLE t1, t2;
 
@@ -529,3 +529,36 @@ ANALYZE TABLE t1;
 EXPLAIN SELECT c1, c2 FROM t1 ORDER BY c1 DESC LIMIT 1;
 SELECT * FROM INFORMATION_SCHEMA.OPTIMIZER_TRACE;
 DROP TABLE t1;
+
+--echo # Bug#29016383 - fil_report_invalid_page_access
+
+CREATE TABLE t1 (
+ pk INTEGER PRIMARY KEY,
+ a INTEGER,
+ b VARCHAR(20)
+);
+CREATE TABLE t2 (
+ pk INTEGER PRIMARY KEY,
+ c VARCHAR(20),
+ KEY (c)
+);
+INSERT INTO t2 VALUES
+(1,'koeiwsgpmfyvvuqvtjnc'),
+(2,'pmfyvvuqvtjncdsvq'),
+(3,'mfyv'),
+(4,NULL);
+
+SET end_markers_in_json=off;
+SELECT alias1.*
+FROM t2 AS alias1, t2 AS alias2
+WHERE alias2.c IN (
+  WITH qn AS (SELECT b FROM t1 WHERE a = alias1.pk)
+  SELECT * FROM qn);
+
+--echo # Prove that the predicate from the WHERE clause of the CTE
+--echo # is decorrelated:
+
+SELECT json_extract(trace,'$**.decorrelated_predicates')
+FROM information_schema.optimizer_trace;
+
+DROP TABLE t1, t2;

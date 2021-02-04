@@ -1,14 +1,21 @@
 /*
-   Copyright (c) 2011, 2016, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2011, 2020, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -85,6 +92,11 @@ runLookupJoin(NDBT_Context* ctx, NDBT_Step* step){
   HugoQueryBuilder qb(GETNDB(step), ctx->getTab(), HugoQueryBuilder::O_LOOKUP);
   qb.setJoinLevel(joinlevel);
   const NdbQueryDef * query = qb.createQuery();
+  if (query == nullptr)
+  {
+    ndbout << "Failed to create NdbQueryDef" <<endl;
+    return NDBT_FAILED;
+  }
   HugoQueries hugoTrans(*query);
   while ((i<loops || until_stopped) && !ctx->isTestStopped())
   {
@@ -114,6 +126,11 @@ runLookupJoinError(NDBT_Context* ctx, NDBT_Step* step){
   HugoQueryBuilder qb(GETNDB(step), ctx->getTab(), HugoQueryBuilder::O_LOOKUP);
   qb.setJoinLevel(joinlevel);
   const NdbQueryDef * query = qb.createQuery();
+  if (query == nullptr)
+  {
+    ndbout << "Failed to create NdbQueryDef" <<endl;
+    return NDBT_FAILED;
+  }
   HugoQueries hugoTrans(*query);
 
   NdbRestarter restarter;
@@ -187,6 +204,11 @@ runScanJoin(NDBT_Context* ctx, NDBT_Step* step){
   HugoQueryBuilder qb(GETNDB(step), ctx->getTab(), HugoQueryBuilder::O_SCAN);
   qb.setJoinLevel(joinlevel);
   const NdbQueryDef * query = qb.createQuery();
+  if (query == nullptr)
+  {
+    ndbout << "Failed to create NdbQueryDef" <<endl;
+    return NDBT_FAILED;
+  }
   HugoQueries hugoTrans(* query);
   while ((i<loops || until_stopped) && !ctx->isTestStopped())
   {
@@ -214,6 +236,11 @@ runScanJoinError(NDBT_Context* ctx, NDBT_Step* step){
   HugoQueryBuilder qb(GETNDB(step), ctx->getTab(), HugoQueryBuilder::O_SCAN);
   qb.setJoinLevel(joinlevel);
   const NdbQueryDef * query = qb.createQuery();
+  if (query == nullptr)
+  {
+    ndbout << "Failed to create NdbQueryDef" <<endl;
+    return NDBT_FAILED;
+  }
   HugoQueries hugoTrans(* query);
 
   NdbRestarter restarter;
@@ -296,6 +323,11 @@ runJoin(NDBT_Context* ctx, NDBT_Step* step){
   qb2.setJoinLevel(joinlevel);
   const NdbQueryDef * q1 = qb1.createQuery();
   const NdbQueryDef * q2 = qb2.createQuery();
+  if (q1 == nullptr || q2 == nullptr)
+  {
+    ndbout << "Failed to create NdbQueryDefs" <<endl;
+    return NDBT_FAILED;
+  }
   HugoQueries hugoTrans1(* q1, maxRetries);
   HugoQueries hugoTrans2(* q2, maxRetries);
   NdbRestarter restarter;
@@ -354,6 +386,11 @@ runAbortedJoin(NDBT_Context* ctx, NDBT_Step* step){
   HugoQueryBuilder qb2(GETNDB(step), ctx->getTab(), HugoQueryBuilder::O_LOOKUP);
   qb2.setJoinLevel(joinlevel);
   const NdbQueryDef * q2 = qb2.createQuery();
+  if (q2 == nullptr)
+  {
+    ndbout << "Failed to create NdbQueryDef" <<endl;
+    return NDBT_FAILED;
+  }
   HugoQueries hugoTrans2(* q2, 1); //maxRetry==1 -> Don't retry temp errors
   NdbRestarter restarter;
 
@@ -624,7 +661,6 @@ createNegativeSchema(NDBT_Context* ctx, NDBT_Step* step)
 #define QRY_EMPTY_PROJECTION 4826
 
 /* Various error codes that are not specific to NdbQuery. */
-static const int Err_FunctionNotImplemented = 4003;
 static const int Err_UnknownColumn = 4004;
 static const int Err_WrongFieldLength = 4209;
 static const int Err_InvalidRangeNo = 4286;
@@ -802,7 +838,7 @@ NegativeTest::runKeyTest() const
       builder->destroy();
       return NDBT_FAILED;
     }
-    if (builder->prepare() != NULL)
+    if (builder->prepare(m_ndb) != NULL)
     {
       g_err << "prepare() on failed query gave non-NULL result.";
       builder->destroy();
@@ -818,7 +854,7 @@ NegativeTest::runKeyTest() const
       {builder->paramValue(), builder->paramValue(), NULL};
 
     require(builder->readTuple(m_nt1Tab, keyOperands) != NULL);
-    const NdbQueryDef* const queryDef = builder->prepare();
+    const NdbQueryDef* const queryDef = builder->prepare(m_ndb);
     require(queryDef != NULL);
     builder->destroy();
 
@@ -856,7 +892,7 @@ NegativeTest::runGraphTest() const
   // Try preparing empty NdbQueryBuilder
   {
     NdbQueryBuilder* const builder = NdbQueryBuilder::create();
-    if (builder->prepare() != NULL ||
+    if (builder->prepare(m_ndb) != NULL ||
         builder->getNdbError().code != QRY_HAS_ZERO_OPERATIONS)
     {
       g_err << "prepare() on empty query gave non-NULL result.";
@@ -1095,7 +1131,7 @@ NegativeTest::runSetBoundTest() const
       = builder->scanIndex(m_nt2OrdIdx, m_nt2Tab);
     require(parentOperation != NULL);
 
-    const NdbQueryDef* const queryDef = builder->prepare();
+    const NdbQueryDef* const queryDef = builder->prepare(m_ndb);
     require(queryDef != NULL);
     builder->destroy();
 
@@ -1154,7 +1190,7 @@ NegativeTest::runSetBoundTest() const
       = builder->scanIndex(m_nt1OrdIdx, m_nt1Tab);
     require(parentOperation != NULL);
 
-    const NdbQueryDef* const queryDef = builder->prepare();
+    const NdbQueryDef* const queryDef = builder->prepare(m_ndb);
     require(queryDef != NULL);
     builder->destroy();
 
@@ -1189,7 +1225,7 @@ NegativeTest::runSetBoundTest() const
       = builder->scanTable(m_nt1Tab);
     require(parentOperation != NULL);
 
-    const NdbQueryDef* const queryDef = builder->prepare();
+    const NdbQueryDef* const queryDef = builder->prepare(m_ndb);
     require(queryDef != NULL);
     builder->destroy();
 
@@ -1223,7 +1259,7 @@ NegativeTest::runSetBoundTest() const
       = builder->scanIndex(m_nt1OrdIdx, m_nt1Tab);
     require(parentOperation != NULL);
 
-    const NdbQueryDef* const queryDef = builder->prepare();
+    const NdbQueryDef* const queryDef = builder->prepare(m_ndb);
     require(queryDef != NULL);
     builder->destroy();
 
@@ -1275,7 +1311,7 @@ NegativeTest::runValueTest() const
       = builder->scanTable(m_nt1Tab);
     require(parentOperation != NULL);
 
-    const NdbQueryDef* const queryDef = builder->prepare();
+    const NdbQueryDef* const queryDef = builder->prepare(m_ndb);
     require(queryDef != NULL);
     builder->destroy();
 
@@ -1303,7 +1339,7 @@ NegativeTest::runValueTest() const
       = builder->scanTable(m_nt1Tab);
     require(parentOperation != NULL);
 
-    const NdbQueryDef* const queryDef = builder->prepare();
+    const NdbQueryDef* const queryDef = builder->prepare(m_ndb);
     require(queryDef != NULL);
     builder->destroy();
 
@@ -1335,7 +1371,7 @@ NegativeTest::runValueTest() const
       = builder->scanTable(m_nt1Tab);
     require(parentOperation != NULL);
 
-    const NdbQueryDef* const queryDef = builder->prepare();
+    const NdbQueryDef* const queryDef = builder->prepare(m_ndb);
     require(queryDef != NULL);
     builder->destroy();
 
@@ -1372,7 +1408,7 @@ NegativeTest::runValueTest() const
       = builder->scanIndex(m_nt1OrdIdx, m_nt1Tab);
     require(parentOperation != NULL);
 
-    const NdbQueryDef* const queryDef = builder->prepare();
+    const NdbQueryDef* const queryDef = builder->prepare(m_ndb);
     require(queryDef != NULL);
     builder->destroy();
 
@@ -1409,7 +1445,6 @@ NegativeTest::runFeatureDisabledTest() const
   
   int result = NDBT_OK;
 
-  if (ndb_join_pushdown(ndbGetOwnVersion()))
   {
     if (parentOperation == NULL)
     {
@@ -1421,28 +1456,6 @@ NegativeTest::runFeatureDisabledTest() const
     {
       g_info << "scanTable() succeeded in version "
              << ndbGetOwnVersionString() << " as expected." << endl;
-    }
-  }
-  else
-  {
-    // Query pushdown should not be enabled in this version.
-    if (parentOperation != NULL)
-    {
-      g_err << "Succeeded with creating scan operation, which should not be "
-        "possible in version " << ndbGetOwnVersionString() << endl;
-      result = NDBT_FAILED;      
-    }
-    else if (builder->getNdbError().code != Err_FunctionNotImplemented)
-    {
-      g_err << "scanTable() failed with unexpected error: " 
-            << builder->getNdbError() << endl;
-      result = NDBT_FAILED;
-    }
-    else
-    {
-      g_info << "scanTable() failed in version "
-             << ndbGetOwnVersionString() << " as expected with error: " 
-             << builder->getNdbError() << endl;
     }
   }
 
@@ -1510,6 +1523,24 @@ TESTCASE("MixedJoinDiskWait", "Simulate disk wait during pushed joins"){
   STEPS(runJoin, 4);
   FINALIZER(runClearTable);
 }
+TESTCASE("MultiFrag_OOM",
+         "'Out of LongMessageBuffer' during 'import' of MultiFrag list")
+{
+  INITIALIZER(runLoadTable);
+  TC_PROPERTY("ErrorCode", 8116);
+  TC_PROPERTY("AcceptError", 218);
+  STEP(runJoin);
+  FINALIZER(runClearTable);
+}
+TESTCASE("MultiFrag_OOM_rand",
+         "Random 'Out of LongMessageBuffer' during 'import' of MultiFrag list")
+{
+  INITIALIZER(runLoadTable);
+  TC_PROPERTY("ErrorCode", 8117);
+  TC_PROPERTY("AcceptError", 218);
+  STEP(runJoin);
+  FINALIZER(runClearTable);
+}
 TESTCASE("NF_Join", ""){
   TC_PROPERTY("UntilStopped", 1);
   TC_PROPERTY("WaitProgress", 20);
@@ -1553,7 +1584,7 @@ TESTCASE("ScanJoinError", ""){
   STEP(runScanJoinError);
   FINALIZER(runClearTable);
 }
-NDBT_TESTSUITE_END(testSpj);
+NDBT_TESTSUITE_END(testSpj)
 
 
 int main(int argc, const char** argv){

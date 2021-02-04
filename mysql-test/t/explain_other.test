@@ -6,15 +6,6 @@
 --source include/have_debug.inc
 --source include/have_debug_sync.inc
 
-#
-# We are checking privileges, which the embedded server cannot do.
-#
---source include/not_embedded.inc
-
-# Problem occur with checking ACL when QC is enabled
-# Should be lifted later
---source include/have_query_cache_disabled.inc
-
 CREATE DATABASE mysqltest1;
 USE mysqltest1;
 CREATE TABLE t1 (f1 int);
@@ -311,10 +302,7 @@ connection default;
 disconnect ce;
 --echo # Check access rights checking
 connection cq;
-set @orig_sql_mode = @@sql_mode;
-set sql_mode=(select replace(@@sql_mode,'NO_AUTO_CREATE_USER',''));
-GRANT USAGE ON *.* TO 'privtest'@'localhost';
-set sql_mode= @orig_sql_mode;
+CREATE USER 'privtest'@'localhost';
 GRANT SUPER ON *.* TO 'privtest'@'localhost';
 GRANT SELECT ON mysqltest1.t2 TO 'privtest'@'localhost';
 CREATE VIEW v2 AS SELECT * FROM t2;
@@ -382,9 +370,11 @@ connection ce;
 CREATE TABLE h2 (
 pk int(11) NOT NULL AUTO_INCREMENT,
 PRIMARY KEY (pk)
-) ENGINE=MyISAM AUTO_INCREMENT=10 DEFAULT CHARSET=latin1;
+) ENGINE=InnoDB AUTO_INCREMENT=10 DEFAULT CHARSET=latin1;
 
 insert into h2 values (1),(2),(3),(4),(5),(6),(7),(8),(9);
+
+ANALYZE TABLE h2;
 
 CREATE TABLE aa3 (
   col_int_key int(11) DEFAULT NULL,
@@ -408,7 +398,7 @@ CREATE TABLE t1 (
   pk int(11),
   col_int_key int(11) DEFAULT NULL,
   KEY col_int_key (col_int_key)
-) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 
 INSERT INTO t1 VALUES (NULL,NULL);
 INSERT INTO t1 VALUES (6,NULL);

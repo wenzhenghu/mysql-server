@@ -1,21 +1,25 @@
 /*
- Copyright (c) 2013, 2016, Oracle and/or its affiliates. All rights
- reserved.
+ Copyright (c) 2013, 2020 Oracle and/or its affiliates.
  
- This program is free software; you can redistribute it and/or
- modify it under the terms of the GNU General Public License
- as published by the Free Software Foundation; version 2 of
- the License.
- 
+ This program is free software; you can redistribute it and/or modify
+ it under the terms of the GNU General Public License, version 2.0,
+ as published by the Free Software Foundation.
+
+ This program is also distributed with certain software (including
+ but not limited to OpenSSL) that is licensed under separate terms,
+ as designated in a particular file or component or in included license
+ documentation.  The authors of MySQL hereby grant you an additional
+ permission to link the program and your derivative works with the
+ separately licensed software that they have included with MySQL.
+
  This program is distributed in the hope that it will be useful,
  but WITHOUT ANY WARRANTY; without even the implied warranty of
- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- GNU General Public License for more details.
- 
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License, version 2.0, for more details.
+
  You should have received a copy of the GNU General Public License
  along with this program; if not, write to the Free Software
- Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
- 02110-1301  USA
+ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
 */
 
 
@@ -28,7 +32,6 @@
 #include "NdbWrapperErrors.h"
 #include "NdbJsConverters.h"
 
-using namespace v8;
 
 V8WrapperFn begin;
 V8WrapperFn end;
@@ -123,11 +126,11 @@ void isfalse(const Arguments & args) {
 */
 void cmp(const Arguments &args) {
   NdbScanFilter * filter = unwrapPointer<NdbScanFilter *>(args.Holder());
-  int condition   = args[0]->Int32Value();
-  int columnId    = args[1]->Uint32Value();
-  char * buffer   = node::Buffer::Data(args[2]->ToObject());
-  uint32_t offset = args[3]->Uint32Value();
-  uint32_t length = args[4]->Uint32Value();
+  int condition   = GetInt32Arg(args, 0);
+  int columnId    = GetUint32Arg(args, 1);
+  char * buffer   = GetBufferData(ArgToObject(args, 2));
+  uint32_t offset = GetUint32Arg(args, 3);
+  uint32_t length = GetUint32Arg(args, 4);
 
   int rval = filter->cmp(NdbScanFilter::BinaryCondition(condition), 
                          columnId, buffer + offset, length);
@@ -176,11 +179,10 @@ void getNdbOperation(const Arguments & args) {
 
 #define WRAP_CONSTANT(X) DEFINE_JS_INT(sfObj, #X, NdbScanFilter::X)
 
-void NdbScanFilter_initOnLoad(Handle<Object> target) {
-  Local<String> sfKey = NEW_SYMBOL("NdbScanFilter");
-  Local<Object> sfObj = Object::New(v8::Isolate::GetCurrent());
+void NdbScanFilter_initOnLoad(Local<Object> target) {
+  Local<Object> sfObj = Object::New(target->GetIsolate());
 
-  target->Set(sfKey, sfObj);
+  SetProp(target, "NdbScanFilter", sfObj);
 
   DEFINE_JS_FUNCTION(sfObj, "create", newNdbScanFilter);
   WRAP_CONSTANT(AND);

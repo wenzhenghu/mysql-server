@@ -1,14 +1,21 @@
 /*
-   Copyright (c) 2003, 2013, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2003, 2020, Oracle and/or its affiliates.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -24,6 +31,13 @@
 #define JAM_FILE_ID 78
 
 
+/*
+ * DefineBackupReq
+ *
+ * Global signal, but only between data nodes of same version since mixed
+ * version backup is not allowed.
+ * No logic for mixed versions is needed.
+ */
 class DefineBackupReq {
   /**
    * Sender(s)
@@ -34,11 +48,12 @@ class DefineBackupReq {
    * Reciver(s)
    */
   friend class Backup;
+  friend class BackupProxy;
   friend class Dblqh;
 
   friend bool printDEFINE_BACKUP_REQ(FILE *, const Uint32 *, Uint32, Uint16);
 public:
-  STATIC_CONST( SignalLength = 9 + NdbNodeBitmask::Size);
+  STATIC_CONST( SignalLength_v1 = 11 + NdbNodeBitmask48::Size);
 
 private:
   /**
@@ -50,11 +65,12 @@ private:
   Uint32 clientRef;
   Uint32 clientData;
   Uint32 senderRef;
-  
+
   /**
    * Which node(s) is participating in the backup
+   * Note: Only to support versions < 8.0.18
    */
-  NdbNodeBitmask nodes;
+  NdbNodeBitmask48 nodes;
   
   /**
    * Generated random number
@@ -73,6 +89,11 @@ private:
    * & 0x4 - Use undo log
    */
   Uint32 flags;
+  /**
+   * Reference of block which controls backup across all nodes
+   */
+  Uint32 masterRef;
+  Uint32 senderData;
 };
 
 class DefineBackupRef {
@@ -80,6 +101,7 @@ class DefineBackupRef {
    * Sender(s)
    */
   friend class Backup;
+  friend class BackupProxy;
   friend class Dblqh;
 
   /**
@@ -115,6 +137,7 @@ class DefineBackupConf {
    * Sender(s)
    */
   friend class Backup;
+  friend class BackupProxy;
   friend class Dblqh;
 
   /**
@@ -141,15 +164,18 @@ class StartBackupReq {
    * Reciver(s)
    */
   friend class Backup;
+  friend class BackupProxy;
 
   friend bool printSTART_BACKUP_REQ(FILE *, const Uint32 *, Uint32, Uint16);
 public:
 
-  STATIC_CONST( SignalLength = 2 );
+  STATIC_CONST( SignalLength = 4 );
 
 private:
   Uint32 backupId;
   Uint32 backupPtr;
+  Uint32 senderRef;
+  Uint32 senderData;
 };
 
 class StartBackupRef {
@@ -162,13 +188,15 @@ class StartBackupRef {
    * Reciver(s)
    */
   friend class BackupMaster;
+  friend class BackupProxy;
 
   friend bool printSTART_BACKUP_REF(FILE *, const Uint32 *, Uint32, Uint16);
 public:
   STATIC_CONST( SignalLength = 4 );
 
   enum ErrorCode {
-    FailedToAllocateTriggerRecord = 1
+    FailedToAllocateTriggerRecord = 1,
+    FailedStartSinceDefineFailed = 1351
   };
 private:
   Uint32 backupId;
@@ -202,6 +230,7 @@ class BackupFragmentReq {
    * Sender(s)
    */
   friend class BackupMaster;
+  friend class BackupProxy;
   
   /**
    * Reciver(s)
@@ -211,7 +240,7 @@ class BackupFragmentReq {
 
   friend bool printBACKUP_FRAGMENT_REQ(FILE *, const Uint32 *, Uint32, Uint16);
 public:
-  STATIC_CONST( SignalLength = 5 );
+  STATIC_CONST( SignalLength = 7 );
 
 private:
   Uint32 backupId;
@@ -219,6 +248,8 @@ private:
   Uint32 tableId;
   Uint32 fragmentNo;
   Uint32 count;
+  Uint32 senderRef;
+  Uint32 senderData;
 };
 
 class BackupFragmentRef {
@@ -232,6 +263,7 @@ class BackupFragmentRef {
    * Reciver(s)
    */
   friend class BackupMaster;
+  friend class BackupProxy;
 
   friend bool printBACKUP_FRAGMENT_REF(FILE *, const Uint32 *, Uint32, Uint16);
 public:
@@ -295,16 +327,19 @@ class StopBackupReq {
    * Reciver(s)
    */
   friend class Backup;
+  friend class BackupProxy;
 
   friend bool printSTOP_BACKUP_REQ(FILE *, const Uint32 *, Uint32, Uint16);
 public:
-  STATIC_CONST( SignalLength = 4 );
+  STATIC_CONST( SignalLength = 6 );
 
 private:
   Uint32 backupId;
   Uint32 backupPtr;
   Uint32 startGCP;
   Uint32 stopGCP;
+  Uint32 senderRef;
+  Uint32 senderData;
 };
 
 class StopBackupRef {
@@ -317,6 +352,7 @@ class StopBackupRef {
    * Reciver(s)
    */
   friend class BackupMaster;
+  friend class BackupProxy;
 
   friend bool printSTOP_BACKUP_REF(FILE *, const Uint32 *, Uint32, Uint16);
 public:

@@ -1,17 +1,24 @@
-/* Copyright (c) 2014, 2017, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2014, 2020, Oracle and/or its affiliates.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software Foundation,
-   51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 #ifndef DD__PARTITION_IMPL_INCLUDED
 #define DD__PARTITION_IMPL_INCLUDED
@@ -19,243 +26,289 @@
 #include <sys/types.h>
 #include <memory>
 #include <new>
-#include <string>
 
-#include "dd/collection.h"
-#include "dd/impl/types/entity_object_impl.h"  // dd::Entity_object_impl
-#include "dd/impl/types/weak_object_impl.h"
-#include "dd/object_id.h"
-#include "dd/sdi_fwd.h"
-#include "dd/types/object_type.h"              // dd::Object_type
-#include "dd/types/partition.h"                // dd::Partition
-#include "dd/types/partition_index.h"          // dd::Partition_index
-#include "dd/types/partition_value.h"          // dd::Partition_value
+#include "sql/dd/collection.h"
+#include "sql/dd/impl/properties_impl.h"
+#include "sql/dd/impl/types/entity_object_impl.h"  // dd::Entity_object_impl
+#include "sql/dd/impl/types/weak_object_impl.h"
+#include "sql/dd/object_id.h"
+#include "sql/dd/sdi_fwd.h"
+#include "sql/dd/string_type.h"
+#include "sql/dd/types/partition.h"        // dd::Partition
+#include "sql/dd/types/partition_index.h"  // IWYU pragma: keep
+#include "sql/dd/types/partition_value.h"  // IWYU pragma: keep
+#include "sql/dd/types/table.h"
 
 namespace dd {
 
 ///////////////////////////////////////////////////////////////////////////
 
-class Open_dictionary_tables_ctx;
-class Raw_record;
-class Table_impl;
 class Index;
 class Object_table;
-class Partition_index;
-class Partition_value;
+class Open_dictionary_tables_ctx;
 class Properties;
+class Raw_record;
 class Sdi_rcontext;
 class Sdi_wcontext;
 class Table;
+class Table_impl;
 class Weak_object;
 
 ///////////////////////////////////////////////////////////////////////////
 
-class Partition_impl : public Entity_object_impl,
-                       public Partition
-{
-public:
+class Partition_impl : public Entity_object_impl, public Partition {
+ public:
   Partition_impl();
 
   Partition_impl(Table_impl *table);
 
+  Partition_impl(Table_impl *parent, Partition_impl *partition);
+
   Partition_impl(const Partition_impl &src, Table_impl *parent);
 
-  virtual ~Partition_impl();
+  Partition_impl(const Partition_impl &src, Partition_impl *partition);
 
-public:
-  virtual const Object_table &object_table() const
-  { return Partition::OBJECT_TABLE(); }
+  ~Partition_impl() override;
 
-  virtual bool validate() const;
+ public:
+  const Object_table &object_table() const override;
 
-  virtual bool restore_children(Open_dictionary_tables_ctx *otx);
+  bool validate() const override;
 
-  virtual bool store_children(Open_dictionary_tables_ctx *otx);
+  bool restore_children(Open_dictionary_tables_ctx *otx) override;
 
-  virtual bool drop_children(Open_dictionary_tables_ctx *otx) const;
+  bool store_children(Open_dictionary_tables_ctx *otx) override;
 
-  virtual bool restore_attributes(const Raw_record &r);
+  bool drop_children(Open_dictionary_tables_ctx *otx) const override;
 
-  virtual bool store_attributes(Raw_record *r);
+  bool restore_attributes(const Raw_record &r) override;
 
-  void serialize(Sdi_wcontext *wctx, Sdi_writer *w) const;
+  bool store_attributes(Raw_record *r) override;
 
-  bool deserialize(Sdi_rcontext *rctx, const RJ_Value &val);
+  void serialize(Sdi_wcontext *wctx, Sdi_writer *w) const override;
 
-  void debug_print(String_type &outb) const;
+  bool deserialize(Sdi_rcontext *rctx, const RJ_Value &val) override;
 
-  void set_ordinal_position(uint)
-  { }
+  void debug_print(String_type &outb) const override;
 
-  virtual uint ordinal_position() const
-  { return -1; }
+  void set_ordinal_position(uint) {}
 
-public:
+  virtual uint ordinal_position() const { return -1; }
+
+ public:
+  static void register_tables(Open_dictionary_tables_ctx *otx);
+
   /////////////////////////////////////////////////////////////////////////
   // Table.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual const Table &table() const;
+  const Table &table() const override;
 
-  virtual Table &table();
+  Table &table() override;
 
-  /* non-virtual */ const Table_impl &table_impl() const
-  { return *m_table; }
+  /* non-virtual */ const Table_impl &table_impl() const { return *m_table; }
 
-  /* non-virtual */ Table_impl &table_impl()
-  { return *m_table; }
+  /* non-virtual */ Table_impl &table_impl() { return *m_table; }
 
   /////////////////////////////////////////////////////////////////////////
-  // level
+  // Parent partition.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual uint level() const
-  { return m_level; }
+  virtual const Partition *parent_partition() const { return m_parent; }
 
-  virtual void set_level(uint level)
-  { m_level= level; }
+  virtual Partition *parent_partition() {
+    return const_cast<dd::Partition *>(m_parent);
+  }
+
+  /////////////////////////////////////////////////////////////////////////
+  // parent_partition_id
+  /////////////////////////////////////////////////////////////////////////
+
+  Object_id parent_partition_id() const override {
+    return m_parent_partition_id;
+  }
+
+  void set_parent_partition_id(Object_id parent_partition_id) override {
+    m_parent_partition_id = parent_partition_id;
+  }
 
   /////////////////////////////////////////////////////////////////////////
   // number.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual uint number() const
-  { return m_number; }
+  uint number() const override { return m_number; }
 
-  virtual void set_number(uint number)
-  { m_number= number; }
+  void set_number(uint number) override { m_number = number; }
+
+  /////////////////////////////////////////////////////////////////////////
+  // description_utf8.
+  /////////////////////////////////////////////////////////////////////////
+
+  const String_type &description_utf8() const override {
+    return m_description_utf8;
+  }
+
+  void set_description_utf8(const String_type &description_utf8) override {
+    m_description_utf8 = description_utf8;
+  }
 
   /////////////////////////////////////////////////////////////////////////
   // engine.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual const String_type &engine() const
-  { return m_engine; }
+  const String_type &engine() const override { return m_engine; }
 
-  virtual void set_engine(const String_type &engine)
-  { m_engine= engine; }
+  void set_engine(const String_type &engine) override { m_engine = engine; }
 
   /////////////////////////////////////////////////////////////////////////
   // comment.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual const String_type &comment() const
-  { return m_comment; }
+  const String_type &comment() const override { return m_comment; }
 
-  virtual void set_comment(const String_type &comment)
-  { m_comment= comment; }
+  void set_comment(const String_type &comment) override { m_comment = comment; }
 
   /////////////////////////////////////////////////////////////////////////
   // Options.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual const Properties &options() const
-  { return *m_options; }
+  const Properties &options() const override { return m_options; }
 
-  virtual Properties &options()
-  { return *m_options; }
+  Properties &options() override { return m_options; }
 
-  virtual bool set_options_raw(const String_type &options_raw);
+  bool set_options(const Properties &options) override {
+    return m_options.insert_values(options);
+  }
+
+  bool set_options(const String_type &options_raw) override {
+    return m_options.insert_values(options_raw);
+  }
 
   /////////////////////////////////////////////////////////////////////////
   // se_private_data.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual const Properties &se_private_data() const
-  { return *m_se_private_data; }
+  const Properties &se_private_data() const override {
+    return m_se_private_data;
+  }
 
-  virtual Properties &se_private_data()
-  { return *m_se_private_data; }
+  Properties &se_private_data() override { return m_se_private_data; }
 
-  virtual bool set_se_private_data_raw(const String_type &se_private_data_raw);
+  bool set_se_private_data(const String_type &se_private_data_raw) override {
+    return m_se_private_data.insert_values(se_private_data_raw);
+  }
 
-  virtual void set_se_private_data(const Properties &se_private_data);
+  bool set_se_private_data(const Properties &se_private_data) override {
+    return m_se_private_data.insert_values(se_private_data);
+  }
 
   /////////////////////////////////////////////////////////////////////////
   // se_private_id.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual Object_id se_private_id() const
-  { return m_se_private_id; }
+  Object_id se_private_id() const override { return m_se_private_id; }
 
-  virtual void set_se_private_id(Object_id se_private_id)
-  { m_se_private_id= se_private_id; }
+  void set_se_private_id(Object_id se_private_id) override {
+    m_se_private_id = se_private_id;
+  }
 
   /////////////////////////////////////////////////////////////////////////
   // Tablespace.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual Object_id tablespace_id() const
-  { return m_tablespace_id; }
+  Object_id tablespace_id() const override { return m_tablespace_id; }
 
-  virtual void set_tablespace_id(Object_id tablespace_id)
-  { m_tablespace_id= tablespace_id; }
+  void set_tablespace_id(Object_id tablespace_id) override {
+    m_tablespace_id = tablespace_id;
+  }
 
   /////////////////////////////////////////////////////////////////////////
   // Partition-value collection
   /////////////////////////////////////////////////////////////////////////
 
-  virtual Partition_value *add_value();
+  Partition_value *add_value() override;
 
-  virtual const Partition_values &values() const
-  { return m_values; }
+  const Partition_values &values() const override { return m_values; }
 
   /////////////////////////////////////////////////////////////////////////
   // Partition-index collection
   /////////////////////////////////////////////////////////////////////////
 
-  virtual Partition_index *add_index(Index *idx);
+  Partition_index *add_index(Index *idx) override;
 
-  virtual const Partition_indexes &indexes() const
-  { return m_indexes; }
+  const Partition_indexes &indexes() const override { return m_indexes; }
 
   /* purecov: begin deadcode */
-  virtual Partition_indexes *indexes()
-  { return &m_indexes; }
+  Partition_indexes *indexes() override { return &m_indexes; }
   /* purecov: end */
 
-  virtual const Partition *parent() const
-  { return m_parent; }
-  virtual void set_parent(const Partition *parent)
-  { m_parent= parent; }
+  /////////////////////////////////////////////////////////////////////////
+  // Sub Partition collection.
+  /////////////////////////////////////////////////////////////////////////
+
+  Partition *add_subpartition() override;
+
+  const Table::Partition_collection &subpartitions() const override {
+    return m_subpartitions;
+  }
+
+  Table::Partition_collection *subpartitions() override {
+    return &m_subpartitions;
+  }
+
+  const Partition *parent() const override { return m_parent; }
+  void set_parent(const Partition *parent) override { m_parent = parent; }
 
   // Fix "inherits ... via dominance" warnings
-  virtual Weak_object_impl *impl()
-  { return Weak_object_impl::impl(); }
-  virtual const Weak_object_impl *impl() const
-  { return Weak_object_impl::impl(); }
-  virtual Object_id id() const
-  { return Entity_object_impl::id(); }
-  virtual bool is_persistent() const
-  { return Entity_object_impl::is_persistent(); }
-  virtual const String_type &name() const
-  { return Entity_object_impl::name(); }
-  virtual void set_name(const String_type &name)
-  { Entity_object_impl::set_name(name); }
+  Entity_object_impl *impl() override { return Entity_object_impl::impl(); }
+  const Entity_object_impl *impl() const override {
+    return Entity_object_impl::impl();
+  }
+  Object_id id() const override { return Entity_object_impl::id(); }
+  bool is_persistent() const override {
+    return Entity_object_impl::is_persistent();
+  }
+  const String_type &name() const override {
+    return Entity_object_impl::name();
+  }
+  void set_name(const String_type &name) override {
+    Entity_object_impl::set_name(name);
+  }
 
-public:
-  static Partition_impl *restore_item(Table_impl *table)
-  {
+ public:
+  static Partition_impl *restore_item(Table_impl *table) {
     return new (std::nothrow) Partition_impl(table);
   }
 
-  static Partition_impl *clone(const Partition_impl &other,
-                               Table_impl *table)
-  {
+  static Partition_impl *restore_item(Partition_impl *part) {
+    Partition_impl *p =
+        new (std::nothrow) Partition_impl(&part->table_impl(), part);
+    p->set_parent(part);
+
+    return p;
+  }
+
+  static Partition_impl *clone(const Partition_impl &other, Table_impl *table) {
     return new (std::nothrow) Partition_impl(other, table);
   }
 
-private:
+  static Partition_impl *clone(const Partition_impl &other,
+                               Partition_impl *part) {
+    return new (std::nothrow) Partition_impl(other, part);
+  }
+
+ private:
   // Fields.
 
-  uint m_level;
+  Object_id m_parent_partition_id;
   uint m_number;
   Object_id m_se_private_id;
 
+  String_type m_description_utf8;
   String_type m_engine;
   String_type m_comment;
-  std::unique_ptr<Properties> m_options;
-  std::unique_ptr<Properties> m_se_private_data;
+  Properties_impl m_options;
+  Properties_impl m_se_private_data;
 
   // References to tightly-coupled objects.
 
@@ -265,6 +318,7 @@ private:
 
   Partition_values m_values;
   Partition_indexes m_indexes;
+  Table::Partition_collection m_subpartitions;
 
   // References to loosely-coupled objects.
 
@@ -272,30 +326,17 @@ private:
 };
 
 ///////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////
-
-class Partition_type : public Object_type
-{
-public:
-  virtual void register_tables(Open_dictionary_tables_ctx *otx) const;
-
-  virtual Weak_object *create_object() const
-  { return new (std::nothrow) Partition_impl(); }
-};
-
-///////////////////////////////////////////////////////////////////////////
 
 /** Used to compare two partition elements. */
-struct Partition_order_comparator
-{
-  bool operator() (const dd::Partition* p1, const dd::Partition* p2) const
-  {
-    if (p1->level() == p2->level())
+struct Partition_order_comparator {
+  // TODO : do we really need this ordering now ?
+  bool operator()(const dd::Partition *p1, const dd::Partition *p2) const {
+    if (p1->parent_partition_id() == p2->parent_partition_id())
       return p1->number() < p2->number();
-    return p1->level() < p2->level();
+    return p1->parent_partition_id() < p2->parent_partition_id();
   }
 };
 
-}
+}  // namespace dd
 
-#endif // DD__PARTITION_IMPL_INCLUDED
+#endif  // DD__PARTITION_IMPL_INCLUDED

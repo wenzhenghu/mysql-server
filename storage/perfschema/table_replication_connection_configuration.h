@@ -1,14 +1,21 @@
 /*
-   Copyright (c) 2013, 2017, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2013, 2020, Oracle and/or its affiliates.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -24,16 +31,19 @@
 
 #include <sys/types.h>
 
+#include "compression.h"  // COMPRESSION_ALGORITHM_NAME_BUFFER_SIZE
+#include "my_base.h"
 #include "my_io.h"
 #include "mysql_com.h"
-#include "pfs_column_types.h"
-#include "pfs_engine_table.h"
-#include "rpl_info.h" /* CHANNEL_NAME_LENGTH*/
-#include "rpl_mi.h"
-#include "rpl_msr.h"
-#include "table_helper.h"
+#include "sql/rpl_info.h" /* CHANNEL_NAME_LENGTH*/
+#include "storage/perfschema/pfs_engine_table.h"
+#include "storage/perfschema/table_helper.h"
 
+class Field;
 class Master_info;
+class Plugin_table;
+struct TABLE;
+struct THR_LOCK;
 
 /**
   @addtogroup performance_schema_tables
@@ -42,16 +52,11 @@ class Master_info;
 
 #ifndef ENUM_RPL_YES_NO
 #define ENUM_RPL_YES_NO
-enum enum_rpl_yes_no
-{
-  PS_RPL_YES = 1,
-  PS_RPL_NO
-};
+enum enum_rpl_yes_no { PS_RPL_YES = 1, PS_RPL_NO };
 #endif
 
 /** enum values for SSL_Allowed*/
-enum enum_ssl_allowed
-{
+enum enum_ssl_allowed {
   PS_SSL_ALLOWED_YES = 1,
   PS_SSL_ALLOWED_NO,
   PS_SSL_ALLOWED_IGNORED
@@ -61,8 +66,7 @@ enum enum_ssl_allowed
   A row in the table. The fields with string values have an additional
   length field denoted by \<field_name\>_length.
 */
-struct st_row_connect_config
-{
+struct st_row_connect_config {
   char channel_name[CHANNEL_NAME_LENGTH];
   uint channel_name_length;
   char host[HOSTNAME_LENGTH];
@@ -94,44 +98,58 @@ struct st_row_connect_config
   double heartbeat_interval;
   char tls_version[FN_REFLEN];
   uint tls_version_length;
+  char public_key_path[FN_REFLEN];
+  uint public_key_path_length;
+  enum_rpl_yes_no get_public_key;
+  char network_namespace[NAME_LEN];
+  uint network_namespace_length;
+  char compression_algorithm[COMPRESSION_ALGORITHM_NAME_BUFFER_SIZE];
+  uint compression_algorithm_length;
+  uint zstd_compression_level;
+  /*
+    tls_ciphersuites = NULL means that TLS 1.3 default ciphersuites
+    are enabled. To allow a value that can either be NULL or a string,
+    it is represented by the pair:
+      first:  true if tls_ciphersuites is set to NULL
+      second: the string value when first is false
+  */
+  std::pair<bool, std::string> tls_ciphersuites = {true, ""};
+  enum_rpl_yes_no source_connection_auto_failover{PS_RPL_NO};
 };
 
-class PFS_index_rpl_connection_config : public PFS_engine_index
-{
-public:
+class PFS_index_rpl_connection_config : public PFS_engine_index {
+ public:
   PFS_index_rpl_connection_config()
-    : PFS_engine_index(&m_key), m_key("CHANNEL_NAME")
-  {
-  }
+      : PFS_engine_index(&m_key), m_key("CHANNEL_NAME") {}
 
-  ~PFS_index_rpl_connection_config()
-  {
-  }
+  ~PFS_index_rpl_connection_config() override {}
 
   virtual bool match(Master_info *mi);
 
-private:
+ private:
   PFS_key_name m_key;
 };
 
 /** Table PERFORMANCE_SCHEMA.TABLE_REPLICATION_CONNECTION_CONFIGURATION. */
-class table_replication_connection_configuration : public PFS_engine_table
-{
-private:
+class table_replication_connection_configuration : public PFS_engine_table {
+  typedef PFS_simple_index pos_t;
+
+ private:
   int make_row(Master_info *);
 
   /** Table share lock. */
   static THR_LOCK m_table_lock;
-  /** Fields definition. */
-  static TABLE_FIELD_DEF m_field_def;
+  /** Table definition. */
+  static Plugin_table m_table_def;
+
   /** Current row */
   st_row_connect_config m_row;
   /** Current position. */
-  PFS_simple_index m_pos;
+  pos_t m_pos;
   /** Next position. */
-  PFS_simple_index m_next_pos;
+  pos_t m_next_pos;
 
-protected:
+ protected:
   /**
     Read the current row values.
     @param table            Table handle
@@ -140,29 +158,27 @@ protected:
     @param read_all         true if all columns are read.
   */
 
-  virtual int read_row_values(TABLE *table,
-                              unsigned char *buf,
-                              Field **fields,
-                              bool read_all);
+  int read_row_values(TABLE *table, unsigned char *buf, Field **fields,
+                      bool read_all) override;
 
   table_replication_connection_configuration();
 
-public:
-  ~table_replication_connection_configuration();
+ public:
+  ~table_replication_connection_configuration() override;
 
   /** Table share. */
   static PFS_engine_table_share m_share;
-  static PFS_engine_table *create();
+  static PFS_engine_table *create(PFS_engine_table_share *);
   static ha_rows get_row_count();
-  virtual void reset_position(void);
+  void reset_position(void) override;
 
-  virtual int rnd_next();
-  virtual int rnd_pos(const void *pos);
+  int rnd_next() override;
+  int rnd_pos(const void *pos) override;
 
-  virtual int index_init(uint idx, bool sorted);
-  virtual int index_next();
+  int index_init(uint idx, bool sorted) override;
+  int index_next() override;
 
-private:
+ private:
   PFS_index_rpl_connection_config *m_opened_index;
 };
 

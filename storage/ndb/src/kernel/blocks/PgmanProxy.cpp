@@ -1,17 +1,25 @@
-/* Copyright (c) 2008, 2016, Oracle and/or its affiliates. All rights reserved.
+/*
+   Copyright (c) 2008, 2020, Oracle and/or its affiliates.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA */
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 #include "PgmanProxy.hpp"
 #include "pgman.hpp"
@@ -23,9 +31,9 @@
 PgmanProxy::PgmanProxy(Block_context& ctx) :
   LocalProxy(PGMAN, ctx)
 {
-  // GSN_LCP_FRAG_ORD
-  addRecSignal(GSN_LCP_FRAG_ORD, &PgmanProxy::execLCP_FRAG_ORD);
-
+  // GSN_SYNC_EXTENT_PAGES_REQ
+  addRecSignal(GSN_SYNC_EXTENT_PAGES_REQ,
+               &PgmanProxy::execSYNC_EXTENT_PAGES_REQ);
   // GSN_END_LCPREQ
   addRecSignal(GSN_END_LCPREQ, &PgmanProxy::execEND_LCPREQ);
   addRecSignal(GSN_END_LCPCONF, &PgmanProxy::execEND_LCPCONF);
@@ -42,27 +50,17 @@ PgmanProxy::newWorker(Uint32 instanceNo)
   return new Pgman(m_ctx, instanceNo);
 }
 
-// GSN_LCP_FRAG_ORD
-
+// GSN_SYNC_EXTENT_PAGES_REQ
 void
-PgmanProxy::execLCP_FRAG_ORD(Signal* signal)
+PgmanProxy::execSYNC_EXTENT_PAGES_REQ(Signal *signal)
 {
-  const LcpFragOrd* req = (const LcpFragOrd*)signal->getDataPtr();
-  Uint32 ssId = getSsId(req);
-  Ss_LCP_FRAG_ORD& ss = ssSeize<Ss_LCP_FRAG_ORD>(ssId);
-  ss.m_req = *req;
-  sendREQ(signal, ss);
-  ssRelease<Ss_LCP_FRAG_ORD>(ssId);
-}
-
-void
-PgmanProxy::sendLCP_FRAG_ORD(Signal* signal, Uint32 ssId, SectionHandle* handle)
-{
-  Ss_LCP_FRAG_ORD& ss = ssFind<Ss_LCP_FRAG_ORD>(ssId);
-  LcpFragOrd* req = (LcpFragOrd*)signal->getDataPtrSend();
-  *req = ss.m_req;
-  sendSignalNoRelease(workerRef(ss.m_worker), GSN_LCP_FRAG_ORD,
-                      signal, LcpFragOrd::SignalLength, JBB, handle);
+  // Route signal on to extra PGMAN worker that handles extent pages
+  // The return signal will be sent directly from there to sender
+  // Same data sent, so proxy block is merely a router here.
+  jamEntry();
+  sendSignal(workerRef(c_workers - 1), GSN_SYNC_EXTENT_PAGES_REQ, signal,
+             SyncExtentPagesReq::SignalLength, JBB);
+  return;
 }
 
 // GSN_END_LCPREQ
@@ -78,7 +76,8 @@ PgmanProxy::execEND_LCPREQ(Signal* signal)
   const Uint32 sb = refToBlock(ss.m_req.senderRef);
   ndbrequire(sb == DBLQH || sb == LGMAN);
 
-  if (sb == LGMAN) {
+  ndbrequire(sb == LGMAN);
+  {
     jam();
     /*
      * At end of UNDO execution.  Extra PGMAN worker was used to
@@ -94,15 +93,12 @@ PgmanProxy::execEND_LCPREQ(Signal* signal)
                signal, ReleasePagesReq::SignalLength, JBB);
     return;
   }
-  /**
-   * Send to extra PGMAN *after* all other PGMAN has completed
-   */
-  sendREQ(signal, ss, /* skip last */ true);
 }
 
 void
 PgmanProxy::execRELEASE_PAGES_CONF(Signal* signal)
 {
+  jam();
   const ReleasePagesConf* conf = (const ReleasePagesConf*)signal->getDataPtr();
   Uint32 ssId = getSsId(conf);
   Ss_END_LCPREQ& ss = ssFind<Ss_END_LCPREQ>(ssId);
@@ -112,6 +108,7 @@ PgmanProxy::execRELEASE_PAGES_CONF(Signal* signal)
 void
 PgmanProxy::sendEND_LCPREQ(Signal* signal, Uint32 ssId, SectionHandle* handle)
 {
+  jam();
   Ss_END_LCPREQ& ss = ssFind<Ss_END_LCPREQ>(ssId);
 
   EndLcpReq* req = (EndLcpReq*)signal->getDataPtrSend();
@@ -125,6 +122,7 @@ PgmanProxy::sendEND_LCPREQ(Signal* signal, Uint32 ssId, SectionHandle* handle)
 void
 PgmanProxy::execEND_LCPCONF(Signal* signal)
 {
+  jam();
   const EndLcpConf* conf = (EndLcpConf*)signal->getDataPtr();
   Uint32 ssId = conf->senderData;
   Ss_END_LCPREQ& ss = ssFind<Ss_END_LCPREQ>(ssId);
@@ -134,10 +132,12 @@ PgmanProxy::execEND_LCPCONF(Signal* signal)
 void
 PgmanProxy::sendEND_LCPCONF(Signal* signal, Uint32 ssId)
 {
+  jam();
   Ss_END_LCPREQ& ss = ssFind<Ss_END_LCPREQ>(ssId);
   BlockReference senderRef = ss.m_req.senderRef;
 
-  if (!lastReply(ss)) {
+  if (!lastReply(ss))
+  {
     jam();
     return;
   }
@@ -153,15 +153,18 @@ PgmanProxy::sendEND_LCPCONF(Signal* signal, Uint32 ssId)
     return;
   }
 
-  if (ss.m_error == 0) {
+  if (ss.m_error == 0)
+  {
     jam();
     EndLcpConf* conf = (EndLcpConf*)signal->getDataPtrSend();
     conf->senderData = ss.m_req.senderData;
     conf->senderRef = reference();
     sendSignal(senderRef, GSN_END_LCPCONF,
                signal, EndLcpConf::SignalLength, JBB);
-  } else {
-    ndbrequire(false);
+  }
+  else
+  {
+    ndbabort();
   }
 
   ssRelease<Ss_END_LCPREQ>(ssId);
@@ -173,6 +176,20 @@ PgmanProxy::sendEND_LCPCONF(Signal* signal, Uint32 ssId)
  * Here caller must have instance 0.  The extra worker in our
  * thread is used.  These are extent pages.
  */
+
+void
+PgmanProxy::get_extent_page(Page_cache_client& caller,
+                            Signal* signal,
+                            Page_cache_client::Request& req,
+                            Uint32 flags)
+{
+  ndbrequire(blockToInstance(caller.m_block) == 0);
+  SimulatedBlock* block = globalData.getBlock(caller.m_block);
+  Pgman* worker = (Pgman*)workerBlock(c_workers - 1); // extraWorkerBlock();
+  Page_cache_client pgman(block, worker);
+  pgman.get_extent_page(signal, req, flags);
+  caller.m_ptr = pgman.m_ptr;
+}
 
 int
 PgmanProxy::get_page(Page_cache_client& caller,
@@ -189,14 +206,28 @@ PgmanProxy::get_page(Page_cache_client& caller,
 }
 
 void
-PgmanProxy::update_lsn(Page_cache_client& caller,
-                       Local_key key, Uint64 lsn)
+PgmanProxy::set_lsn(Page_cache_client& caller,
+                    Local_key key,
+                    Uint64 lsn)
 {
   ndbrequire(blockToInstance(caller.m_block) == 0);
   SimulatedBlock* block = globalData.getBlock(caller.m_block);
   Pgman* worker = (Pgman*)workerBlock(c_workers - 1); // extraWorkerBlock();
   Page_cache_client pgman(block, worker);
-  pgman.update_lsn(key, lsn);
+  pgman.set_lsn(key, lsn);
+}
+
+void
+PgmanProxy::update_lsn(Signal *signal,
+                       Page_cache_client& caller,
+                       Local_key key,
+                       Uint64 lsn)
+{
+  ndbrequire(blockToInstance(caller.m_block) == 0);
+  SimulatedBlock* block = globalData.getBlock(caller.m_block);
+  Pgman* worker = (Pgman*)workerBlock(c_workers - 1); // extraWorkerBlock();
+  Page_cache_client pgman(block, worker);
+  pgman.update_lsn(signal, key, lsn);
 }
 
 int
@@ -288,6 +319,15 @@ PgmanProxy::send_data_file_ord(Signal* signal,
   ord->fd = fd;
   sendSignal(workerRef(i), GSN_DATA_FILE_ORD,
              signal, DataFileOrd::SignalLength, JBB);
+}
+
+bool
+PgmanProxy::extent_pages_available(Uint32 pages_needed,
+                                          Page_cache_client& caller)
+{
+  ndbrequire(blockToInstance(caller.m_block) == 0);
+  Pgman* worker = (Pgman*)workerBlock(c_workers - 1); // extraWorkerBlock();
+  return worker->extent_pages_available(pages_needed);
 }
 
 BLOCK_FUNCTIONS(PgmanProxy)

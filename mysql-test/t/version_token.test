@@ -1,6 +1,5 @@
 # Save the initial number of concurrent sessions
 --disable_ps_protocol
---source include/not_embedded.inc
 --source include/count_sessions.inc
 
 if ( !$VERSION_TOKEN ) {
@@ -22,9 +21,12 @@ SELECT version_tokens_show();
 --replace_regex /\.dll/.so/
 eval INSTALL PLUGIN version_tokens SONAME '$VERSION_TOKEN';
 UNINSTALL PLUGIN version_tokens;
+--source include/disconnect_connections.inc
+
 --replace_regex /\.dll/.so/
 eval INSTALL PLUGIN version_tokens SONAME '$VERSION_TOKEN';
 UNINSTALL PLUGIN version_tokens;
+--source include/disconnect_connections.inc
 
 --echo # Should not crash when unloading the so through removing the UDF
 drop function version_tokens_show;
@@ -171,8 +173,6 @@ select @@version_tokens_session;
 
 --echo
 set @@version_tokens_session= "token111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111=abc;;";
---error ER_ACCESS_DENIED_ERROR
-set @@old_passwords= 0;
 -- echo
 disconnect con1;
 --source include/wait_until_disconnected.inc
@@ -198,8 +198,6 @@ connect (con1,localhost,vbhagi,,test);
 -- echo
 connection con1;
 set @@version_tokens_session= "token1=def;;;      token2  =   abc    ;  sdf =  ;;;;";
---error ER_ACCESS_DENIED_ERROR
-set @@old_passwords= 0;
 
 disconnect con1;
 --source include/wait_until_disconnected.inc
@@ -290,6 +288,8 @@ connection default;
 
 -- echo
 UNINSTALL PLUGIN version_tokens;
+--source include/disconnect_connections.inc
+
 --disable_result_log
 --disable_query_log 
 let $mysql_errno = 0;

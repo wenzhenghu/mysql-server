@@ -38,6 +38,7 @@
 # WL#3584 Global Transaction Identifiers (GTIDs)
 
 # Output from mysqlbinlog is replayed on the slave server.
+--source include/not_have_privilege_checks_user.inc
 --source include/master-slave.inc
 --source include/have_binlog_format_mixed.inc
 
@@ -178,6 +179,7 @@ let $UUID= `SELECT @@SERVER_UUID`;
 --remove_file $MYSQLTEST_VARDIR/tmp/output.000005
 --remove_file $MYSQLTEST_VARDIR/tmp/output.000006
 --remove_file $MYSQLTEST_VARDIR/tmp/output.000007
+--remove_file $MYSQLTEST_VARDIR/tmp/$binlog_file
 
 --echo ==== --read-from-remote-master with --exclude-gtids ====
 
@@ -200,6 +202,7 @@ let $UUID= `SELECT @@SERVER_UUID`;
 --remove_file $MYSQLTEST_VARDIR/tmp/output.000002
 --remove_file $MYSQLTEST_VARDIR/tmp/output.000003
 --remove_file $MYSQLTEST_VARDIR/tmp/output.000004
+--remove_file $MYSQLTEST_VARDIR/tmp/$binlog_file
 
 --echo ==== --read-from-remote-master with --include-gtids ====
 
@@ -241,4 +244,4 @@ DROP TABLE t1;
 --let $binlog_file= query_get_value(SHOW MASTER STATUS, File, 1)
 --exec $MYSQL_BINLOG $datadir/$binlog_file | $MYSQL --user=root --host=127.0.0.1 --port=$SLAVE_MYPORT
 connection slave;
-CHANGE MASTER TO MASTER_AUTO_POSITION=0;
+CHANGE REPLICATION SOURCE TO SOURCE_AUTO_POSITION=0;

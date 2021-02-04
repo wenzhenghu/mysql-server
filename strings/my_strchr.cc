@@ -1,13 +1,25 @@
-/* Copyright (c) 2005, 2017, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2005, 2018, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
+
+   Without limiting anything contained in the foregoing, this file,
+   which is part of C Driver for MySQL (Connector/C), is also subject to the
+   Universal FOSS Exception, version 1.0, a copy of which can be found at
+   http://oss.oracle.com/licenses/universal-foss-exception.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -17,41 +29,6 @@
 #include <sys/types.h>
 
 #include "m_ctype.h"
-
-
-/*
-  Return pointer to first occurrence of character in a multi-byte string
-  or NULL if the character doesn't appear in the multi-byte string or
-  invalid character in charset of multi-byte string is found.
-
-  @param   cs    Pointer to charset info.
-  @param   str   Pointer to start of multi-byte string.
-  @param   end   Pointer to end of multi-byte string.
-  @param   c     Character to find first occurrence of.
-
-  @return  Pointer to first occurence of c in str or NULL.
-*/
-
-char *my_strchr(const CHARSET_INFO *cs, const char *str, const char *end,
-                char c)
-{
-  while (str < end)
-  {
-    uint mbl= my_mbcharlen_ptr(cs, str, end);
-    if (mbl == 0)
-      return NULL;
-    if (mbl == 1)
-    {
-      if (*str == c)
-        return((char *)str);
-      str++;
-    }
-    else
-      str+= mbl;
-  }
-  return(0);
-}
-
 
 /**
   Calculate the length of the initial segment of 'str' which consists
@@ -84,29 +61,22 @@ char *my_strchr(const CHARSET_INFO *cs, const char *str, const char *end,
   in 'reject'.
 */
 
-size_t my_strcspn(const CHARSET_INFO *cs, const char *str,
-                  const char *str_end, const char *reject,
-                  size_t reject_length)
-{
+size_t my_strcspn(const CHARSET_INFO *cs, const char *str, const char *str_end,
+                  const char *reject, size_t reject_length) {
   const char *ptr_str, *ptr_reject;
-  const char *reject_end= reject + reject_length;
-  uint mbl= 0;
+  const char *reject_end = reject + reject_length;
+  uint mbl = 0;
 
-  for (ptr_str= str; ptr_str < str_end; ptr_str+= mbl)
-  {
-    mbl= my_mbcharlen_ptr(cs, ptr_str, str_end);
+  for (ptr_str = str; ptr_str < str_end; ptr_str += mbl) {
+    mbl = my_mbcharlen_ptr(cs, ptr_str, str_end);
 
-    if (mbl == 0)
-      return 0;
+    if (mbl == 0) return 0;
 
-    if (mbl == 1)
-    {
-      for (ptr_reject= reject; ptr_reject < reject_end; ++ptr_reject)
-      {
-        if (*ptr_reject == *ptr_str)
-          return (size_t) (ptr_str - str);
+    if (mbl == 1) {
+      for (ptr_reject = reject; ptr_reject < reject_end; ++ptr_reject) {
+        if (*ptr_reject == *ptr_str) return (size_t)(ptr_str - str);
       }
     }
   }
-  return (size_t) (ptr_str - str);
+  return (size_t)(ptr_str - str);
 }

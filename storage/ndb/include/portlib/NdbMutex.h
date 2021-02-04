@@ -1,14 +1,21 @@
 /*
-   Copyright (c) 2003, 2015, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2003, 2018, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -19,7 +26,7 @@
 #define NDB_MUTEX_H
 
 #include <ndb_global.h>
-#include <thr_mutex.h>
+#include "thr_mutex.h"
 
 #ifdef	__cplusplus
 extern "C" {
@@ -66,6 +73,7 @@ NdbMutex* NdbMutex_CreateWithName(const char * name);
  * * p_mutex: pointer to the mutex structure
  * * returnvalue: 0 = succeeded, -1 = failed
  */
+int NdbMutex_Init_Shared(NdbMutex *p_mutex);
 int NdbMutex_Init(NdbMutex* p_mutex);
 int NdbMutex_InitWithName(NdbMutex* p_mutex, const char * name);
 
@@ -118,7 +126,7 @@ public:
   void unlock(){ NdbMutex_Unlock(m_mutex);}
   bool tryLock(){ return NdbMutex_Trylock(m_mutex) == 0;}
   
-  NdbMutex* getMutex() {return m_mutex;};
+  NdbMutex* getMutex() {return m_mutex;}
 
 protected:
   NdbMutex * m_mutex;
@@ -126,9 +134,9 @@ protected:
 
 class Guard {
 public:
-  Guard(NdbMutex *mtx) : m_mtx(mtx) { NdbMutex_Lock(m_mtx); };
-  Guard(NdbLockable & l) : m_mtx(l.m_mutex) { NdbMutex_Lock(m_mtx); }; 
-  ~Guard() { NdbMutex_Unlock(m_mtx); };
+  Guard(NdbMutex *mtx) : m_mtx(mtx) { NdbMutex_Lock(m_mtx); }
+  Guard(NdbLockable & l) : m_mtx(l.m_mutex) { NdbMutex_Lock(m_mtx); }
+  ~Guard() { NdbMutex_Unlock(m_mtx); }
 private:
   NdbMutex *m_mtx;
 };
@@ -136,9 +144,9 @@ private:
 class Guard2
 {
 public:
-  Guard2(NdbMutex *mtx) : m_mtx(mtx) { if (m_mtx) NdbMutex_Lock(m_mtx);};
-  Guard2(NdbLockable & l) : m_mtx(l.m_mutex) { if(m_mtx)NdbMutex_Lock(m_mtx);};
-  ~Guard2() { if (m_mtx) NdbMutex_Unlock(m_mtx); };
+  Guard2(NdbMutex *mtx) : m_mtx(mtx) { if (m_mtx) NdbMutex_Lock(m_mtx);}
+  Guard2(NdbLockable & l) : m_mtx(l.m_mutex) { if(m_mtx)NdbMutex_Lock(m_mtx);}
+  ~Guard2() { if (m_mtx) NdbMutex_Unlock(m_mtx); }
 private:
   NdbMutex *m_mtx;
 };

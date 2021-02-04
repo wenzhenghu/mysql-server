@@ -1,14 +1,21 @@
 /*
-   Copyright (c) 2010, 2017, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2010, 2020, Oracle and/or its affiliates.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -36,12 +43,12 @@ class trp_client : TransporterSendBufferHandle
   friend class ReceiveThreadClient;
 public:
   trp_client();
-  virtual ~trp_client();
+  ~trp_client() override;
 
   virtual void trp_deliver_signal(const NdbApiSignal *,
                                   const LinearSectionPtr ptr[3]) = 0;
   virtual void trp_wakeup()
-    {};
+    {}
 
   Uint32 open(class TransporterFacade*, int blockNo = -1);
   void close();
@@ -51,6 +58,11 @@ public:
   void complete_poll();
   void wakeup();
 
+  // Called under m_mutex protection
+  void set_enabled_send(const NodeBitmask &nodes);
+  void enable_send(NodeId node);
+  void disable_send(NodeId node);
+  
   void flush_send_buffers();
   int do_forceSend(bool forceSend = true);
 
@@ -67,7 +79,7 @@ public:
   const trp_node & getNodeInfo(Uint32 i) const;
 
   virtual void recordWaitTimeNanos(Uint64 nanos)
-    {};
+    {}
 
   void lock();
   void unlock();
@@ -85,6 +97,8 @@ public:
    * This variant does flush thread-local send-buffer
    */
   int safe_sendSignal(const NdbApiSignal*, Uint32 nodeId);
+  int safe_sendSignal(const NdbApiSignal*, Uint32 nodeId,
+                      const LinearSectionPtr ptr[3], Uint32 secs);
 
   /**
    * This sendSignal variant can be called on any trp_client
@@ -94,15 +108,26 @@ public:
    * This variant does not flush thread-local send-buffer
    */
   int safe_noflush_sendSignal(const NdbApiSignal*, Uint32 nodeId);
+  int safe_noflush_sendSignal(const NdbApiSignal*, Uint32 nodeId,
+                              const LinearSectionPtr ptr[3], Uint32 secs);
+
 private:
   /**
    * TransporterSendBufferHandle interface
    */
-  virtual Uint32 *getWritePtr(NodeId node, Uint32 lenBytes, Uint32 prio,
-                              Uint32 max_use);
-  virtual Uint32 updateWritePtr(NodeId node, Uint32 lenBytes, Uint32 prio);
-  virtual void getSendBufferLevel(NodeId node, SB_LevelType &level);
-  virtual bool forceSend(NodeId node);
+  bool isSendEnabled(NodeId node) const override;
+  Uint32 *getWritePtr(NodeId nodeId,
+                      TrpId trp_id,
+                      Uint32 lenBytes,
+                      Uint32 prio,
+                      Uint32 max_use,
+                      SendStatus *error) override;
+  Uint32 updateWritePtr(NodeId nodeId,
+                        TrpId trp_id,
+                        Uint32 lenBytes,
+                        Uint32 prio) override;
+  void getSendBufferLevel(NodeId node, SB_LevelType &level) override;
+  bool forceSend(NodeId nodeId, TrpId trp_id) override;
 
 private:
   Uint32 m_blockNo;
@@ -115,7 +140,12 @@ private:
    *   'm_locked_for_poll' also implies 'm_mutex' is locked
    */
   bool m_locked_for_poll;
+  bool m_is_receiver_thread;
 public:
+  bool is_receiver_thread()
+  {
+    return m_is_receiver_thread;
+  }
   NdbMutex* m_mutex; // thread local mutex...
   void set_locked_for_poll(bool val)
   {
@@ -155,6 +185,8 @@ private:
     trp_client *m_next;
     NdbCondition * m_condition;
   } m_poll;
+
+  NodeBitmask m_enabled_nodes_mask;
 
   /**
    * This is used for sending.

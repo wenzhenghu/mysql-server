@@ -1,17 +1,28 @@
-# Copyright (c) 2008, 2017, Oracle and/or its affiliates. All rights reserved.
+# Copyright (c) 2008, 2020, Oracle and/or its affiliates.
 #
 # This program is free software; you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; version 2 of the License.
+# it under the terms of the GNU General Public License, version 2.0,
+# as published by the Free Software Foundation.
+#
+# This program is also distributed with certain software (including
+# but not limited to OpenSSL) that is licensed under separate terms,
+# as designated in a particular file or component or in included license
+# documentation.  The authors of MySQL hereby grant you an additional
+# permission to link the program and your derivative works with the
+# separately licensed software that they have included with MySQL.
 #
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
+# GNU General Public License, version 2.0, for more details.
 #
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
-# Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+# Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
+
+IF(NOT WITH_NDBCLUSTER)
+  RETURN()
+ENDIF()
 
 # Add both MySQL and NDB cmake repositories to search path
 SET(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH}
@@ -19,147 +30,114 @@ SET(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH}
     ${CMAKE_SOURCE_DIR}/storage/ndb/cmake)
 INCLUDE(ndb_add_target_property)
 INCLUDE(ndb_add_test)
-
-MESSAGE(STATUS "Using cmake version ${CMAKE_VERSION}")
-
-# Check if this is MySQL Cluster build i.e the MySQL Server
-# version string ends in -ndb-Y.Y.Y[-status]    
-MACRO(NDB_CHECK_MYSQL_CLUSTER version_string)
-
-  IF(${version_string} MATCHES "(.*)-ndb-(.*)")
-    SET(mysql_version ${CMAKE_MATCH_1})
-    SET(cluster_version ${CMAKE_MATCH_2})
-
-    # Sanity check that the mysql_version matches precalcuated
-    # values from higher level scripts  
-    IF(NOT ${mysql_version} EQUAL "${MYSQL_NO_DASH_VERSION}")
-      MESSAGE(FATAL_ERROR "Sanity check of version_string failed!")
-    ENDIF()
-
-    # Split the cluster_version further into Y.Y.Y subcomponents
-    IF(${cluster_version} MATCHES "([0-9]+)\\.([0-9]+)\\.([0-9]+)")
-      SET(MYSQL_CLUSTER_VERSION_MAJOR ${CMAKE_MATCH_1})
-      SET(MYSQL_CLUSTER_VERSION_MINOR ${CMAKE_MATCH_2})
-      SET(MYSQL_CLUSTER_VERSION_BUILD ${CMAKE_MATCH_3})
-    ENDIF()
-
-    MESSAGE(STATUS  "This is MySQL Cluster ${cluster_version}")
-    # Finally set MYSQL_CLUSTER_VERSION to be used as an indicator
-    # that this is a MySQL Cluster build, yay!
-    SET(MYSQL_CLUSTER_VERSION ${cluster_version})
-  ENDIF()
-ENDMACRO()
-
-NDB_CHECK_MYSQL_CLUSTER(${VERSION})
+INCLUDE(ndb_add_executable)
 
 #
 # Add the ndbcluster plugin
 #
 SET(NDBCLUSTER_SOURCES
-  ../../sql/ha_ndbcluster.cc
-  ../../sql/ha_ndbcluster_cond.cc
-  ../../sql/ha_ndbcluster_push.cc
-  ../../sql/ha_ndbcluster_connection.cc
-  ../../sql/ha_ndbcluster_binlog.cc
-  ../../sql/ha_ndb_index_stat.cc
-  ../../sql/ha_ndb_ddl_fk.cc
-  ../../sql/ha_ndbinfo.cc
-  ../../sql/ndb_local_connection.cc
-  ../../sql/ndb_share.cc
-  ../../sql/ndb_thd.cc
-  ../../sql/ndb_thd_ndb.cc
-  ../../sql/ndb_global_schema_lock.cc
-  ../../sql/ndb_mi.cc
-  ../../sql/ndb_conflict_trans.cc
-  ../../sql/ndb_anyvalue.cc
-  ../../sql/ndb_ndbapi_util.cc
-  ../../sql/ndb_binlog_extra_row_info.cc
-  ../../sql/ndb_event_data.cc
-  ../../sql/ndb_schema_object.cc
-  ../../sql/ndb_schema_dist.cc
-  ../../sql/ndb_component.cc
-  ../../sql/ndb_local_schema.cc
-  ../../sql/ndb_repl_tab.cc
-  ../../sql/ndb_conflict.cc
-  ../../sql/ndb_tdc.cc
-  ../../sql/ndb_log.cc
-  ../../sql/ndb_binlog_thread.cc
-  ../../sql/ndb_find_files_list.cc
-  ../../sql/ndb_name_util.cc
-  ../../sql/ndb_bitmap.cc
-  ../../sql/ndb_table_map.cc
+  plugin/ha_ndbcluster.cc
+  plugin/ha_ndbcluster_cond.cc
+  plugin/ha_ndbcluster_push.cc
+  plugin/ha_ndbcluster_connection.cc
+  plugin/ha_ndbcluster_binlog.cc
+  plugin/ha_ndb_index_stat.cc
+  plugin/ha_ndb_ddl_fk.cc
+  plugin/ha_ndbinfo.cc
+  plugin/ha_ndbinfo_sql.cc
+  plugin/ndb_local_connection.cc
+  plugin/ndb_share.cc
+  plugin/ndb_thd.cc
+  plugin/ndb_thd_ndb.cc
+  plugin/ndb_global_schema_lock.cc
+  plugin/ndb_mi.cc
+  plugin/ndb_conflict_trans.cc
+  plugin/ndb_anyvalue.cc
+  plugin/ndb_ndbapi_util.cc
+  plugin/ndb_binlog_extra_row_info.cc
+  plugin/ndb_event_data.cc
+  plugin/ndb_schema_object.cc
+  plugin/ndb_schema_dist.cc
+  plugin/ndb_component.cc
+  plugin/ndb_repl_tab.cc
+  plugin/ndb_conflict.cc
+  plugin/ndb_tdc.cc
+  plugin/ndb_log.cc
+  plugin/ndb_binlog_thread.cc
+  plugin/ndb_name_util.cc
+  plugin/ndb_bitmap.cc
+  plugin/ndb_table_map.cc
+  plugin/ndb_dd.cc
+  plugin/ndb_modifiers.cc
+  plugin/ndb_dd_client.cc
+  plugin/ndb_dd_schema.cc
+  plugin/ndb_dd_table.cc
+  plugin/ndb_dd_sdi.cc
+  plugin/ndb_plugin_reference.cc
+  plugin/ndb_server_hooks.cc
+  plugin/ndb_binlog_client.cc
+  plugin/ndb_metadata.cc
+  plugin/ndb_dd_disk_data.cc
+  plugin/ndb_dd_upgrade_table.cc
+  plugin/ndb_binlog_hooks.cc
+  plugin/ndb_util_table.cc
+  plugin/ndb_schema_dist_table.cc
+  plugin/ndb_fk_util.cpp
+  plugin/ndb_schema_trans_guard.cc
+  plugin/ndb_create_helper.cc
+  plugin/ndb_apply_status_table.cc
+  plugin/ndb_metadata_change_monitor.cc
+  plugin/ndb_schema_result_table.cc
+  plugin/ndb_metadata_sync.cc
+  plugin/ndb_ddl_transaction_ctx.cc
+  plugin/ndb_record_layout.cc
+  plugin/ndb_sql_metadata_table.cc
+  plugin/ndb_stored_grants.cc
+  plugin/ndb_dd_fk.cc
+  plugin/ndb_pfs_init.cc
+  plugin/ndb_pfs_table.cc
+  plugin/ndb_sync_pending_objects_table.cc
+  plugin/ndb_sync_excluded_objects_table.cc
+  plugin/ndb_dd_sync.cc
+  plugin/ndb_upgrade_util.cc
 )
 
 # Include directories used when building ha_ndbcluster
 INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR}/storage/ndb/include)
 
-IF(NOT MYSQL_CLUSTER_VERSION)
-ENDIF()
-
-# NDB is DEFAULT plugin in MySQL Cluster
-SET(is_default_plugin "")
-OPTION(WITH_NDB_DEFAULT_PLUGIN_DETECT
-  "Autodetect MySQL Cluster version and set ndbcluster as DEFAULT plugin" ON)
-MARK_AS_ADVANCED(WITH_NDB_DEFAULT_PLUGIN_DETECT)
-IF(WITH_NDB_DEFAULT_PLUGIN_DETECT)
-  IF(MYSQL_CLUSTER_VERSION)
-    # ndbcluster is DEFAULT plugin in MySQL Cluster
-    SET(is_default_plugin "DEFAULT")
-  ENDIF()
+IF(SOLARIS_INTEL)
+  # Sun Studio 12.6 on x86 machines creates a bogus code
+  # when -xO2 is used and crashes the executable whenever
+  # it calls std::condition_variable::wait_for()
+  STRING_APPEND(CMAKE_CXX_FLAGS_RELWITHDEBINFO " -xO1")
+  STRING_APPEND(CMAKE_CXX_FLAGS_RELEASE " -xO1")
+  STRING_APPEND(CMAKE_CXX_FLAGS_MINSIZEREL " -xO1")
 ENDIF()
 
 IF(NOT WITHOUT_SERVER)
   MYSQL_ADD_PLUGIN(ndbcluster ${NDBCLUSTER_SOURCES} STORAGE_ENGINE
-    ${is_default_plugin} STATIC_ONLY
+    DEFAULT STATIC_ONLY
     LINK_LIBRARIES ndbclient_static)
+
+  # Sanity check that MYSQL_ADD_PLUGIN didn't decide to skip build
+  IF (NOT WITH_NDBCLUSTER)
+    MESSAGE(FATAL_ERROR "MYSQL_ADD_PLUGIN decided to skip build")
+  ENDIF()
 ENDIF()
 
-#
-# Build NDB only if MYSQL_ADD_PLUGIN has decided(by looking at various
-# cmake args same as all other plugins have) to build ndbcluster(our handler)
-#
-IF (NOT WITH_NDBCLUSTER)
-  MESSAGE(STATUS "Not building NDB")
-  RETURN()
+# Disable strict-aliasing for storage/ndb
+IF(MY_COMPILER_IS_GNU_OR_CLANG)
+  STRING_APPEND(CMAKE_C_FLAGS   " -fno-strict-aliasing")
+  STRING_APPEND(CMAKE_CXX_FLAGS " -fno-strict-aliasing")
 ENDIF()
 
-# Disable specific types of warnings for storage/ndb
-# if the compiler supports the flag
-IF(CMAKE_COMPILER_IS_GNUCXX)
-  INCLUDE(CheckCXXCompilerFlag)
-  FOREACH(warning
-          "unused-but-set-variable"
-          "strict-aliasing"
-          # Downgrade -Werror to warning for "may be used uninitialized"
-          # and "is used uninitialized in this function"
-          "error=maybe-uninitialized"
-          "error=uninitialized"
-          # Downgrade placement-new as part of Bug #24822203
-          "error=placement-new")
-    STRING(REPLACE "-" "_" warning_ ${warning})
-    STRING(TOUPPER ${warning_} WARNING)
-    CHECK_CXX_COMPILER_FLAG("-Wno-${warning}" HAVE_${WARNING})
-    IF(HAVE_${WARNING})
-      MESSAGE(STATUS "Disabling -W${warning} warning for building NDB")
-      SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-${warning}")
-      SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-${warning}")
-    ENDIF()
-  ENDFOREACH()
-ENDIF()
-
-IF(CMAKE_SIZEOF_VOID_P EQUAL 4)
-  MESSAGE(STATUS "Building NDB 32-bit")
-ELSE()
-  MESSAGE(STATUS "Building NDB 64-bit")
+IF(NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
+  MESSAGE(FATAL_ERROR "Only 64-bit build of NDB is supported")
 ENDIF()
 
 INCLUDE(${CMAKE_CURRENT_SOURCE_DIR}/ndb_configure.cmake)
 
 INCLUDE_DIRECTORIES(
-  # MySQL Server includes
-  ${CMAKE_SOURCE_DIR}/include
-  ${CMAKE_BINARY_DIR}/include
-
   # NDB includes
   ${CMAKE_CURRENT_SOURCE_DIR}/include
   ${CMAKE_CURRENT_SOURCE_DIR}/include/util
@@ -172,13 +150,7 @@ INCLUDE_DIRECTORIES(
   ${CMAKE_CURRENT_SOURCE_DIR}/include/ndbapi
   ${CMAKE_CURRENT_SOURCE_DIR}/include/logger
   ${CMAKE_CURRENT_BINARY_DIR}/include
-
-  # Util library includes
-  ${ZLIB_INCLUDE_DIR}
-  ${EDITLINE_INCLUDE_DIR})
-
-# The root of storage/ndb/
-SET(NDB_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
+)
 
 OPTION(WITH_NDB_TEST
   "Include the NDB Cluster ndbapi test programs" OFF)
@@ -189,6 +161,8 @@ ELSE()
   IF(ENABLE_GCOV AND NOT WIN32 AND NOT APPLE)
     MESSAGE(STATUS "Building NDB test programs for improved gcov coverage")
     SET(WITH_NDB_TEST ON)
+    MESSAGE(STATUS "Building NdbApi examples for improved gcov coverage")
+    SET(WITH_NDBAPI_EXAMPLES ON)
   ENDIF()
   # Turn on NDB tests automatically for valgrind builds
   IF(WITH_VALGRIND)
@@ -200,16 +174,20 @@ ELSE()
   # Turn on NDB tests automatically for "-devbld" debug builds
   # to increase test coverage
   IF(PACKAGE_SUFFIX STREQUAL "-devbld" AND
-     CMAKE_BUILD_TYPE MATCHES "Debug")
+     CMAKE_BUILD_TYPE_UPPER STREQUAL "DEBUG")
     MESSAGE(STATUS "Building NDB test programs for \"-devbld\" debug build")
     SET(WITH_NDB_TEST ON)
     MESSAGE(STATUS "Building NdbApi examples for \"-devbld\" debug build")
     SET(WITH_NDBAPI_EXAMPLES ON)
   ENDIF()
+  # Turn on build of NDB tests automatically for "-werror" builds
+  IF(PACKAGE_SUFFIX STREQUAL "-werror")
+    MESSAGE(STATUS "Building NDB test programs for \"-werror\" build")
+    SET(WITH_NDB_TEST ON)
+    MESSAGE(STATUS "Building NdbApi examples for \"-werror\" build")
+    SET(WITH_NDBAPI_EXAMPLES ON)
+  ENDIF()
 ENDIF()
-
-OPTION(WITH_NDB_BINLOG
-  "Disable NDB binlog" ON)
 
 OPTION(WITH_ERROR_INSERT
   "Enable error injection in NDB" OFF)
@@ -217,7 +195,7 @@ OPTION(WITH_ERROR_INSERT
 OPTION(WITH_NDB_DEBUG
   "Enable special ndb NDB features(including ERROR_INSERT)" OFF)
 
-IF(WITH_NDB_DEBUG OR CMAKE_BUILD_TYPE MATCHES "Debug")
+IF(WITH_NDB_DEBUG OR CMAKE_BUILD_TYPE_UPPER STREQUAL "DEBUG")
   MESSAGE(STATUS "Turning on special NDB debug features")
   ADD_DEFINITIONS(-DVM_TRACE)
   ADD_DEFINITIONS(-DNDB_DEBUG)
@@ -235,9 +213,10 @@ ENDIF()
 # Set extra compiler switches from WITH_NDB_CCFLAGS
 SET(WITH_NDB_CCFLAGS "" CACHE STRING "Extra compiler flags for NDB")
 IF(WITH_NDB_CCFLAGS)
-  MESSAGE(STATUS "Appending extra compiler flags for NDB: \"${WITH_NDB_CCFLAGS}\"")
-  SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${WITH_NDB_CCFLAGS}")
-  SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${WITH_NDB_CCFLAGS}")
+  MESSAGE(STATUS
+    "Appending extra compiler flags for NDB: \"${WITH_NDB_CCFLAGS}\"")
+  STRING_APPEND(CMAKE_C_FLAGS   " ${WITH_NDB_CCFLAGS}")
+  STRING_APPEND(CMAKE_CXX_FLAGS " ${WITH_NDB_CCFLAGS}")
 ENDIF()
 
 # Set extra compiler switches from environment variable NDB_EXTRA_FLAGS
@@ -245,9 +224,12 @@ SET(ndb_flags_env $ENV{NDB_EXTRA_FLAGS})
 IF(ndb_flags_env)
   MESSAGE(STATUS "Appending extra compiler flags for NDB from "
                  "environment: \"${ndb_flags_env}\"")
-  SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${ndb_flags_env}")
-  SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${ndb_flags_env}")
+  STRING_APPEND(CMAKE_C_FLAGS   " ${ndb_flags_env}")
+  STRING_APPEND(CMAKE_CXX_FLAGS " ${ndb_flags_env}")
 ENDIF()
+
+# Moved here from configure.cmake
+CHECK_FUNCTION_EXISTS (getrlimit HAVE_GETRLIMIT)
 
 SET(HAVE_JAVA FALSE)
 SET(HAVE_JDK FALSE)
@@ -256,7 +238,8 @@ SET(WITH_NDB_JAVA_DEFAULT ON)
 # by environment variable
 IF (DEFINED ENV{WITH_NDB_JAVA_DEFAULT})
   SET(WITH_NDB_JAVA_DEFAULT $ENV{WITH_NDB_JAVA_DEFAULT})
-  MESSAGE(STATUS "Default value for WITH_NDB_JAVA set to ${WITH_NDB_JAVA_DEFAULT}")
+  MESSAGE(STATUS
+    "Default value for WITH_NDB_JAVA set to ${WITH_NDB_JAVA_DEFAULT}")
 ELSE()
   # Check if the default for WITH_NDB_JAVA should be
   # magically overriden
@@ -278,7 +261,9 @@ ELSE()
 ENDIF()
 OPTION(WITH_NDB_JAVA
   "Include NDB Cluster Java components" ${WITH_NDB_JAVA_DEFAULT})
-IF(WITH_NDB_JAVA)
+IF(WITH_ASAN)
+  MESSAGE(STATUS "Skip building ClusterJ for ASAN builds")
+ELSEIF(WITH_NDB_JAVA)
   #
   # Check for Java and JDK needed by ndbjtie and clusterj
   #
@@ -291,7 +276,7 @@ IF(WITH_NDB_JAVA)
     MESSAGE(STATUS "Looking for Java in standard locations")
   ENDIF()
 
-  FIND_PACKAGE(Java 1.6 COMPONENTS Development)
+  FIND_PACKAGE(Java 1.8 COMPONENTS Development)
   IF(NOT JAVA_FOUND)
     IF(DEFINED ENV{JAVA_HOME})
       # Could not find Java in the specific location set by JAVA_HOME
@@ -318,10 +303,7 @@ IF(WITH_NDB_JAVA)
     ENDIF()
 
     # Search for version in specified order
-    SET(_preferred_versions
-       1.8
-       1.7
-       1.6)
+    SET(_preferred_versions 1.8)
 
     FOREACH(_version ${_preferred_versions})
       SET(_path ${_base_path}jdk${_version}${_bit_suffix})
@@ -370,14 +352,14 @@ IF(WITH_NDB_JAVA)
   MESSAGE(STATUS "JNI_LIBRARIES: ${JNI_LIBRARIES}")
   NDB_REQUIRE_VARIABLE(JNI_INCLUDE_DIRS)
 
-  INCLUDE("${NDB_SOURCE_DIR}/config/type_JAVA.cmake")
+  INCLUDE("${CMAKE_CURRENT_SOURCE_DIR}/config/type_JAVA.cmake")
   SET(HAVE_JAVA TRUE)
   SET(HAVE_JDK TRUE)
   SET(WITH_CLASSPATH ${WITH_CLASSPATH} CACHE STRING
     "Enable the classpath for MySQL Cluster Java Connector")
 ELSE(WITH_NDB_JAVA)
   MESSAGE(STATUS "Excluding Cluster Java components")
-ENDIF(WITH_NDB_JAVA)
+ENDIF(WITH_ASAN)
 
 ADD_SUBDIRECTORY(include)
 ADD_SUBDIRECTORY(src)
@@ -389,8 +371,6 @@ ENDIF()
 IF (HAVE_JAVA AND HAVE_JDK)
   ADD_SUBDIRECTORY(clusterj)
 ENDIF()
-ADD_SUBDIRECTORY(memcache)
-ADD_SUBDIRECTORY(mcc)
 
 SET(WITH_NDB_NODEJS_DEFAULT ON)
 
@@ -398,8 +378,10 @@ SET(WITH_NDB_NODEJS_DEFAULT ON)
 # by environment variable
 IF(DEFINED ENV{WITH_NDB_NODEJS_DEFAULT})
   SET(WITH_NDB_NODEJS_DEFAULT $ENV{WITH_NDB_NODEJS_DEFAULT})
-  MESSAGE(STATUS "Default value for WITH_NDB_NODEJS set to ${WITH_NDB_NODEJS_DEFAULT}")
+  MESSAGE(STATUS
+    "Default value for WITH_NDB_NODEJS set to ${WITH_NDB_NODEJS_DEFAULT}")
 ENDIF(DEFINED ENV{WITH_NDB_NODEJS_DEFAULT})
+
 OPTION(WITH_NDB_NODEJS
   "Include NDB Cluster node.js components" ${WITH_NDB_NODEJS_DEFAULT})
 IF(WITH_NDB_NODEJS)
@@ -417,7 +399,3 @@ ADD_SUBDIRECTORY(wix)
 IF(WITH_UNIT_TESTS)
   FILE(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/unittest/ndb)
 ENDIF()
-
-# Show any MySQL Server patches
-#INCLUDE(ndb_show_patches)
-#NDB_SHOW_PATCHES()

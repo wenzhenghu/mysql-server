@@ -1,15 +1,21 @@
 /*
-   Copyright (C) 2003-2008 MySQL AB, 2008, 2009 Sun Microsystems, Inc.
-    All rights reserved. Use is subject to license terms.
+   Copyright (c) 2003, 2019, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -115,6 +121,12 @@ public:
    */
   int end();
 
+  /**
+   *  Reset the ScanFilter object, discarding any previous
+   *  filter definition and error state.
+   */
+  void reset();
+
   /** @} *********************************************************************/
 
   /**
@@ -144,6 +156,17 @@ public:
    *  ®return  0 if successful, -1 otherwise
    */
   int cmp(BinaryCondition cond, int ColId, const void *val, Uint32 len = 0); 
+
+  /**
+   * Compare column <b>ColId1</b> with <b>ColId2</b>
+   *
+   * Compare two column which has to be of the exact same data type,
+   * including length, precision, scale etc, as relevant for each type.
+   * Only the comparison conditions EQ,NE,LT,LE,GT,GE are supported.
+   *
+   *  ï¿½return  0 if successful, -1 otherwise
+   */
+  int cmp(BinaryCondition cond, int ColId1, int ColId2);
 
   /** 
    * @name Integer Comparators

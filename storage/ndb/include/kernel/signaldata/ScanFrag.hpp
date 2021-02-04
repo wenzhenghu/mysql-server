@@ -1,14 +1,21 @@
 /*
-   Copyright (c) 2003, 2016, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2003, 2020, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -40,8 +47,8 @@ class ScanFragReq {
 public:
   STATIC_CONST( SignalLength = 12 );
 
-  STATIC_CONST( AttrInfoSectionNum = 0 );
-  STATIC_CONST( KeyInfoSectionNum = 1 );
+  STATIC_CONST( AttrInfoSectionNum = 0 ); //Mandatory part
+  STATIC_CONST( KeyInfoSectionNum = 1 );  //Optional
   
   friend bool printSCAN_FRAGREQ(FILE *, const Uint32*, Uint32, Uint16);
   friend bool printSCAN_FRAGCONF(FILE *, const Uint32*, Uint32, Uint16);
@@ -115,6 +122,18 @@ public:
 
   static void setCorrFactorFlag(Uint32 & requestInfo, Uint32 val);
   static Uint32 getCorrFactorFlag(const Uint32 & requestInfo);
+
+  // Multiple fragment list is sent as last section if MultiFragFlag
+  // is set. Encoded as a list of fragId's, where first fragId
+  // is the same as 'fragmentNoKeyLen'.
+  static void setMultiFragFlag(Uint32 & requestInfo, Uint32 val);
+  static Uint32 getMultiFragFlag(const Uint32 & requestInfo);
+
+  static void setFirstMatchFlag(Uint32 & requestInfo, Uint32 val);
+  static Uint32 getFirstMatchFlag(const Uint32 requestInfo);
+
+  static void setQueryThreadFlag(Uint32 & requestInfo, Uint32 val);
+  static Uint32 getQueryThreadFlag(const Uint32 requestInfo);
 };
 
 /*
@@ -186,6 +205,8 @@ class ScanFragConf {
   friend class Suma;
 public:
   STATIC_CONST( SignalLength = 6 );
+  STATIC_CONST( SignalLength_ext = 7 );
+  STATIC_CONST( SignalLength_query = 8);
   
 public:
   Uint32 senderData;
@@ -194,6 +215,19 @@ public:
   Uint32 transId1;
   Uint32 transId2;
   Uint32 total_len;  // Total #Uint32 returned as TRANSID_AI
+
+  /**
+   * ext'ended format used by SPJ: Allow it to report a bitmask
+   * of treeNode id's (tables) which are still 'active', such
+   * that more result rows will be returned in later NEXTREQ's.
+   */
+  Uint32 activeMask;
+  /**
+   * When query thread is used, DBTC and DBSPJ needs to know
+   * the senders reference to be able to send the following
+   * signals.
+   */
+  Uint32 senderRef;
 };
 
 class ScanFragRef {
@@ -210,6 +244,7 @@ class ScanFragRef {
   friend class Suma;
 public:
   STATIC_CONST( SignalLength = 4 );
+  STATIC_CONST( SignalLength_query = 5 );
 public:
   enum ErrorCode {
     ZNO_FREE_TC_CONREC_ERROR = 484,
@@ -230,6 +265,7 @@ public:
   Uint32 transId1;
   Uint32 transId2;
   Uint32 errorCode;
+  Uint32 senderRef;
 };
 
 /**
@@ -293,11 +329,14 @@ public:
  * s = Stat scan             - 1  Bit 17
  * a = Prio A scan           - 1  Bit 18
  * i = Not interpreted flag  - 1  Bit 19
+ * m = Multi fragment scan   - 1  Bit 20
+ * f = First match flag      - 1  Bit 21
+ * q = Query thread flag     - 1  Bit 22
  *
  *           1111111111222222222233
  * 01234567890123456789012345678901
  *  rrcdlxhkrztppppaaaaaaaaaaaaaaaa   Short variant ( < 6.4.0)
- *  rrcdlxhkrztppppCs                 Long variant (6.4.0 +)
+ *  rrcdlxhkrztppppCsaim              Long variant (6.4.0 +)
  */
 #define SF_LOCK_MODE_SHIFT   (5)
 #define SF_LOCK_MODE_MASK    (1)
@@ -325,6 +364,9 @@ public:
 #define SF_STAT_SCAN_SHIFT  (17)
 #define SF_PRIO_A_SHIFT     (18)
 #define SF_NOT_INTERPRETED_SHIFT (19)
+#define SF_MULTI_FRAG_SHIFT  (20)
+#define SF_FIRST_MATCH_SHIFT (21)
+#define SF_QUERY_THREAD_SHIFT  (22)
 
 inline 
 Uint32
@@ -520,6 +562,48 @@ void
 ScanFragReq::setCorrFactorFlag(UintR & requestInfo, UintR val){
   ASSERT_BOOL(val, "ScanFragReq::setCorrFactorFlag");
   requestInfo |= (val << SF_CORR_FACTOR_SHIFT);
+}
+
+inline
+Uint32
+ScanFragReq::getMultiFragFlag(const Uint32 & requestInfo){
+  return (requestInfo >> SF_MULTI_FRAG_SHIFT) & 1;
+}
+
+inline
+void
+ScanFragReq::setMultiFragFlag(UintR & requestInfo, UintR val){
+  ASSERT_BOOL(val, "ScanFragReq::setMultiFragFlag");
+  requestInfo= (requestInfo & ~(1 << SF_MULTI_FRAG_SHIFT)) |
+               (val << SF_MULTI_FRAG_SHIFT);
+}
+
+inline
+Uint32
+ScanFragReq::getFirstMatchFlag(const Uint32 requestInfo){
+  return (requestInfo >> SF_FIRST_MATCH_SHIFT) & 1;
+}
+
+inline
+void
+ScanFragReq::setFirstMatchFlag(Uint32 & requestInfo, UintR val){
+  ASSERT_BOOL(val, "ScanFragReq::setFirstMatchFlag");
+  requestInfo= (requestInfo & ~(1 << SF_FIRST_MATCH_SHIFT)) |
+               (val << SF_FIRST_MATCH_SHIFT);
+}
+
+inline
+Uint32
+ScanFragReq::getQueryThreadFlag(const Uint32 requestInfo){
+  return (requestInfo >> SF_QUERY_THREAD_SHIFT) & 1;
+}
+
+inline
+void
+ScanFragReq::setQueryThreadFlag(Uint32 & requestInfo, UintR val){
+  ASSERT_BOOL(val, "ScanFragReq::setQueryThreadFlag");
+  requestInfo= (requestInfo & ~(1 << SF_QUERY_THREAD_SHIFT)) |
+               (val << SF_QUERY_THREAD_SHIFT);
 }
 
 inline

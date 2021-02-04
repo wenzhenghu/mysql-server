@@ -1,17 +1,24 @@
-/* Copyright (c) 2014, 2017, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2014, 2020, Oracle and/or its affiliates.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software Foundation,
-   51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 #ifndef DD__INDEX_IMPL_INCLUDED
 #define DD__INDEX_IMPL_INCLUDED
@@ -19,232 +26,242 @@
 #include <sys/types.h>
 #include <memory>
 #include <new>
-#include <string>
 
-#include "dd/impl/types/entity_object_impl.h" // dd::Entity_object_impl
-#include "dd/impl/types/weak_object_impl.h"
-#include "dd/object_id.h"
-#include "dd/sdi_fwd.h"
-#include "dd/types/index.h"                   // dd::Index
-#include "dd/types/index_element.h"           // dd::Index_element
-#include "dd/types/object_type.h"             // dd::Object_type
+#include "sql/dd/impl/properties_impl.h"           // Properties_impl
+#include "sql/dd/impl/types/entity_object_impl.h"  // dd::Entity_object_impl
+#include "sql/dd/impl/types/weak_object_impl.h"
+#include "sql/dd/object_id.h"
+#include "sql/dd/properties.h"
+#include "sql/dd/sdi_fwd.h"
+#include "sql/dd/string_type.h"
+#include "sql/dd/types/index.h"          // dd::Index
+#include "sql/dd/types/index_element.h"  // IWYU pragma: keep
+#include "sql/strfunc.h"
 
 namespace dd {
 
 ///////////////////////////////////////////////////////////////////////////
 
-class Open_dictionary_tables_ctx;
-class Raw_record;
-class Table_impl;
 class Column;
-class Index_element;
 class Object_table;
+class Open_dictionary_tables_ctx;
 class Properties;
+class Raw_record;
 class Sdi_rcontext;
 class Sdi_wcontext;
 class Table;
+class Table_impl;
 class Weak_object;
 
 ///////////////////////////////////////////////////////////////////////////
 
-class Index_impl : public Entity_object_impl,
-                   public Index
-{
-public:
+class Index_impl : public Entity_object_impl, public Index {
+ public:
   Index_impl();
 
   Index_impl(Table_impl *table);
 
   Index_impl(const Index_impl &src, Table_impl *parent);
 
-  virtual ~Index_impl();
+  ~Index_impl() override;
 
-public:
-  virtual const Object_table &object_table() const
-  { return Index::OBJECT_TABLE(); }
+ public:
+  const Object_table &object_table() const override;
 
-  virtual bool validate() const;
+  bool validate() const override;
 
-  virtual bool restore_children(Open_dictionary_tables_ctx *otx);
+  bool restore_children(Open_dictionary_tables_ctx *otx) override;
 
-  virtual bool store_children(Open_dictionary_tables_ctx *otx);
+  bool store_children(Open_dictionary_tables_ctx *otx) override;
 
-  virtual bool drop_children(Open_dictionary_tables_ctx *otx) const;
+  bool drop_children(Open_dictionary_tables_ctx *otx) const override;
 
-  virtual bool restore_attributes(const Raw_record &r);
+  bool restore_attributes(const Raw_record &r) override;
 
-  virtual bool store_attributes(Raw_record *r);
+  bool store_attributes(Raw_record *r) override;
 
-  void serialize(Sdi_wcontext *wctx, Sdi_writer *w) const;
+  void serialize(Sdi_wcontext *wctx, Sdi_writer *w) const override;
 
-  bool deserialize(Sdi_rcontext *rctx, const RJ_Value &val);
+  bool deserialize(Sdi_rcontext *rctx, const RJ_Value &val) override;
 
-  void debug_print(String_type &outb) const;
+  void debug_print(String_type &outb) const override;
 
-  virtual void set_ordinal_position(uint ordinal_position)
-  { m_ordinal_position= ordinal_position; }
+  void set_ordinal_position(uint ordinal_position) override {
+    m_ordinal_position = ordinal_position;
+  }
 
-  virtual uint ordinal_position() const
-  { return m_ordinal_position; }
+  uint ordinal_position() const override { return m_ordinal_position; }
 
-public:
+ public:
+  static void register_tables(Open_dictionary_tables_ctx *otx);
+
   /////////////////////////////////////////////////////////////////////////
   // Table.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual const Table &table() const;
+  const Table &table() const override;
 
-  virtual Table &table();
+  Table &table() override;
 
-  /* non-virtual */ const Table_impl &table_impl() const
-  { return *m_table; }
+  /* non-virtual */ const Table_impl &table_impl() const { return *m_table; }
 
-  /* non-virtual */ Table_impl &table_impl()
-  { return *m_table; }
+  /* non-virtual */ Table_impl &table_impl() { return *m_table; }
 
   /////////////////////////////////////////////////////////////////////////
   // is_generated
   /////////////////////////////////////////////////////////////////////////
 
-  virtual bool is_generated() const
-  { return m_is_generated; }
+  bool is_generated() const override { return m_is_generated; }
 
-  virtual void set_generated(bool generated)
-  { m_is_generated= generated; }
+  void set_generated(bool generated) override { m_is_generated = generated; }
 
   /////////////////////////////////////////////////////////////////////////
   // is_hidden.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual bool is_hidden() const
-  { return m_hidden; }
+  bool is_hidden() const override { return m_hidden; }
 
-  virtual void set_hidden(bool hidden)
-  { m_hidden= hidden; }
+  void set_hidden(bool hidden) override { m_hidden = hidden; }
 
   /////////////////////////////////////////////////////////////////////////
   // comment.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual const String_type &comment() const
-  { return m_comment; }
+  const String_type &comment() const override { return m_comment; }
 
-  virtual void set_comment(const String_type &comment)
-  { m_comment= comment; }
+  void set_comment(const String_type &comment) override { m_comment = comment; }
 
   /////////////////////////////////////////////////////////////////////////
   // Options.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual const Properties &options() const
-  { return *m_options; }
+  const Properties &options() const override { return m_options; }
 
-  virtual Properties &options()
-  { return *m_options; }
+  Properties &options() override { return m_options; }
 
-  virtual bool set_options_raw(const String_type &options_raw);
+  bool set_options(const Properties &options) override {
+    return m_options.insert_values(options);
+  }
+
+  bool set_options(const String_type &options_raw) override {
+    return m_options.insert_values(options_raw);
+  }
 
   /////////////////////////////////////////////////////////////////////////
   // se_private_data.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual const Properties &se_private_data() const
-  { return *m_se_private_data; }
+  const Properties &se_private_data() const override {
+    return m_se_private_data;
+  }
 
-  virtual Properties &se_private_data()
-  { return *m_se_private_data; }
+  Properties &se_private_data() override { return m_se_private_data; }
 
-  virtual bool set_se_private_data_raw(const String_type &se_private_data_raw);
-  virtual void set_se_private_data(const Properties &se_private_data);
+  bool set_se_private_data(const String_type &se_private_data_raw) override {
+    return m_se_private_data.insert_values(se_private_data_raw);
+  }
+
+  bool set_se_private_data(const Properties &se_private_data) override {
+    return m_se_private_data.insert_values(se_private_data);
+  }
 
   /////////////////////////////////////////////////////////////////////////
   // Tablespace.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual Object_id tablespace_id() const
-  { return m_tablespace_id; }
+  Object_id tablespace_id() const override { return m_tablespace_id; }
 
-  virtual void set_tablespace_id(Object_id tablespace_id)
-  { m_tablespace_id= tablespace_id; }
+  void set_tablespace_id(Object_id tablespace_id) override {
+    m_tablespace_id = tablespace_id;
+  }
 
   /////////////////////////////////////////////////////////////////////////
   // Engine.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual const String_type &engine() const
-  { return m_engine; }
+  const String_type &engine() const override { return m_engine; }
 
-  virtual void set_engine(const String_type &engine)
-  { m_engine= engine; }
+  void set_engine(const String_type &engine) override { m_engine = engine; }
 
   /////////////////////////////////////////////////////////////////////////
   // Index type.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual Index::enum_index_type type() const
-  { return m_type; }
+  Index::enum_index_type type() const override { return m_type; }
 
-  virtual void set_type(Index::enum_index_type type)
-  { m_type= type; }
+  void set_type(Index::enum_index_type type) override { m_type = type; }
 
   /////////////////////////////////////////////////////////////////////////
   // Index algorithm.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual Index::enum_index_algorithm algorithm() const
-  { return m_algorithm; }
+  Index::enum_index_algorithm algorithm() const override { return m_algorithm; }
 
-  virtual void set_algorithm(Index::enum_index_algorithm algorithm)
-  { m_algorithm= algorithm; }
+  void set_algorithm(Index::enum_index_algorithm algorithm) override {
+    m_algorithm = algorithm;
+  }
 
-  virtual bool is_algorithm_explicit() const
-  { return m_is_algorithm_explicit; }
+  bool is_algorithm_explicit() const override {
+    return m_is_algorithm_explicit;
+  }
 
-  virtual void set_algorithm_explicit(bool alg_expl)
-  { m_is_algorithm_explicit= alg_expl; }
+  void set_algorithm_explicit(bool alg_expl) override {
+    m_is_algorithm_explicit = alg_expl;
+  }
 
-  virtual bool is_visible() const { return m_is_visible; }
+  bool is_visible() const override { return m_is_visible; }
 
-  virtual void set_visible(bool is_visible) { m_is_visible= is_visible; }
+  void set_visible(bool is_visible) override { m_is_visible = is_visible; }
+
+  LEX_CSTRING engine_attribute() const override {
+    return lex_cstring_handle(m_engine_attribute);
+  }
+  void set_engine_attribute(LEX_CSTRING a) override {
+    m_engine_attribute.assign(a.str, a.length);
+  }
+  LEX_CSTRING secondary_engine_attribute() const override {
+    return lex_cstring_handle(m_secondary_engine_attribute);
+  }
+  void set_secondary_engine_attribute(LEX_CSTRING a) override {
+    m_secondary_engine_attribute.assign(a.str, a.length);
+  }
 
   /////////////////////////////////////////////////////////////////////////
   // Index-element collection
   /////////////////////////////////////////////////////////////////////////
 
-  virtual Index_element *add_element(Column *c);
+  Index_element *add_element(Column *c) override;
 
-  virtual const Index_elements &elements() const
-  { return m_elements; }
+  const Index_elements &elements() const override { return m_elements; }
 
-  virtual bool is_candidate_key() const;
+  bool is_candidate_key() const override;
 
   // Fix "inherits ... via dominance" warnings
-  virtual Weak_object_impl *impl()
-  { return Weak_object_impl::impl(); }
-  virtual const Weak_object_impl *impl() const
-  { return Weak_object_impl::impl(); }
-  virtual Object_id id() const
-  { return Entity_object_impl::id(); }
-  virtual bool is_persistent() const
-  { return Entity_object_impl::is_persistent(); }
-  virtual const String_type &name() const
-  { return Entity_object_impl::name(); }
-  virtual void set_name(const String_type &name)
-  { Entity_object_impl::set_name(name); }
+  Entity_object_impl *impl() override { return Entity_object_impl::impl(); }
+  const Entity_object_impl *impl() const override {
+    return Entity_object_impl::impl();
+  }
+  Object_id id() const override { return Entity_object_impl::id(); }
+  bool is_persistent() const override {
+    return Entity_object_impl::is_persistent();
+  }
+  const String_type &name() const override {
+    return Entity_object_impl::name();
+  }
+  void set_name(const String_type &name) override {
+    Entity_object_impl::set_name(name);
+  }
 
-public:
-  static Index_impl *restore_item(Table_impl *table)
-  {
+ public:
+  static Index_impl *restore_item(Table_impl *table) {
     return new (std::nothrow) Index_impl(table);
   }
 
-  static Index_impl *clone(const Index_impl &other,
-                           Table_impl *table)
-  {
+  static Index_impl *clone(const Index_impl &other, Table_impl *table) {
     return new (std::nothrow) Index_impl(other, table);
   }
 
-private:
+ private:
   // Fields.
 
   bool m_hidden;
@@ -253,8 +270,8 @@ private:
   uint m_ordinal_position;
 
   String_type m_comment;
-  std::unique_ptr<Properties> m_options;
-  std::unique_ptr<Properties> m_se_private_data;
+  Properties_impl m_options;
+  Properties_impl m_se_private_data;
 
   Index::enum_index_type m_type;
   Index::enum_index_algorithm m_algorithm;
@@ -262,6 +279,9 @@ private:
   bool m_is_visible;
 
   String_type m_engine;
+
+  String_type m_engine_attribute;
+  String_type m_secondary_engine_attribute;
 
   // References to tightly-coupled objects.
 
@@ -276,17 +296,6 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////
 
-class Index_type : public Object_type
-{
-public:
-  virtual void register_tables(Open_dictionary_tables_ctx *otx) const;
+}  // namespace dd
 
-  virtual Weak_object *create_object() const
-  { return new (std::nothrow) Index_impl(); }
-};
-
-///////////////////////////////////////////////////////////////////////////
-
-}
-
-#endif // DD__INDEX_IMPL_INCLUDED
+#endif  // DD__INDEX_IMPL_INCLUDED

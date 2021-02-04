@@ -1,17 +1,24 @@
-/* Copyright (c) 2016, 2017, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2016, 2020, Oracle and/or its affiliates.
 
   This program is free software; you can redistribute it and/or modify
-  it under the terms of the GNU General Public License as published by
-  the Free Software Foundation; version 2 of the License.
+  it under the terms of the GNU General Public License, version 2.0,
+  as published by the Free Software Foundation.
+
+  This program is also distributed with certain software (including
+  but not limited to OpenSSL) that is licensed under separate terms,
+  as designated in a particular file or component or in included license
+  documentation.  The authors of MySQL hereby grant you an additional
+  permission to link the program and your derivative works with the
+  separately licensed software that they have included with MySQL.
 
   This program is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  GNU General Public License for more details.
+  GNU General Public License, version 2.0, for more details.
 
   You should have received a copy of the GNU General Public License
   along with this program; if not, write to the Free Software
-  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA
+  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
   */
 
 #ifndef TABLE_ESMH_GLOBAL_H
@@ -22,27 +29,23 @@
   Table EVENTS_STATEMENTS_HISTOGRAM_GLOBAL (declarations).
 */
 
-#include "table_helper.h"
+#include "storage/perfschema/table_helper.h"
 
 /**
   @addtogroup performance_schema_tables
   @{
 */
 
-class PFS_index_esmh_global : public PFS_engine_index
-{
-public:
-  PFS_index_esmh_global() : PFS_engine_index(&m_key_1), m_key_1("BUCKET_NUMBER")
-  {
-  }
+class PFS_index_esmh_global : public PFS_engine_index {
+ public:
+  PFS_index_esmh_global()
+      : PFS_engine_index(&m_key_1), m_key_1("BUCKET_NUMBER") {}
 
-  ~PFS_index_esmh_global()
-  {
-  }
+  ~PFS_index_esmh_global() override {}
 
   bool match_bucket(ulong bucket_index);
 
-private:
+ private:
   PFS_key_bucket_number m_key_1;
 };
 
@@ -51,22 +54,19 @@ private:
   PERFORMANCE_SCHEMA.EVENTS_STATEMENTS_HISTOGRAM_GLOBAL.
 */
 
-struct PFS_esmh_global_bucket
-{
+struct PFS_esmh_global_bucket {
   /** Column BUCKET_NUMBER. */
   ulonglong m_count_bucket;
   /** Column COUNT_BUCKET_AND_LOWER. */
   ulonglong m_count_bucket_and_lower;
 };
 
-struct PFS_esmh_global_histogram
-{
+struct PFS_esmh_global_histogram {
   /** Statistics for all buckets. */
   PFS_esmh_global_bucket m_buckets[NUMBER_OF_BUCKETS];
 };
 
-struct row_esmh_global
-{
+struct row_esmh_global {
   /** Column BUCKET_NUMBER. */
   ulong m_bucket_number;
   /** Column BUCKET_TIMER_LOW. */
@@ -82,52 +82,46 @@ struct row_esmh_global
 };
 
 /** Table PERFORMANCE_SCHEMA.EVENTS_STATEMENTS_HISTOGRAM_GLOBAL. */
-class table_esmh_global : public PFS_engine_table
-{
+class table_esmh_global : public PFS_engine_table {
   typedef PFS_simple_index pos_t;
 
-public:
+ public:
   /** Table share */
   static PFS_engine_table_share m_share;
-  static PFS_engine_table *create();
+  static PFS_engine_table *create(PFS_engine_table_share *);
   static int delete_all_rows();
   static ha_rows get_row_count();
 
-  virtual void reset_position(void);
+  void reset_position(void) override;
 
-  virtual int rnd_next();
-  virtual int rnd_pos(const void *pos);
+  int rnd_next() override;
+  int rnd_pos(const void *pos) override;
 
-  virtual int index_init(uint idx, bool sorted);
-  virtual int index_next();
+  int index_init(uint idx, bool sorted) override;
+  int index_next() override;
 
-protected:
-  virtual int read_row_values(TABLE *table,
-                              unsigned char *buf,
-                              Field **fields,
-                              bool read_all);
+ protected:
+  int read_row_values(TABLE *table, unsigned char *buf, Field **fields,
+                      bool read_all) override;
 
   table_esmh_global();
 
-public:
-  ~table_esmh_global()
-  {
-  }
+ public:
+  ~table_esmh_global() override {}
 
-protected:
+ protected:
   void materialize();
   int make_row(ulong bucket_index);
 
-private:
+ private:
   /** Table share lock. */
   static THR_LOCK m_table_lock;
-  /** Fields definition. */
-  static TABLE_FIELD_DEF m_field_def;
+  /** Table definition. */
+  static Plugin_table m_table_def;
 
   /** Current row. */
   PFS_esmh_global_histogram m_materialized_histogram;
   row_esmh_global m_row;
-  time_normalizer *m_normalizer;
   /** Current position. */
   pos_t m_pos;
   /** Next position. */

@@ -1,10 +1,9 @@
 #
-# wl#8919 InnoDB: Implement NOWAIT and SKIP LOCKED
+# wl#8919  Implement NOWAIT and SKIP LOCKED
 #
 
 --source include/count_sessions.inc
-# should work with embedded server after mysqltest is fixed
---source include/not_embedded.inc
+--source include/not_hypergraph.inc   # Depends on indexes being used, which the hypergraph optimizer does not support.
 
 connect (con1,localhost,root,,);
 SET SESSION innodb_lock_wait_timeout=1;
@@ -137,7 +136,7 @@ DROP TABLE t1;
 --echo # Case 3: Test primary index & spatial index
 CREATE TABLE t1(
         seat_id    INT,
-        pos        POINT NOT NULL,
+        pos        POINT NOT NULL SRID 0,
         state      INT,
         PRIMARY KEY(seat_id),
         SPATIAL KEY(pos)

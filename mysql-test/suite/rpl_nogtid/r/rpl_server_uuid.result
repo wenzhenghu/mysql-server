@@ -10,6 +10,7 @@ CALL mtr.add_suppression("Master's UUID has changed, although this should not ha
 CALL mtr.add_suppression("Slave I/O: SET @master_heartbeat_period to master failed with error: Lost connection to MySQL server during query");
 CALL mtr.add_suppression("Notifying master by SET @master_binlog_checksum= @@global.binlog_checksum failed with error");
 CALL mtr.add_suppression("A slave with the same server_uuid/server_id as this slave has connected to the master");
+SET @@GLOBAL.LOG_ERROR_VERBOSITY= 3;
 include/sync_slave_sql_with_master.inc
 
 # Case 1:
@@ -38,14 +39,16 @@ include/check_slave_param.inc [Slave_IO_Running]
 -----------------------------------------------------------------------------
 include/rpl_restart_server.inc [server_number=1]
 START SLAVE IO_THREAD;
-include/wait_for_slave_io_error.inc [errno=1593]
+Warnings:
+Warning	1287	'START SLAVE' is deprecated and will be removed in a future release. Please use START REPLICA instead
+include/wait_for_slave_io_error.inc [errno=13117]
 include/rpl_restart_server.inc [server_number=1]
 
 # server_3 is running with --replicate-same-server-id option 
-CHANGE MASTER TO MASTER_HOST= '127.0.0.1',
-MASTER_PORT= MASTER_PORT,
-MASTER_USER= 'root',
-MASTER_LOG_FILE='master-bin.000001';
+CHANGE REPLICATION SOURCE TO SOURCE_HOST= '127.0.0.1',
+SOURCE_PORT= MASTER_PORT,
+SOURCE_USER= 'root',
+SOURCE_LOG_FILE='master-bin.000001';
 Warnings:
 Warning	####	CHANGE MASTER TO with a MASTER_LOG_FILE clause but no MASTER_LOG_POS clause may not be safe. The old position value may not be valid for the new binary log file.
 Note	####	Sending passwords in plain text without SSL/TLS is extremely insecure.
@@ -62,48 +65,54 @@ include/rpl_restart_server.inc [server_number=1]
 # Master's UUID and server_id will not be cleared if both master_port
 # and master_host are not changed.
 -----------------------------------------------------------------------------
-START SLAVE IO_THREAD;
+include/start_slave_io.inc
 include/wait_for_slave_param.inc [Master_UUID]
 include/stop_slave.inc
 
 # Only change MASTER_PORT
-CHANGE MASTER TO MASTER_PORT= 1111;
+CHANGE REPLICATION SOURCE TO SOURCE_PORT= 1111;
 include/check_slave_param.inc [Master_UUID]
 include/check_slave_param.inc [Master_Server_Id]
-CHANGE MASTER TO MASTER_PORT= MASTER_PORT,
-MASTER_LOG_FILE= 'MASTER_LOG_FILE', MASTER_LOG_POS= MASTER_POS;
-START SLAVE IO_THREAD;
+CHANGE REPLICATION SOURCE TO SOURCE_PORT= MASTER_PORT,
+SOURCE_LOG_FILE= 'MASTER_LOG_FILE', SOURCE_LOG_POS= MASTER_POS;
+include/start_slave_io.inc
 include/wait_for_slave_param.inc [Master_UUID]
 
 # Only change MASTER_HOST
 STOP SLAVE IO_THREAD;
+Warnings:
+Warning	1287	'STOP SLAVE' is deprecated and will be removed in a future release. Please use STOP REPLICA instead
 include/wait_for_slave_io_to_stop.inc
-CHANGE MASTER TO MASTER_HOST= 'localhost';
+CHANGE REPLICATION SOURCE TO SOURCE_HOST= 'localhost';
 include/check_slave_param.inc [Master_UUID]
 include/check_slave_param.inc [Master_Server_Id]
-CHANGE MASTER TO MASTER_HOST= '127.0.0.1',
-MASTER_LOG_FILE= 'MASTER_LOG_FILE', MASTER_LOG_POS= MASTER_POS;
-START SLAVE IO_THREAD;
+CHANGE REPLICATION SOURCE TO SOURCE_HOST= '127.0.0.1',
+SOURCE_LOG_FILE= 'MASTER_LOG_FILE', SOURCE_LOG_POS= MASTER_POS;
+include/start_slave_io.inc
 include/wait_for_slave_param.inc [Master_UUID]
 
 # Both MASTER_HOST and MASTER_PORT are changed
 STOP SLAVE IO_THREAD;
+Warnings:
+Warning	1287	'STOP SLAVE' is deprecated and will be removed in a future release. Please use STOP REPLICA instead
 include/wait_for_slave_io_to_stop.inc
-CHANGE MASTER TO MASTER_HOST= '127.0.0.1', MASTER_PORT= 1111;
+CHANGE REPLICATION SOURCE TO SOURCE_HOST= '127.0.0.1', SOURCE_PORT= 1111;
 include/check_slave_param.inc [Master_UUID]
 include/check_slave_param.inc [Master_Server_Id]
-CHANGE MASTER TO MASTER_HOST= '127.0.0.1', MASTER_PORT= MASTER_PORT,
-MASTER_LOG_FILE= 'MASTER_LOG_FILE', MASTER_LOG_POS= MASTER_POS;
-START SLAVE IO_THREAD;
+CHANGE REPLICATION SOURCE TO SOURCE_HOST= '127.0.0.1', SOURCE_PORT= MASTER_PORT,
+SOURCE_LOG_FILE= 'MASTER_LOG_FILE', SOURCE_LOG_POS= MASTER_POS;
+include/start_slave_io.inc
 include/wait_for_slave_param.inc [Master_UUID]
 
 # Both MASTER_HOST and MASTER_PORT are NOT changed
 STOP SLAVE IO_THREAD;
+Warnings:
+Warning	1287	'STOP SLAVE' is deprecated and will be removed in a future release. Please use STOP REPLICA instead
 include/wait_for_slave_io_to_stop.inc
-CHANGE MASTER TO MASTER_HOST= '127.0.0.1', MASTER_PORT= MASTER_PORT;
+CHANGE REPLICATION SOURCE TO SOURCE_HOST= '127.0.0.1', SOURCE_PORT= MASTER_PORT;
 include/check_slave_param.inc [Slave_IO_Running]
-CHANGE MASTER TO 
-MASTER_LOG_FILE= 'MASTER_LOG_FILE', MASTER_LOG_POS= MASTER_POS;
+CHANGE REPLICATION SOURCE TO 
+SOURCE_LOG_FILE= 'MASTER_LOG_FILE', SOURCE_LOG_POS= MASTER_POS;
 include/check_slave_param.inc [Slave_IO_Running]
 
 # Case 5:
@@ -111,9 +120,11 @@ include/check_slave_param.inc [Slave_IO_Running]
 # into Slave status.
 -----------------------------------------------------------------------------
 RESET SLAVE;
+Warnings:
+Warning	1287	'RESET SLAVE' is deprecated and will be removed in a future release. Please use RESET REPLICA instead
 include/check_slave_param.inc [Slave_IO_Running]
-CHANGE MASTER TO 
-MASTER_LOG_FILE= 'MASTER_LOG_FILE', MASTER_LOG_POS= MASTER_POS;
+CHANGE REPLICATION SOURCE TO 
+SOURCE_LOG_FILE= 'MASTER_LOG_FILE', SOURCE_LOG_POS= MASTER_POS;
 include/start_slave.inc
 
 # Case 6:
@@ -124,14 +135,16 @@ include/start_slave.inc
 -----------------------------------------------------------------------------
 include/rpl_restart_server.inc [server_number=3]
 [connection server_2]
-include/wait_for_slave_io_error.inc [errno=1236]
+include/wait_for_slave_io_error.inc [errno=13114]
 include/assert_grep.inc [Found the expected line in master's error log for server 2 disconnection]
 include/start_slave_io.inc
 [connection server_3]
-include/wait_for_slave_io_error.inc [errno=1236]
+include/wait_for_slave_io_error.inc [errno=13114]
 include/assert_grep.inc [Found the expected line in master's error log for server 3 disconnection]
 include/assert_grep.inc [Found the expected line in server 2 error log]
 include/assert_grep.inc [Found the expected line in server 3 error log]
 include/rpl_restart_server.inc [server_number=3]
 include/stop_slave.inc
+[connection master]
+SET @@GLOBAL.log_error_verbosity= OLD_LOG_ERROR_VERBOSITY;
 include/rpl_end.inc

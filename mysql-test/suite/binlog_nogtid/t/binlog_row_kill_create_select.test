@@ -4,7 +4,7 @@
 # CREATE...SELECT right before writting 'create table' event into
 # binlog statement cache, right after writting 'create table' event
 # into binlog statement cache or after writting rows event into
-# binlog transaction cache when binlog_format=row and gtid_mode=off.
+# binlog transaction cache when binlog_format='row' and gtid_mode=off.
 #
 # ==== Implementation ====
 #
@@ -17,7 +17,4 @@
 # Bug#20742519  KILL `CREATE TABLE ..SELECT` MAY LEAD TO REPLICATION BROKEN
 
 --let $engine= InnoDB
---source extra/binlog_tests/binlog_row_kill_create_select.test
-
---let $engine= MyISAM
 --source extra/binlog_tests/binlog_row_kill_create_select.test

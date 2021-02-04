@@ -1,17 +1,24 @@
-/* Copyright (c) 2014, 2017, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2014, 2020, Oracle and/or its affiliates.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software Foundation,
-   51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 #ifndef DD__INDEX_ELEMENT_IMPL_INCLUDED
 #define DD__INDEX_ELEMENT_IMPL_INCLUDED
@@ -19,165 +26,140 @@
 #include <stddef.h>
 #include <sys/types.h>
 #include <new>
-#include <string>
 
-#include "dd/impl/types/index_impl.h"       // dd::Index_impl
-#include "dd/impl/types/weak_object_impl.h" // dd::Weak_object_impl
-#include "dd/sdi_fwd.h"
-#include "dd/types/index_element.h"         // dd::Index_element
-#include "dd/types/object_type.h"           // dd::Object_type
+#include "sql/dd/impl/types/index_impl.h"        // dd::Index_impl
+#include "sql/dd/impl/types/weak_object_impl.h"  // dd::Weak_object_impl
+#include "sql/dd/sdi_fwd.h"
+#include "sql/dd/string_type.h"
+#include "sql/dd/types/index_element.h"  // dd::Index_element
 
 namespace dd {
 
 ///////////////////////////////////////////////////////////////////////////
 
-class Index;
-class Index_impl;
-class Open_dictionary_tables_ctx;
-class Raw_record;
 class Column;
+class Index;
 class Object_key;
 class Object_table;
+class Open_dictionary_tables_ctx;
+class Raw_record;
 class Sdi_rcontext;
 class Sdi_wcontext;
 class Weak_object;
 
 ///////////////////////////////////////////////////////////////////////////
 
-class Index_element_impl : public Weak_object_impl,
-                           public Index_element
-{
-public:
+class Index_element_impl : public Weak_object_impl, public Index_element {
+ public:
   Index_element_impl()
-   :m_ordinal_position(0),
-    m_length(-1),
-    m_order(Index_element::ORDER_ASC),
-    m_hidden(false),
-    m_index(NULL),
-    m_column(NULL)
-  { }
+      : m_ordinal_position(0),
+        m_length(-1),
+        m_order(Index_element::ORDER_ASC),
+        m_hidden(false),
+        m_index(nullptr),
+        m_column(nullptr) {}
 
   Index_element_impl(Index_impl *index, Column *column)
-   :m_ordinal_position(0),
-    m_length(-1),
-    m_order(Index_element::ORDER_ASC),
-    m_hidden(false),
-    m_index(index),
-    m_column(column)
-  { }
+      : m_ordinal_position(0),
+        m_length(-1),
+        m_order(Index_element::ORDER_ASC),
+        m_hidden(false),
+        m_index(index),
+        m_column(column) {}
 
   Index_element_impl(const Index_element_impl &src, Index_impl *parent,
                      Column *column);
 
-  virtual ~Index_element_impl()
-  { }
+  ~Index_element_impl() override {}
 
-public:
-  virtual const Object_table &object_table() const
-  { return Index_element::OBJECT_TABLE(); }
+ public:
+  const Object_table &object_table() const override;
 
-  virtual bool validate() const;
+  bool validate() const override;
 
-  virtual bool store_attributes(Raw_record *r);
+  bool store_attributes(Raw_record *r) override;
 
-  virtual bool restore_attributes(const Raw_record &r);
+  bool restore_attributes(const Raw_record &r) override;
 
-  void serialize(Sdi_wcontext *wctx, Sdi_writer *w) const;
+  void serialize(Sdi_wcontext *wctx, Sdi_writer *w) const override;
 
-  bool deserialize(Sdi_rcontext *rctx, const RJ_Value &val);
+  bool deserialize(Sdi_rcontext *rctx, const RJ_Value &val) override;
 
-  void set_ordinal_position(uint ordinal_position)
-  { m_ordinal_position= ordinal_position; }
+  void set_ordinal_position(uint ordinal_position) {
+    m_ordinal_position = ordinal_position;
+  }
 
-public:
+ public:
+  static void register_tables(Open_dictionary_tables_ctx *otx);
+
   /////////////////////////////////////////////////////////////////////////
   // index.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual const Index &index() const
-  { return *m_index; }
+  const Index &index() const override { return *m_index; }
 
-  virtual Index &index()
-  { return *m_index; }
+  Index &index() override { return *m_index; }
 
   /////////////////////////////////////////////////////////////////////////
   // column.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual const Column &column() const
-  { return *m_column; }
+  const Column &column() const override { return *m_column; }
 
-  virtual Column &column()
-  { return *m_column; }
+  Column &column() override { return *m_column; }
 
   /////////////////////////////////////////////////////////////////////////
   // ordinal_position.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual uint ordinal_position() const
-  { return m_ordinal_position; }
+  uint ordinal_position() const override { return m_ordinal_position; }
 
   /////////////////////////////////////////////////////////////////////////
   // length.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual uint length() const
-  { return m_length; }
+  uint length() const override { return m_length; }
 
-  virtual void set_length(uint length)
-  { m_length= length; }
+  void set_length(uint length) override { m_length = length; }
 
-  virtual void set_length_null(bool)
-  { m_length= (uint) -1; }
+  void set_length_null(bool) override { m_length = (uint)-1; }
 
-  virtual bool is_length_null() const
-  { return m_length == (uint) -1; }
+  bool is_length_null() const override { return m_length == (uint)-1; }
 
   /////////////////////////////////////////////////////////////////////////
   // is_hidden.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual bool is_hidden() const
-  { return m_hidden; }
+  bool is_hidden() const override { return m_hidden; }
 
-  virtual void set_hidden(bool hidden)
-  { m_hidden= hidden; }
+  void set_hidden(bool hidden) override { m_hidden = hidden; }
 
   /////////////////////////////////////////////////////////////////////////
   // order.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual enum_index_element_order order() const
-  { return m_order; }
+  enum_index_element_order order() const override { return m_order; }
 
-  virtual void set_order(enum_index_element_order order)
-  { m_order= order; }
+  void set_order(enum_index_element_order order) override { m_order = order; }
 
-  virtual bool is_prefix() const;
+  bool is_prefix() const override;
 
-  // Fix "inherits ... via dominance" warnings
-  virtual Weak_object_impl *impl()
-  { return Weak_object_impl::impl(); }
-  virtual const Weak_object_impl *impl() const
-  { return Weak_object_impl::impl(); }
-
-public:
-  static Index_element_impl *restore_item(Index_impl *index)
-  {
-    return new (std::nothrow) Index_element_impl(index, NULL);
+ public:
+  static Index_element_impl *restore_item(Index_impl *index) {
+    return new (std::nothrow) Index_element_impl(index, nullptr);
   }
 
   static Index_element_impl *clone(const Index_element_impl &other,
                                    Index_impl *index);
 
-public:
-  virtual void debug_print(String_type &outb) const;
+ public:
+  void debug_print(String_type &outb) const override;
 
-public:
-  virtual Object_key *create_primary_key() const;
-  virtual bool has_new_primary_key() const;
+ public:
+  Object_key *create_primary_key() const override;
+  bool has_new_primary_key() const override;
 
-private:
+ private:
   // Fields
   uint m_ordinal_position;
   uint m_length;
@@ -193,17 +175,6 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////
 
-class Index_element_type : public Object_type
-{
-public:
-  virtual void register_tables(Open_dictionary_tables_ctx *otx) const;
+}  // namespace dd
 
-  virtual Weak_object *create_object() const
-  { return new (std::nothrow) Index_element_impl(); }
-};
-
-///////////////////////////////////////////////////////////////////////////
-
-}
-
-#endif // DD__INDEX_ELEMENT_IMPL_INCLUDED
+#endif  // DD__INDEX_ELEMENT_IMPL_INCLUDED

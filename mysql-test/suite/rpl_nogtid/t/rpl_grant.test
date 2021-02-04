@@ -1,7 +1,8 @@
 # Tests of grants and users
 
 --source include/not_group_replication_plugin.inc
-source include/not_embedded.inc;
+let $rpl_privilege_checks_user_grant_option = 1;
+source include/set_privilege_checks_user_as_system_user.inc;
 source include/master-slave.inc;
 
 --echo **** On Master ****
@@ -103,7 +104,7 @@ CREATE TABLE t1 ( c1 INT, c2 INT, c3 INT );
 
 ## revoke should now fail and log a incident event
 --connection master
---error ER_NONEXISTING_GRANT
+--error ER_NONEXISTING_TABLE_GRANT
 --eval REVOKE ALTER ON TABLE $dbname.t1 FROM '$dbuser'@'localhost', 'b54866_fake_user'
 
 --connection master
@@ -147,7 +148,7 @@ DELIMITER ;|
 -- connection master
 
 -- echo #### PROCEDURE ASSERTION
---error ER_NONEXISTING_GRANT
+--error ER_NONEXISTING_PROC_GRANT
 --eval REVOKE EXECUTE ON PROCEDURE $dbname.b54866_p FROM '$dbuser'@'localhost', 'b54866_fake_user'
 
 --echo ****** Checking grants on the master for user: $dbuser ******
@@ -166,7 +167,7 @@ DELIMITER ;|
 --echo ##########
 -- connection master
 
---error ER_NONEXISTING_GRANT
+--error ER_NONEXISTING_PROC_GRANT
 --eval REVOKE EXECUTE ON FUNCTION $dbname.b54866_f FROM '$dbuser'@'localhost', 'b54866_fake_user'
 
 --connection master
@@ -189,9 +190,9 @@ DELIMITER ;|
 
 ## assert that failing revoke on non existing user will not 
 ## be binlogged
--- error ER_NONEXISTING_GRANT
+-- error ER_NONEXISTING_PROC_GRANT
 REVOKE EXECUTE ON PROCEDURE b54866_p FROM 'fake_user'@'localhost';
--- error ER_NONEXISTING_GRANT
+-- error ER_NONEXISTING_PROC_GRANT
 REVOKE EXECUTE ON FUNCTION b54866_f FROM 'fake_user'@'localhost';
 -- error ER_REVOKE_GRANTS
 REVOKE ALL PRIVILEGES, GRANT OPTION FROM 'fake_user'@'localhost';

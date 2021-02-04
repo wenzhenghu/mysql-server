@@ -1,32 +1,90 @@
-# Copyright (c) 2010, 2016, Oracle and/or its affiliates. All rights reserved.
+# Copyright (c) 2010, 2020, Oracle and/or its affiliates. All rights reserved.
 # 
 # This program is free software; you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; version 2 of the License.
+# it under the terms of the GNU General Public License, version 2.0,
+# as published by the Free Software Foundation.
+#
+# This program is also distributed with certain software (including
+# but not limited to OpenSSL) that is licensed under separate terms,
+# as designated in a particular file or component or in included license
+# documentation.  The authors of MySQL hereby grant you an additional
+# permission to link the program and your derivative works with the
+# separately licensed software that they have included with MySQL.
 #
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
+# GNU General Public License, version 2.0, for more details.
 #
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
-# Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA 
+# Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA 
 
 # This file includes Linux specific options and quirks, related to system checks
 
 INCLUDE(CheckSymbolExists)
 INCLUDE(CheckCSourceRuns)
 
-# We require at least GCC 4.8 or Clang 3.4.
+SET(LINUX 1)
+
+# OS display name (version_compile_os etc).
+# Used by the test suite to ignore bugs on some platforms.
+SET(SYSTEM_TYPE "Linux")
+
+IF(EXISTS "/etc/SuSE-release")
+  SET(LINUX_SUSE 1)
+ENDIF()
+
+IF(EXISTS "/etc/alpine-release")
+  SET(LINUX_ALPINE 1)
+ENDIF()
+
+IF(EXISTS "/etc/fedora-release")
+  SET(LINUX_FEDORA 1)
+  FILE(READ "/etc/fedora-release" FEDORA_RELEASE)
+  IF(FEDORA_RELEASE MATCHES "Fedora" AND
+      FEDORA_RELEASE MATCHES "28")
+    SET(LINUX_FEDORA_28 1)
+  ENDIF()
+ENDIF()
+
+IF(EXISTS "/etc/os-release")
+  FILE(READ "/etc/os-release" MY_OS_RELEASE)
+  IF(MY_OS_RELEASE MATCHES "Ubuntu" AND
+      MY_OS_RELEASE MATCHES "16.04")
+    SET(LINUX_UBUNTU_16_04 1)
+  ENDIF()
+  IF(MY_OS_RELEASE MATCHES "Debian")
+    SET(LINUX_DEBIAN 1)
+  ELSEIF(MY_OS_RELEASE MATCHES "Ubuntu")
+    SET(LINUX_UBUNTU 1)
+  ENDIF()
+ENDIF()
+
+IF(MY_HOST_SYSTEM_VERSION AND MY_HOST_FILESYSTEM_NAME)
+  IF( MY_HOST_SYSTEM_VERSION MATCHES "\\.el6(uek)?\\."
+      OR
+      MY_HOST_FILESYSTEM_NAME MATCHES "\\.el6\\.")
+    SET(LINUX_RHEL6 1)
+  ENDIF()
+ENDIF()
+
+# We require at least GCC 5.3 or Clang 3.4.
 IF(NOT FORCE_UNSUPPORTED_COMPILER)
-  IF(CMAKE_COMPILER_IS_GNUCC)
+  IF(MY_COMPILER_IS_GNU)
     EXECUTE_PROCESS(COMMAND ${CMAKE_C_COMPILER} -dumpversion
+                    OUTPUT_STRIP_TRAILING_WHITESPACE
                     OUTPUT_VARIABLE GCC_VERSION)
-    IF(GCC_VERSION VERSION_LESS 4.8)
-      MESSAGE(FATAL_ERROR "GCC 4.8 or newer is required!")
+    # -dumpversion may output only MAJOR.MINOR rather than MAJOR.MINOR.PATCH
+    IF(GCC_VERSION VERSION_LESS 5.3)
+      SET(WARNING_LEVEL WARNING)
+      IF(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 5.3)
+        SET(WARNING_LEVEL FATAL_ERROR)
+      ENDIF()
+      MESSAGE(${WARNING_LEVEL}
+        "GCC 5.3 or newer is required (-dumpversion says ${GCC_VERSION})")
     ENDIF()
-  ELSEIF(CMAKE_C_COMPILER_ID MATCHES "Clang")
+  ELSEIF(MY_COMPILER_IS_CLANG)
     CHECK_C_SOURCE_RUNS("
       int main()
       {
@@ -50,8 +108,13 @@ ADD_DEFINITIONS(-D_FILE_OFFSET_BITS=64)
 # Ensure we have clean build for shared libraries
 # without unresolved symbols
 # Not supported with Sanitizers
-IF(NOT WITH_ASAN AND NOT WITH_MSAN AND NOT WITH_UBSAN AND NOT WITH_TSAN)
+IF(NOT WITH_ASAN AND
+   NOT WITH_LSAN AND
+   NOT WITH_MSAN AND
+   NOT WITH_TSAN AND
+   NOT WITH_UBSAN)
   SET(LINK_FLAG_NO_UNDEFINED "-Wl,--no-undefined")
+  SET(LINK_FLAG_Z_DEFS "-z,defs")
 ENDIF()
 
 # Linux specific HUGETLB /large page support

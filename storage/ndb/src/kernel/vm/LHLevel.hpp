@@ -1,14 +1,21 @@
 /*
-   Copyright (c) 2012, 2013, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2012, 2019, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -40,8 +47,6 @@ public:
   explicit LHBits();
   explicit LHBits(Int bits);
   template<typename Int2> LHBits(LHBits<Int2> const& bits);
-  ~LHBits();
-  LHBits& operator=(LHBits const&);
 
   void clear();
 static LHBits<Int> unpack(Int packed);
@@ -69,10 +74,8 @@ class LHLevel
 public:
   explicit LHLevel();
   explicit LHLevel(Uint32 size);
-  ~LHLevel() {}
 private:
   LHLevel(LHLevel const&); // Not to be implemented
-  LHLevel&  operator=(LHLevel const&); // Not to be implemented
 public:
   void clear();
   bool isEmpty() const;
@@ -156,16 +159,6 @@ template<typename Int> template<typename Int2> inline LHBits<Int>::LHBits(LHBits
 {
   if (m_bits != bits.pack())
     m_bits |= highbit();
-}
-
-template<typename Int> inline LHBits<Int>::~LHBits()
-{
-}
-
-template<typename Int> inline LHBits<Int>& LHBits<Int>::operator=(LHBits const& src)
-{
-  m_bits = src.m_bits;
-  return *this;
 }
 
 template<typename Int> inline void LHBits<Int>::clear()

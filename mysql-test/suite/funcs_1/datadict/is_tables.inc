@@ -17,7 +17,6 @@
 #                   Create this script based on older scripts and new code.
 # Last Change:
 # 2008-06-11 mleich Move t/is_tables.test to this file and
-#                   create variants for embedded/non embedded server.
 #
 
 let $is_table = TABLES;
@@ -351,7 +350,7 @@ SELECT UPDATE_TIME, checksum INTO @UPDATE_TIME, @checksum
 FROM information_schema.tables
 WHERE table_name = 't1_my_tablex';
 #   Enforce a time difference bigger than the smallest unit (1 second).
---real_sleep 1.1
+--sleep 1.1
 INSERT INTO db_datadict.t1_my_tablex SET f1 = 3;
 FLUSH TABLES;
 ANALYZE TABLE db_datadict.t1_my_tablex;
@@ -467,9 +466,7 @@ let $my_error_message =
 ##### The previous statement must fail ######
 # Server type  | expected error name      | expected error message
 # --------------------------------------------------------------------------------------------------------------------
-# not embedded | ER_DBACCESS_DENIED_ERROR | ERROR 42000: Access denied for user 'root'@'localhost' to database 'information_schema'
-# embedded     | ER_NON_UPDATABLE_TABLE   | ERROR HY000: The target table tables of the UPDATE is not updatable
-#              | or similar               |              or similar
+# MySQL  | ER_DBACCESS_DENIED_ERROR | ERROR 42000: Access denied for user 'root'@'localhost' to database 'information_schema'
 ;
 --disable_abort_on_error
 UPDATE information_schema.tables SET table_schema = 'test'

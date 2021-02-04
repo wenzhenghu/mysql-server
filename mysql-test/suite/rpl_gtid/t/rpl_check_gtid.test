@@ -70,10 +70,15 @@
 # 9. Binary logs with corrupted GTIDs are generated simulating a crash
 #    while writing such information into the binary log.
 ################################################################################
---source include/not_embedded.inc
 --source include/not_windows.inc
 --source include/have_debug.inc
 --source include/master-slave.inc
+
+# this test case requires that certain events appear in a given
+# order in the relay log. With compression, only GTID and a
+# Transaction_payload event shall appear, which makes this test
+# case invalid in that scenario.
+--source include/not_binlog_transaction_compression_on.inc
 
 --disable_warnings
 call mtr.add_suppression("Recovery from master pos .*");
@@ -621,7 +626,7 @@ RESET MASTER;
 --connection slave
 --let $slave_master_host= query_get_value(SHOW SLAVE STATUS, Master_Host, 1)
 --error ER_BAD_SLAVE_AUTO_POSITION
-CHANGE MASTER TO MASTER_AUTO_POSITION= 1, MASTER_LOG_FILE= 'master-bin.000001', MASTER_LOG_POS= 4;
+CHANGE REPLICATION SOURCE TO SOURCE_AUTO_POSITION= 1, SOURCE_LOG_FILE= 'master-bin.000001', SOURCE_LOG_POS= 4;
 --disable_warnings
 --source include/start_slave.inc
 --enable_warnings
@@ -689,7 +694,7 @@ while ($i != 5)
   # 6.3 - Stop and start the slave, call CHANGE MASTER TO with MASTER_AUTO_POSITION.
   --source include/stop_slave.inc
   --replace_result $slave_master_host SLAVE_MASTER_HOST
-  --eval CHANGE MASTER TO MASTER_HOST= '$slave_master_host', MASTER_AUTO_POSITION= 1
+  --eval CHANGE REPLICATION SOURCE TO SOURCE_HOST= '$slave_master_host', SOURCE_AUTO_POSITION= 1
   --disable_warnings
   --source include/start_slave.inc
   --enable_warnings
@@ -723,7 +728,7 @@ RESET MASTER;
 --connection slave
 --let $slave_master_host= query_get_value(SHOW SLAVE STATUS, Master_Host, 1)
 --replace_result $slave_master_host SLAVE_MASTER_HOST
---eval CHANGE MASTER TO MASTER_HOST= '$slave_master_host', MASTER_AUTO_POSITION= 1
+--eval CHANGE REPLICATION SOURCE TO SOURCE_HOST= '$slave_master_host', SOURCE_AUTO_POSITION= 1
 
 --let $i=1
 while ($i != 5)
@@ -788,7 +793,7 @@ while ($i != 5)
 --source include/stop_slave.inc
 RESET MASTER;
 RESET SLAVE;
---eval CHANGE MASTER TO MASTER_HOST= '$slave_master_host', MASTER_AUTO_POSITION= 0
+--eval CHANGE REPLICATION SOURCE TO SOURCE_HOST= '$slave_master_host', SOURCE_AUTO_POSITION= 0
 --connection master
 RESET MASTER;
 --connection slave

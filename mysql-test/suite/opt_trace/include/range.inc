@@ -263,23 +263,16 @@ ANALYZE TABLE t1;
 -- enable_query_log
 
 --echo
---echo # Covering ROR intersect not chosen: only one scan used
+--echo # Covering ROR intersect not chosen: Index with more keyparts found.
 EXPLAIN SELECT v FROM t1 WHERE i1 = 1 AND v = 'a' AND pk < 3;
 --echo
 SELECT * FROM information_schema.OPTIMIZER_TRACE;
 
-DROP INDEX i1_idx ON t1;
-CREATE INDEX i1_i2_idx ON t1 (i2,i1);
-
-ANALYZE TABLE t1;
-
 --echo
---echo # Covering ROR intersect not chosen: cost
-EXPLAIN SELECT v FROM t1 WHERE i1 = 1 AND i2 = 1  AND v = 'a' AND pk < 3;
+--echo # Chooses ROR intersect
+EXPLAIN SELECT v FROM t1 WHERE i1 = 1 AND pk < 3;
 --echo
 SELECT * FROM information_schema.OPTIMIZER_TRACE;
-
-# Todo: make a test case that chooses ROR intersect
 
 --echo
 DROP TABLE t1;
@@ -323,5 +316,16 @@ INSERT INTO t1 VALUES ('0',3,'0'),('0',2,'1');
 EXPLAIN SELECT * FROM t1 WHERE c1 = '1' ORDER BY i1;
 
 SELECT * FROM information_schema.OPTIMIZER_TRACE;
+
+--echo #
+--echo # Bug#30266767 OPTIMIZER TRACE CONTAINS INVALID JSON FOR FORCE INDEX QUERIES
+--echo #
+
+# Validate that the "infinite cost" value present in the previous
+# trace is parsable; if not, JSON_TYPE returns an error; if the regex
+# is not matched, NULL.
+
+SELECT JSON_TYPE(REGEXP_SUBSTR(TRACE, "1.*e308"))
+FROM information_schema.OPTIMIZER_TRACE;
 
 DROP TABLE t1;

@@ -1,18 +1,25 @@
 /*
-   Copyright (c) 2003, 2016, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2003, 2020, Oracle and/or its affiliates.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 #include <SegmentList.hpp>
 #include <random.h>
@@ -304,7 +311,7 @@ sectionVerify(SegmentUtils& su, Uint32 firstIVal)
 }
 
 
-SegmentListHead::SegmentListHead():headPtr(RNIL) {};
+SegmentListHead::SegmentListHead():headPtr(RNIL) {}
 
 bool
 SegmentListHead::isEmpty() const
@@ -587,11 +594,7 @@ SegmentSubPool::checkInvariants()
 
 #ifdef TEST_SEGMENTLIST
 
-#undef JAM_FILE_ID
-
 #include <NdbTap.hpp>
-
-#define JAM_FILE_ID 494
 
 /* Redefine ArrayPool dependencies to enable standalone Unit-test compile */
 void ErrorReporter::handleAssert(const char* message, const char* file, int line, int ec)
@@ -617,10 +620,10 @@ SectionSegmentPool::handleOutOfSegments(SectionSegment_basepool& pool)
 class TestSegmentUtils : public SegmentUtils
 {
 public:
-  TestSegmentUtils() {};
+  TestSegmentUtils() {}
 
   SectionSegment*
-  getSegmentPtr(Uint32 iVal)
+  getSegmentPtr(Uint32 iVal) override
   {
     return g_sectionSegmentPool.getPtr(iVal);
   }
@@ -631,19 +634,19 @@ public:
   }
 
   bool
-  seizeSegment(Ptr<SectionSegment>& p)
+  seizeSegment(Ptr<SectionSegment>& p) override
   {
     return g_sectionSegmentPool.seize(p);
-  };
+  }
 
   void
-  releaseSegment(Uint32 iVal)
+  releaseSegment(Uint32 iVal) override
   {
     return g_sectionSegmentPool.release(iVal);
-  };
+  }
 
   void
-  releaseSegmentList(Uint32 firstSegmentIVal)
+  releaseSegmentList(Uint32 firstSegmentIVal) override
   {
     if (firstSegmentIVal != RNIL)
     {
@@ -678,7 +681,7 @@ static const TestVariant testVariants[] =
 static Uint32 getActualUsed(SegmentSubPool& ssp)
 {
   return g_sectionSegmentPool.getUsed() - ssp.getNumAvailable();
-};
+}
 
 bool testBasicFillAndDrain()
 {
@@ -770,7 +773,7 @@ bool testBasicFillAndDrain()
   VERIFY(slh.headPtr == RNIL);
 
   return true;
-};
+}
 
 bool testMixedEnqAndDeq()
 {

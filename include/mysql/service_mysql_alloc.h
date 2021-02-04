@@ -1,13 +1,20 @@
-/* Copyright (c) 2012, 2016, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2012, 2020, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -25,22 +32,21 @@
 #endif
 
 /* PSI_memory_key */
-#include "mysql/psi/psi_memory.h"
-
-#ifdef __cplusplus
-extern "C" {
-#endif
+#include "mysql/components/services/psi_memory_bits.h"
 
 /* myf */
 typedef int myf_t;
 
-typedef void * (*mysql_malloc_t)(PSI_memory_key key, size_t size, myf_t flags);
-typedef void * (*mysql_realloc_t)(PSI_memory_key key, void *ptr, size_t size, myf_t flags);
-typedef void (*mysql_claim_t)(const void *ptr);
+typedef void *(*mysql_malloc_t)(PSI_memory_key key, size_t size, myf_t flags);
+typedef void *(*mysql_realloc_t)(PSI_memory_key key, void *ptr, size_t size,
+                                 myf_t flags);
+typedef void (*mysql_claim_t)(const void *ptr, bool claim);
 typedef void (*mysql_free_t)(void *ptr);
-typedef void * (*my_memdup_t)(PSI_memory_key key, const void *from, size_t length, myf_t flags);
-typedef char * (*my_strdup_t)(PSI_memory_key key, const char *from, myf_t flags);
-typedef char * (*my_strndup_t)(PSI_memory_key key, const char *from, size_t length, myf_t flags);
+typedef void *(*my_memdup_t)(PSI_memory_key key, const void *from,
+                             size_t length, myf_t flags);
+typedef char *(*my_strdup_t)(PSI_memory_key key, const char *from, myf_t flags);
+typedef char *(*my_strndup_t)(PSI_memory_key key, const char *from,
+                              size_t length, myf_t flags);
 
 /**
   @ingroup group_ext_plugin_services
@@ -49,8 +55,7 @@ typedef char * (*my_strndup_t)(PSI_memory_key key, const char *from, size_t leng
   memory handling routines.
   This allows uniform memory handling and instrumentation.
 */
-struct mysql_malloc_service_st
-{
+struct mysql_malloc_service_st {
   /**
     Allocates a block of memory
 
@@ -95,7 +100,7 @@ struct mysql_malloc_service_st
   my_strndup_t my_strndup;
 };
 
-extern struct mysql_malloc_service_st *mysql_malloc_service;
+extern "C" struct mysql_malloc_service_st *mysql_malloc_service;
 
 #ifdef MYSQL_DYNAMIC_PLUGIN
 
@@ -109,19 +114,17 @@ extern struct mysql_malloc_service_st *mysql_malloc_service;
 
 #else
 
-extern void * my_malloc(PSI_memory_key key, size_t size, myf_t flags);
-extern void * my_realloc(PSI_memory_key key, void *ptr, size_t size, myf_t flags);
-extern void my_claim(const void *ptr);
+extern void *my_malloc(PSI_memory_key key, size_t size, myf_t flags);
+extern void *my_realloc(PSI_memory_key key, void *ptr, size_t size,
+                        myf_t flags);
+extern void my_claim(const void *ptr, bool claim);
 extern void my_free(void *ptr);
-extern void * my_memdup(PSI_memory_key key, const void *from, size_t length, myf_t flags);
-extern char * my_strdup(PSI_memory_key key, const char *from, myf_t flags);
-extern char * my_strndup(PSI_memory_key key, const char *from, size_t length, myf_t flags);
+extern void *my_memdup(PSI_memory_key key, const void *from, size_t length,
+                       myf_t flags);
+extern char *my_strdup(PSI_memory_key key, const char *from, myf_t flags);
+extern char *my_strndup(PSI_memory_key key, const char *from, size_t length,
+                        myf_t flags);
 
 #endif
 
-#ifdef __cplusplus
-}
 #endif
-
-#endif
-

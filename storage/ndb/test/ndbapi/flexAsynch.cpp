@@ -1,14 +1,21 @@
 /*
-   Copyright (c) 2003, 2017, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2003, 2019, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -32,6 +39,7 @@
 #include <NdbTest.hpp>
 #include <NDBT_Stats.hpp>
 #include <NdbLockCpuUtil.h>
+#include <ndb_limits.h>
 
 #define MAX_PARTS 4 
 #define MAX_SEEK 16 
@@ -43,7 +51,7 @@
 #define MAX_EXECUTOR_THREADS 384
 #define MAX_DEFINER_THREADS 32
 #define MAX_REAL_THREADS 416
-#define NDB_MAX_NODES 48
+#define NDB_MAX_NODES (MAX_NDB_NODES - 1)
 #define NDB_MAX_RECEIVE_CPUS 128
 /*
   NDB_MAXTHREADS used to be just MAXTHREADS, which collides with a
@@ -471,7 +479,7 @@ int main(int argc, char** argv)
         }
       }
     }
-    Uint32 mean_rounds;
+    Uint64 mean_rounds;
     if (total_rounds)
     {
       mean_rounds = total_transactions / total_rounds;
@@ -841,7 +849,7 @@ executeCallback(int result, NdbConnection* transObject, void* aObject)
       /* What can we do here? */
       ndbout_c("execute: %s", transObject->getNdbError().message);
     }//if(retCode == 3)
-    //    ndbout << "Error occured in poll:" << endl;
+    //    ndbout << "Error occurred in poll:" << endl;
     //    ndbout << NdbObject->getNdbError() << endl;
     failed++ ;
   }//if
@@ -971,8 +979,12 @@ defineNdbRecordOperation(char *record,
   {
     if (my_thread_data != NULL && aType != stInsert)
     {
+#ifdef _WIN32
+      rand_val = rand();
+#else
       my_thread_data->rand_seed++;
       rand_val = (Uint32)rand_r(&my_thread_data->rand_seed);
+#endif
     }
     for (unsigned k = 1; k < tNoOfAttributes; k++) {
       NdbDictionary::getOffset(ndb_record, k + 1, offset);
@@ -1478,6 +1490,9 @@ init_thread_data(THREAD_DATA *my_thread_data, Uint32 thread_id)
   my_thread_data->ready = false;
   my_thread_data->start = false;
   my_thread_data->rand_seed = 1;
+#ifdef _WIN32
+  srand(my_thread_data->rand_seed);
+#endif
   my_thread_data->transport_mutex = NdbMutex_Create();
   my_thread_data->transport_cond = NdbCondition_Create();
   my_thread_data->main_cond = NdbCondition_Create();
@@ -2241,7 +2256,7 @@ read_cpus(const char *str, Uint32 *num_cpus, Uint16 *cpu_array)
   bool number_found = false;
   Uint16 start = 0;
   Uint32 current_number = 0;
-  Uint32 len = strlen(str);
+  Uint32 len = (Uint32)strlen(str);
 
   for (i = 0; i < len + 1; i++)
   {

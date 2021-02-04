@@ -1,14 +1,21 @@
 /*
-   Copyright (c) 2003, 2015, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2003, 2019, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -119,7 +126,9 @@ UtilTransactions::clearTable(Ndb* pNdb,
       } while((check = pOp->nextResult(false)) == 0);
       
       if(check != -1){
-	check = pTrans->execute(Commit, AbortOnError);   
+	check = pTrans->execute(Commit, AbortOnError);
+        if (check != -1)
+          pTrans->getGCI(&m_util_latest_gci);
 	pTrans->restart();
       }
       
@@ -128,7 +137,10 @@ UtilTransactions::clearTable(Ndb* pNdb,
 	if(err.status == NdbError::TemporaryError){
 	  NDB_ERR(err);
 	  closeTransaction(pNdb);
-	  NdbSleep_MilliSleep(50);
+          if (err.code == 410 || err.code == 1501)
+	    NdbSleep_MilliSleep(2000);
+          else
+	    NdbSleep_MilliSleep(50);
 	  par = 1;
 	  goto restart;
 	}
@@ -274,6 +286,8 @@ UtilTransactions::copyTableData(Ndb* pNdb,
       } while((eof = pOp->nextResult(false)) == 0);
       
       check = pTrans->execute(Commit, AbortOnError);   
+      if (check != -1)
+        pTrans->getGCI(&m_util_latest_gci);
       pTrans->restart();
       if( check == -1 ) {
 	const NdbError err = pTrans->getNdbError();    
@@ -1117,7 +1131,7 @@ UtilTransactions::verifyOrderedIndex(Ndb* pNdb,
       return NDBT_FAILED;
     }
         
-    int eof;
+    int eof = 0;
     int rows = 0;
     while(check == 0 && (eof = pOp->nextResult()) == 0){
       rows++;
@@ -1296,6 +1310,7 @@ UtilTransactions::getOperation(NdbConnection* pTrans,
         abort();
       }
     }
+    return pTrans->getNdbOperation(tab.getName());
   case NdbOperation::InsertRequest:
   case NdbOperation::WriteRequest:
     return pTrans->getNdbOperation(tab.getName());

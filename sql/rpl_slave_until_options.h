@@ -1,17 +1,24 @@
-/* Copyright (c) 2016, 2017, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2016, 2020, Oracle and/or its affiliates.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software Foundation,
-   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 #ifndef DEFINED_RPL_SLAVE_UNTIL_OPTIONS_H
 #define DEFINED_RPL_SLAVE_UNTIL_OPTIONS_H
@@ -22,7 +29,7 @@
 #include "my_dbug.h"
 #include "my_inttypes.h"
 #include "my_io.h"
-#include "rpl_gtid.h"
+#include "sql/rpl_gtid.h"
 
 class Log_event;
 class Relay_log_info;
@@ -45,9 +52,8 @@ class Relay_log_info;
 
   These three interfaces cover all until options's check requirements.
 */
-class Until_option
-{
-public:
+class Until_option {
+ public:
   virtual ~Until_option() {}
 
   /**
@@ -57,11 +63,10 @@ public:
        @retval true if it is satisfied.
        @retval false if it is not satisfied.
   */
-  bool is_satisfied_at_start_slave()
-  {
-    DBUG_ENTER("Until_option::is_satisfied_at_start_slave");
-    bool ret= check_at_start_slave();
-    DBUG_RETURN(ret);
+  bool is_satisfied_at_start_slave() {
+    DBUG_TRACE;
+    bool ret = check_at_start_slave();
+    return ret;
   }
 
   /**
@@ -74,11 +79,10 @@ public:
        @retval true if it is satisfied.
        @retval false if it is not satisfied.
   */
-  bool is_satisfied_before_dispatching_event(const Log_event *ev)
-  {
-    DBUG_ENTER("Until_option::is_satisfied_before_dispatching_event");
-    bool ret= check_before_dispatching_event(ev);
-    DBUG_RETURN(ret);
+  bool is_satisfied_before_dispatching_event(const Log_event *ev) {
+    DBUG_TRACE;
+    bool ret = check_before_dispatching_event(ev);
+    return ret;
   }
 
   /**
@@ -89,18 +93,18 @@ public:
        @retval true if it is satisfied.
        @retval false if it is not satisfied.
   */
-  bool is_satisfied_after_dispatching_event()
-  {
-    DBUG_ENTER("Until_option::is_satisfied_after_dispatching_event");
-    bool ret= check_after_dispatching_event();
-    DBUG_RETURN(ret);
+  bool is_satisfied_after_dispatching_event() {
+    DBUG_TRACE;
+    bool ret = check_after_dispatching_event();
+    return ret;
   }
 
-protected:
+ protected:
   Relay_log_info *m_rli;
 
   Until_option(Relay_log_info *rli) : m_rli(rli) {}
-private:
+
+ private:
   /*
     The virtual functions called by the interface functions.
     They are implemented in sub-classes.
@@ -123,10 +127,9 @@ private:
    - coodinator should notify Until_option object if master log or relay
      log is switched by calling notify_log_name_change() function.
 */
-class Until_position : public Until_option
-{
-public:
-  virtual ~Until_position() {}
+class Until_position : public Until_option {
+ public:
+  ~Until_position() override {}
 
   /**
      Initialize the until position when starting the slave.
@@ -144,27 +147,26 @@ public:
      Coordinator calls this function to notify that master
      log switch or relay log switch.
   */
-  void notify_log_name_change()
-  {
-    DBUG_ENTER("Until_position::notify_log_name_change");
-    m_log_names_cmp_result= LOG_NAMES_CMP_UNKNOWN;
-    DBUG_VOID_RETURN;
+  void notify_log_name_change() {
+    DBUG_TRACE;
+    m_log_names_cmp_result = LOG_NAMES_CMP_UNKNOWN;
+    return;
   }
 
-  const char *get_until_log_name() { return (const char *) m_until_log_name; }
+  const char *get_until_log_name() { return (const char *)m_until_log_name; }
   my_off_t get_until_log_pos() { return m_until_log_pos; }
-protected:
 
+ protected:
   /**
      Log name is compared only once for each master log or relay log. And
      the comparison result is stored in m_log_names_cmp_result.
   */
-  enum
-  {
-    LOG_NAMES_CMP_UNKNOWN= -2, LOG_NAMES_CMP_LESS= -1,
-    LOG_NAMES_CMP_EQUAL= 0, LOG_NAMES_CMP_GREATER= 1
+  enum {
+    LOG_NAMES_CMP_UNKNOWN = -2,
+    LOG_NAMES_CMP_LESS = -1,
+    LOG_NAMES_CMP_EQUAL = 0,
+    LOG_NAMES_CMP_GREATER = 1
   } m_log_names_cmp_result;
-
 
   Until_position(Relay_log_info *rli) : Until_option(rli) {}
 
@@ -179,9 +181,9 @@ protected:
      - If the comparison result is LOG_NAMES_CMP_GREATER, it will
        return true directly.
   */
-  bool check_position(const char* log_name, my_off_t log_pos);
+  bool check_position(const char *log_name, my_off_t log_pos);
 
-private:
+ private:
   /* They store the log name and log position in START SLAVE UNTIL option */
   char m_until_log_name[FN_REFLEN];
   ulonglong m_until_log_pos;
@@ -199,11 +201,11 @@ private:
 
    It is for UNTIL master_log_file and master_log_pos
 */
-class Until_master_position : public Until_position
-{
-public:
+class Until_master_position : public Until_position {
+ public:
   Until_master_position(Relay_log_info *rli) : Until_position(rli) {}
-private:
+
+ private:
   /*
     Current event's master log name and position. They are set in
     is_satisfied_before_dispatching_event and checked in
@@ -212,9 +214,9 @@ private:
   char m_current_log_name[FN_REFLEN];
   my_off_t m_current_log_pos;
 
-  bool check_at_start_slave();
-  bool check_before_dispatching_event(const Log_event *ev);
-  bool check_after_dispatching_event();
+  bool check_at_start_slave() override;
+  bool check_before_dispatching_event(const Log_event *ev) override;
+  bool check_after_dispatching_event() override;
 };
 
 /**
@@ -222,14 +224,14 @@ private:
 
    It is for UNTIL relay_log_file and relay_log_pos
 */
-class Until_relay_position : public Until_position
-{
-public:
+class Until_relay_position : public Until_position {
+ public:
   Until_relay_position(Relay_log_info *rli) : Until_position(rli) {}
-private:
-  bool check_at_start_slave();
-  bool check_before_dispatching_event(const Log_event *ev);
-  bool check_after_dispatching_event();
+
+ private:
+  bool check_at_start_slave() override;
+  bool check_before_dispatching_event(const Log_event *ev) override;
+  bool check_after_dispatching_event() override;
 };
 
 /**
@@ -238,10 +240,9 @@ private:
    It is an abstract class for UNTIL SQL_BEFORE_GTIDS and SQL_AFTER_GTIDS.
    It encapsulates the variables and functions shared between the two options.
  */
-class Until_gtids : public Until_option
-{
-public:
-  virtual ~Until_gtids() {}
+class Until_gtids : public Until_option {
+ public:
+  ~Until_gtids() override {}
 
   /**
      Initialize the until gtids when starting the slave.
@@ -253,7 +254,8 @@ public:
        @retval a defined mysql error number if error happens.
   */
   int init(const char *gtid_set_str);
-protected:
+
+ protected:
   /**
     Stores the gtids of START SLAVE UNTIL SQL_*_GTIDS.
     Each time a gtid is about to be processed, we check if it is in the
@@ -262,7 +264,8 @@ protected:
   */
   Gtid_set m_gtids;
 
-  Until_gtids(Relay_log_info *rli) : Until_option(rli), m_gtids(global_sid_map) {}
+  Until_gtids(Relay_log_info *rli)
+      : Until_option(rli), m_gtids(global_sid_map) {}
 };
 
 /**
@@ -270,14 +273,14 @@ protected:
 
    It implementes the logic of UNTIL SQL_BEFORE_GTIDS
 */
-class Until_before_gtids : public Until_gtids
-{
-public:
-  Until_before_gtids(Relay_log_info *rli) :Until_gtids(rli) {}
-private:
-  bool check_at_start_slave();
-  bool check_before_dispatching_event(const Log_event *ev);
-  bool check_after_dispatching_event();
+class Until_before_gtids : public Until_gtids {
+ public:
+  Until_before_gtids(Relay_log_info *rli) : Until_gtids(rli) {}
+
+ private:
+  bool check_at_start_slave() override;
+  bool check_before_dispatching_event(const Log_event *ev) override;
+  bool check_after_dispatching_event() override;
 };
 
 /**
@@ -285,14 +288,14 @@ private:
 
    It implementes the logic of UNTIL SQL_AFTER_GTIDS
 */
-class Until_after_gtids : public Until_gtids
-{
-public:
-  Until_after_gtids(Relay_log_info *rli) :Until_gtids(rli) {}
-private:
-  bool check_at_start_slave();
-  bool check_before_dispatching_event(const Log_event *ev);
-  bool check_after_dispatching_event();
+class Until_after_gtids : public Until_gtids {
+ public:
+  Until_after_gtids(Relay_log_info *rli) : Until_gtids(rli) {}
+
+ private:
+  bool check_at_start_slave() override;
+  bool check_before_dispatching_event(const Log_event *ev) override;
+  bool check_after_dispatching_event() override;
 };
 
 /**
@@ -300,14 +303,12 @@ private:
 
    It implementes the logic for UNTIL VIEW_ID.
 */
-class Until_view_id : public Until_option
-{
-public:
+class Until_view_id : public Until_option {
+ public:
   Until_view_id(Relay_log_info *rli)
-    : Until_option(rli),
-      until_view_id_found(false),
-      until_view_id_commit_found(false)
-  {}
+      : Until_option(rli),
+        until_view_id_found(false),
+        until_view_id_commit_found(false) {}
 
   /**
      Initialize the view_id when starting the slave.
@@ -319,7 +320,8 @@ public:
        @retval a defined mysql error number if error happens.
   */
   int init(const char *view_id);
-private:
+
+ private:
   std::string m_view_id;
   /*
     Flag used to indicate that view_id identified by 'until_view_id'
@@ -336,10 +338,9 @@ private:
   */
   bool until_view_id_commit_found;
 
-
-  bool check_at_start_slave();
-  bool check_before_dispatching_event(const Log_event *ev);
-  bool check_after_dispatching_event();
+  bool check_at_start_slave() override;
+  bool check_before_dispatching_event(const Log_event *ev) override;
+  bool check_after_dispatching_event() override;
 };
 
 /**
@@ -347,19 +348,19 @@ private:
 
    It implementes the logic of UNTIL SQL_AFTER_MTS_GAP
 */
-class Until_mts_gap : public Until_option
-{
-public:
+class Until_mts_gap : public Until_option {
+ public:
   Until_mts_gap(Relay_log_info *rli) : Until_option(rli) {}
 
   /**
      Intialize it when starting the slave.
   */
   void init();
-private:
-  bool check_at_start_slave();
-  bool check_before_dispatching_event(const Log_event *ev);
-  bool check_after_dispatching_event();
+
+ private:
+  bool check_at_start_slave() override;
+  bool check_before_dispatching_event(const Log_event *ev) override;
+  bool check_after_dispatching_event() override;
 };
 
-#endif //DEFINED_RPL_SLAVE_UNTIL_OPTIONS_H
+#endif  // DEFINED_RPL_SLAVE_UNTIL_OPTIONS_H

@@ -1,52 +1,56 @@
-/* Copyright (c) 2014, 2017, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2014, 2020, Oracle and/or its affiliates.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software Foundation,
-   51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 #ifndef DD__TABLESPACE_FILES_IMPL_INCLUDED
 #define DD__TABLESPACE_FILES_IMPL_INCLUDED
 
 #include <sys/types.h>
-#include <memory>   // std::unique_ptr
+#include <memory>  // std::unique_ptr
 #include <new>
-#include <string>
 
-#include "dd/impl/raw/raw_record.h"
-#include "dd/impl/types/weak_object_impl.h" // dd::Weak_object_impl
-#include "dd/properties.h"
-#include "dd/sdi_fwd.h"
-#include "dd/types/object_type.h"           // dd::Object_type
-#include "dd/types/tablespace_file.h"       // dd::Tablespace_file
+#include "sql/dd/impl/properties_impl.h"
+#include "sql/dd/impl/raw/raw_record.h"
+#include "sql/dd/impl/types/weak_object_impl.h"  // dd::Weak_object_impl
+#include "sql/dd/sdi_fwd.h"
+#include "sql/dd/string_type.h"
+#include "sql/dd/types/tablespace_file.h"  // dd::Tablespace_file
 
 namespace dd {
 
 ///////////////////////////////////////////////////////////////////////////
 
-class Tablespace;
-class Tablespace_impl;
 class Object_key;
 class Object_table;
 class Open_dictionary_tables_ctx;
 class Sdi_rcontext;
 class Sdi_wcontext;
+class Tablespace;
+class Tablespace_impl;
 class Weak_object;
 
 ///////////////////////////////////////////////////////////////////////////
 
-class Tablespace_file_impl : public Weak_object_impl,
-                             public Tablespace_file
-{
-public:
+class Tablespace_file_impl : public Weak_object_impl, public Tablespace_file {
+ public:
   Tablespace_file_impl();
 
   Tablespace_file_impl(Tablespace_impl *tablespace);
@@ -54,97 +58,90 @@ public:
   Tablespace_file_impl(const Tablespace_file_impl &src,
                        Tablespace_impl *parent);
 
-  virtual ~Tablespace_file_impl()
-  { }
+  ~Tablespace_file_impl() override {}
 
-public:
-  virtual const Object_table &object_table() const
-  { return Tablespace_file::OBJECT_TABLE(); }
+ public:
+  const Object_table &object_table() const override;
 
-  virtual bool store(Open_dictionary_tables_ctx *otx);
+  bool store(Open_dictionary_tables_ctx *otx) override;
 
-  virtual bool validate() const;
+  bool validate() const override;
 
-  virtual bool store_attributes(Raw_record *r);
+  bool store_attributes(Raw_record *r) override;
 
-  virtual bool restore_attributes(const Raw_record &r);
+  bool restore_attributes(const Raw_record &r) override;
 
-  void serialize(Sdi_wcontext *wctx, Sdi_writer *w) const;
+  void serialize(Sdi_wcontext *wctx, Sdi_writer *w) const override;
 
-  bool deserialize(Sdi_rcontext *rctx, const RJ_Value &val);
+  bool deserialize(Sdi_rcontext *rctx, const RJ_Value &val) override;
 
-  virtual void debug_print(String_type &outb) const;
+  void debug_print(String_type &outb) const override;
 
-  void set_ordinal_position(uint ordinal_position)
-  { m_ordinal_position= ordinal_position; }
+  void set_ordinal_position(uint ordinal_position) {
+    m_ordinal_position = ordinal_position;
+  }
 
-public:
+ public:
+  static void register_tables(Open_dictionary_tables_ctx *otx);
+
   /////////////////////////////////////////////////////////////////////////
   // ordinal_position.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual uint ordinal_position() const
-  { return m_ordinal_position; }
+  uint ordinal_position() const override { return m_ordinal_position; }
 
   /////////////////////////////////////////////////////////////////////////
   // filename.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual const String_type &filename() const
-  { return m_filename; }
+  const String_type &filename() const override { return m_filename; }
 
-  virtual void set_filename(const String_type &filename)
-  { m_filename= filename; }
+  void set_filename(const String_type &filename) override {
+    m_filename = filename;
+  }
 
   /////////////////////////////////////////////////////////////////////////
   // se_private_data.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual const Properties &se_private_data() const
-  { return *m_se_private_data; }
+  const Properties &se_private_data() const override {
+    return m_se_private_data;
+  }
 
-  virtual Properties &se_private_data()
-  { return *m_se_private_data; }
+  Properties &se_private_data() override { return m_se_private_data; }
 
-  virtual bool set_se_private_data_raw(
-    const String_type &se_private_data_raw);
-
-  // Fix "inherits ... via dominance" warnings
-  virtual Weak_object_impl *impl()
-  { return Weak_object_impl::impl(); }
-  virtual const Weak_object_impl *impl() const
-  { return Weak_object_impl::impl(); }
+  bool set_se_private_data(const String_type &se_private_data_raw) override {
+    return m_se_private_data.insert_values(se_private_data_raw);
+  }
 
   /////////////////////////////////////////////////////////////////////////
   // tablespace.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual const Tablespace &tablespace() const;
+  const Tablespace &tablespace() const override;
 
-  virtual Tablespace &tablespace();
+  Tablespace &tablespace() override;
 
-public:
-  static Tablespace_file_impl *restore_item(Tablespace_impl *ts)
-  {
+ public:
+  static Tablespace_file_impl *restore_item(Tablespace_impl *ts) {
     return new (std::nothrow) Tablespace_file_impl(ts);
   }
 
   static Tablespace_file_impl *clone(const Tablespace_file_impl &other,
-                                     Tablespace_impl *ts)
-  {
+                                     Tablespace_impl *ts) {
     return new (std::nothrow) Tablespace_file_impl(other, ts);
   }
 
-public:
-  virtual Object_key *create_primary_key() const;
-  virtual bool has_new_primary_key() const;
+ public:
+  Object_key *create_primary_key() const override;
+  bool has_new_primary_key() const override;
 
-private:
+ private:
   // Fields
   uint m_ordinal_position;
 
   String_type m_filename;
-  std::unique_ptr<Properties> m_se_private_data;
+  Properties_impl m_se_private_data;
 
   // References to other objects
   Tablespace_impl *m_tablespace;
@@ -152,17 +149,6 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////
 
-class Tablespace_file_type : public Object_type
-{
-public:
-  virtual void register_tables(Open_dictionary_tables_ctx *otx) const;
+}  // namespace dd
 
-  virtual Weak_object *create_object() const
-  { return new (std::nothrow) Tablespace_file_impl(); }
-};
-
-///////////////////////////////////////////////////////////////////////////
-
-}
-
-#endif // DD__TABLESPACE_FILES_IMPL_INCLUDED
+#endif  // DD__TABLESPACE_FILES_IMPL_INCLUDED

@@ -13,6 +13,8 @@ include/install_replication_observers_example.inc
 # Cause a reset slave notification.
 #
 RESET SLAVE;
+Warnings:
+Warning	1287	'RESET SLAVE' is deprecated and will be removed in a future release. Please use RESET REPLICA instead
 #
 # Cause a connect notification.
 #
@@ -47,6 +49,9 @@ Occurrences of 'replication_observers_example_plugin:binlog_relay_after_read_eve
 Matching lines are:
 replication_observers_example_plugin:binlog_relay_after_queue_event'
 Occurrences of 'replication_observers_example_plugin:binlog_relay_after_queue_event' in the input file: 1
+Matching lines are:
+replication_observers_example_plugin:binlog_relay_applier_start'
+Occurrences of 'replication_observers_example_plugin:binlog_relay_applier_start' in the input file: 1
 Matching lines are:
 replication_observers_example_plugin:binlog_relay_applier_stop'
 Occurrences of 'replication_observers_example_plugin:binlog_relay_applier_stop' in the input file: 1

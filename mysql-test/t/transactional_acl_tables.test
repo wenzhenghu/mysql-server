@@ -1,8 +1,12 @@
-# Grant tests not performed with embedded server
---source include/not_embedded.inc
 
 --source include/no_valgrind_without_big.inc
 --source include/have_debug_sync.inc
+
+CALL mtr.add_suppression("Storage engine '.*' does not support system tables. \\[mysql.*\\]");
+CALL mtr.add_suppression("Column count of mysql.* is wrong. "
+                         "Expected .*, found .*. "
+                         "The table is probably corrupted");
+CALL mtr.add_suppression("Cannot load from mysql.*. The table is probably corrupted");
 
 --echo #
 --echo # WL7158: Move privilege system tables from MyISAM to InnoDB
@@ -196,7 +200,7 @@ DROP USER u1a@h, u2a@h, u3a@h;
 --echo # A.4. Checking lock-wait-timeout with SET PASSWORD.
 --echo ########################################################################
 
-CREATE USER u1@h;
+CREATE USER u1@h IDENTIFIED WITH 'mysql_native_password';
 
 # Check that the user has been created.
 SELECT user, host FROM mysql.user WHERE host = 'h';
@@ -237,7 +241,7 @@ ROLLBACK;
 --connection default
 
 # Check the SET PASSWORD was successful.
-SELECT user, host, authentication_string = password('xxx') FROM mysql.user WHERE host = 'h';
+SELECT user, host, authentication_string = '*3D56A309CD04FA2EEF181462E59011F075C89548' FROM mysql.user WHERE host = 'h';
 
 # Drop the created users (cleanup).
 DROP USER u1@h;
@@ -1367,11 +1371,10 @@ DROP USER u2@l;
 call mtr.add_suppression("Did not write failed .*");
 call mtr.add_suppression("REVOKE/GRANT failed .* An incident event has been written to the binary log which will stop the slaves.");
 
-# NO_AUTO_CREATE_USER defines if the GRANT statement creates non-existing users
-# automatically or not. Unless NO_AUTO_CREATE_USER is set, it is not possible
-# to execute a GRANT statement only for some users (unlike 'DROP USER' which
-# drops only existing users from the lists). It is possible however, to make
-# the GRANT statement fail by specifying non-existing table or column.
+# It is not possible to execute a GRANT statement only for some users
+# (unlike 'DROP USER' which drops only existing users from the lists).
+# It is possible however, to make the GRANT statement fail by specifying
+# non-existing table or column.
 #
 # This is no the case for the REVOKE statement -- it will report an error for
 # every non-existing user from the list and skip it.
@@ -1396,7 +1399,7 @@ SELECT user, column_name, column_priv FROM mysql.columns_priv;
 --echo
 --echo # GRANT for non existing user.
 --echo # (only non-existing user components fail).
---error ER_PASSWORD_NO_MATCH
+--error ER_CANT_CREATE_USER_WITH_GRANT
 GRANT SELECT(b) ON t1 TO u1@h, u2@h, u3@h;
 SHOW WARNINGS;
 SELECT user, column_name, column_priv FROM mysql.columns_priv;
@@ -1410,7 +1413,7 @@ SELECT user, column_name, column_priv FROM mysql.columns_priv;
 --echo
 --echo # REVOKE with existing and non existing user (REVOKE removed privileges
 --echo # for existing accounts despite an error).
---error ER_NONEXISTING_GRANT
+--error ER_NONEXISTING_TABLE_GRANT
 REVOKE SELECT(a) ON t1 FROM u0@h, u1@h, u2@h, u3@h;
 SELECT user, column_name, column_priv FROM mysql.columns_priv;
 
@@ -1483,9 +1486,8 @@ DROP USER u1@h, u2@h;
 --echo # D. Simulate the SE failure and check the ACL statement behavior.
 --echo ####################################################################
 
-SET sql_mode = ''; # No need for NO_AUTO_CREATE_USER any more.
-
 CREATE TABLE t1(a INT);
+CREATE USER user1@;
 GRANT UPDATE (a) ON t1 TO user1@;
 
 SET debug='+d,wl7158_grant_table_1';
@@ -1581,37 +1583,34 @@ SHOW WARNINGS;
 SET debug="-d,wl7158_replace_user_table_2";
 DROP USER u1@h;
 
+CREATE USER u1@h;
 SET debug="+d,wl7158_replace_user_table_1";
 --error ER_ACL_OPERATION_FAILED
-GRANT SELECT ON mysqltest.* TO u1@h REQUIRE CIPHER "EDH-RSA-DES-CBC3-SHA";
+ALTER USER u1@h REQUIRE CIPHER "EDH-RSA-DES-CBC3-SHA";
 SHOW WARNINGS;
---error ER_NONEXISTING_GRANT
-SHOW GRANTS FOR u1@h;
 SET debug="-d,wl7158_replace_user_table_1";
 
-GRANT SELECT ON mysqltest.* TO u1@h REQUIRE CIPHER "EDH-RSA-DES-CBC3-SHA";
+ALTER USER u1@h REQUIRE CIPHER "EDH-RSA-DES-CBC3-SHA";
+GRANT SELECT ON mysqltest.* TO u1@h;
 SET debug="+d,wl7158_replace_user_table_2";
 --error ER_ACL_OPERATION_FAILED
-GRANT USAGE ON mysqltest.* TO u1@h REQUIRE CIPHER "EDH-RSA-DES-CBC3-SHA"
+ALTER USER u1@h REQUIRE CIPHER "EDH-RSA-DES-CBC3-SHA"
   AND SUBJECT "testsubject" ISSUER "MySQL";
 SHOW WARNINGS;
 SHOW GRANTS FOR u1@h;
 SET debug="-d,wl7158_replace_user_table_2";
 DROP USER u1@h;
 
-CREATE USER u1@h;
-CREATE TABLE t1(a INT);
 SET debug="+d,wl7158_replace_user_table_1";
 --error ER_ACL_OPERATION_FAILED
-GRANT SELECT ON t1 TO u1@h;
+CREATE USER u1@h;
 SET debug="-d,wl7158_replace_user_table_1";
-DROP TABLE t1;
-DROP USER u1@h;
 
 CREATE USER u1@h;
 CREATE TABLE t1(a INT);
 SET debug="+d,mysql_table_grant_out_of_memory";
---error ER_OUT_OF_RESOURCES
+CALL mtr.add_suppression(".*Out of memory *");
+--error ER_OUT_OF_RESOURCES, 5
 GRANT SELECT ON t1 TO u1@h;
 SET debug="-d,mysql_table_grant_out_of_memory";
 DROP TABLE t1;
@@ -1628,14 +1627,14 @@ SET debug="-d,wl7158_replace_user_table_3";
 CREATE USER u1@h;
 SET debug="+d,wl7158_replace_db_table_1";
 --error ER_ACL_OPERATION_FAILED
-GRANT SELECT ON mysqltest.* TO u1@h REQUIRE CIPHER "EDH-RSA-DES-CBC3-SHA";
+GRANT SELECT ON mysqltest.* TO u1@h;
 SHOW WARNINGS;
 SET debug="-d,wl7158_replace_db_table_1";
 
-GRANT SELECT ON mysqltest.* TO u1@h REQUIRE CIPHER "EDH-RSA-DES-CBC3-SHA";
+GRANT SELECT ON mysqltest.* TO u1@h;
 SET debug="+d,wl7158_replace_db_table_2";
 --error ER_ACL_OPERATION_FAILED
-GRANT SELECT ON mysqltest.* TO u1@h REQUIRE CIPHER "EDH-RSA-DES-CBC3-SHA";
+GRANT SELECT ON mysqltest.* TO u1@h;
 SHOW WARNINGS;
 SHOW GRANTS FOR u1@h;
 SET debug="-d,wl7158_replace_db_table_2";
@@ -1648,13 +1647,13 @@ SHOW GRANTS FOR u1@h;
 SET debug="-d,wl7158_replace_db_table_3";
 DROP USER u1@h;
 
+CREATE USER u1@h;
 SET debug="+d,wl7158_replace_db_table_4";
 --error ER_ACL_OPERATION_FAILED
-GRANT SELECT ON mysqltest.* TO u1@h REQUIRE CIPHER "EDH-RSA-DES-CBC3-SHA";
+GRANT SELECT ON mysqltest.* TO u1@h;
 SHOW WARNINGS;
---error ER_NONEXISTING_GRANT
-SHOW GRANTS FOR u1@h;
 SET debug="-d,wl7158_replace_db_table_4";
+DROP USER u1@h;
 
 SET debug="+d,mysql_handle_grant_data_fail_on_routine_table";
 --error ER_ACL_OPERATION_FAILED
@@ -1861,7 +1860,7 @@ SHOW GRANTS FOR u1@h;
 
 GRANT UPDATE (a) ON t1 TO u1@h;
 SET debug='+d,mysql_grant_table_init_out_of_memory';
---error ER_OUT_OF_RESOURCES
+--error ER_OUT_OF_RESOURCES, 5
 FLUSH PRIVILEGES;
 SET debug='-d,mysql_grant_table_init_out_of_memory';
 
@@ -1871,23 +1870,22 @@ DROP USER u1@h;
 
 --echo # Test case that checks the whole transaction was rolled back
 --echo # in the case of system error and that in-memory cache was reloaded after that
+CREATE USER u1@h;
 CREATE TABLE t1 (a INT);
 SET debug="+d,wl7158_replace_column_table_5";
 
 --error ER_ACL_OPERATION_FAILED
 GRANT SELECT(a), UPDATE(a), INSERT(a), REFERENCES(a) ON t1 TO u1@h;
 SHOW WARNINGS;
---error ER_NONEXISTING_GRANT
-SHOW GRANTS FOR u1@h;
 
 --echo # Check that changes of the whole statement have been rolled back.
 SELECT * FROM mysql.columns_priv WHERE host = 'h' AND user = 'u1';
 SELECT * FROM mysql.tables_priv WHERE host = 'h' AND user = 'u1';
-SELECT * FROM mysql.user WHERE host = 'h' AND user = 'u1';
 
 SET debug="-d,wl7158_replace_column_table_5";
 
 DROP TABLE t1;
+DROP USER u1@h;
 #
 # Tests for table priv
 #
@@ -1964,39 +1962,6 @@ SET debug="-d,wl7158_replace_routine_table_3";
 DROP TABLE t1;
 DROP USER u1@h;
 
---echo
---echo ########################################################################
---echo # E. Check that it is possible to ALTER  storage engine for privilege
---echo #    tables to MyISAM.
---echo #    This is necessary for mysql_system_tables_fix_for_downgrade.sql
---echo #    to work.
---echo ########################################################################
-
-ALTER TABLE mysql.user ENGINE = MyISAM;
-
-ALTER TABLE mysql.db ENGINE = MyISAM;
-
-ALTER TABLE mysql.columns_priv ENGINE = MyISAM;
-
-ALTER TABLE mysql.procs_priv ENGINE = MyISAM;
-
-ALTER TABLE mysql.proxies_priv ENGINE = MyISAM;
-
-ALTER TABLE mysql.tables_priv ENGINE = MyISAM;
-
-SELECT table_name, engine FROM INFORMATION_SCHEMA.TABLES
-WHERE table_schema = 'mysql' AND
-      table_name IN ('user', 'db', 'columns_priv', 'procs_priv',
-                     'proxies_priv', 'tables_priv')
-ORDER BY table_name;
-
-ALTER TABLE mysql.user ENGINE = InnoDB;
-ALTER TABLE mysql.db ENGINE = InnoDB;
-ALTER TABLE mysql.columns_priv ENGINE = InnoDB;
-ALTER TABLE mysql.procs_priv ENGINE = InnoDB;
-ALTER TABLE mysql.proxies_priv ENGINE = InnoDB;
-ALTER TABLE mysql.tables_priv ENGINE = InnoDB;
-
 --echo ########################################################################
 --echo # Checking that it is possible to CREATE privilege tables in MyISAM.
 --echo # This is necessary for upgrade via mysqldump to work.
@@ -2049,6 +2014,16 @@ RENAME TABLE mysql.tables_priv_bak TO mysql.tables_priv;
 # Create the user u1@h before server upgrade.
 
 CREATE USER u1@h;
+
+--echo
+--echo # Remove the session user
+
+#This user is not compatible with 5.6 tables
+let $date_to_restore=`SELECT password_last_changed from mysql.user where user='mysql.session'`;
+let $sess_user_account_priv=`SELECT timestamp from mysql.tables_priv where user='mysql.session'`;
+DELETE FROM mysql.tables_priv WHERE user='mysql.session';
+DELETE FROM mysql.user WHERE user='mysql.session';
+DELETE FROM mysql.db WHERE user='mysql.session';
 
 --echo
 --echo # Backup privilege tables and drop original ones
@@ -2123,7 +2098,7 @@ CREATE TABLE IF NOT EXISTS mysql.user (   Host char(60) binary DEFAULT '' NOT NU
  max_updates int(11) unsigned DEFAULT 0  NOT NULL,
  max_connections int(11) unsigned DEFAULT 0  NOT NULL,
  max_user_connections int(11) unsigned DEFAULT 0  NOT NULL,
- plugin char(64) DEFAULT 'mysql_native_password', authentication_string TEXT,
+ plugin char(64) DEFAULT 'caching_sha2_password', authentication_string TEXT,
  password_expired ENUM('N', 'Y') COLLATE utf8_general_ci DEFAULT 'N' NOT NULL,
  PRIMARY KEY Host (Host,User) ) engine=MyISAM CHARACTER SET utf8 COLLATE utf8_bin
  comment='Users and global privileges';
@@ -2208,11 +2183,6 @@ INSERT INTO mysql.tables_priv(Host, Db, User, Table_name, Grantor, Timestamp, Ta
 COMMIT;
 
 CREATE TABLE t1 (a INT);
-call mtr.add_suppression("ACL table mysql.* must use supported storage engine");
-call mtr.add_suppression("Column count of mysql.* is wrong. "
-                         "Expected .*, found .*. "
-                         "The table is probably corrupted");
-call mtr.add_suppression("Cannot load from mysql.*. The table is probably corrupted");
 
 # Since the definition of mysql.user was changed by the WL#6409 (the column
 # 'password' was removed) the number of column Event_priv was changed by 1.
@@ -2263,40 +2233,14 @@ ORDER BY table_name;
 --echo
 --echo # mysql_upgrade...
 # Filter out ndb_binlog_index to mask differences due to running with or
-# without ndb.
---replace_regex /mysql.ndb_binlog_index.*$//
---exec $MYSQL_UPGRADE 2>&1
-
---echo
---echo # Shutting down mysqld...
---source include/shutdown_mysqld.inc
-
---echo
---echo # Starting mysqld in the regular mode...
---let $restart_parameters =
---source include/start_mysqld.inc
+# without ndb. Always report check-for-upgrade status as OK, as it depends
+# on the order in which tests are run.
+--let $restart_parameters = restart:--upgrade=FORCE
+--let $wait_counter= 10000
+--source include/restart_mysqld.inc
 
 --echo
 --echo # The ACL tables must have been upgraded.
-SELECT table_name, engine FROM INFORMATION_SCHEMA.TABLES
-WHERE table_schema = 'mysql' AND
-      table_name IN ('user', 'db', 'columns_priv', 'procs_priv',
-                     'proxies_priv', 'tables_priv')
-ORDER BY table_name;
-
---echo # Downgrading
---echo
-
---echo
---echo # Alter the storage engine to MyISAM (downgrade).
-
-ALTER TABLE mysql.user ENGINE = MyISAM;
-ALTER TABLE mysql.db ENGINE = MyISAM;
-ALTER TABLE mysql.columns_priv ENGINE = MyISAM;
-ALTER TABLE mysql.procs_priv ENGINE = MyISAM;
-ALTER TABLE mysql.proxies_priv ENGINE = MyISAM;
-ALTER TABLE mysql.tables_priv ENGINE = MyISAM;
-
 SELECT table_name, engine FROM INFORMATION_SCHEMA.TABLES
 WHERE table_schema = 'mysql' AND
       table_name IN ('user', 'db', 'columns_priv', 'procs_priv',
@@ -2315,6 +2259,23 @@ RENAME TABLE mysql.columns_priv_bak TO mysql.columns_priv;
 RENAME TABLE mysql.procs_priv_bak TO mysql.procs_priv;
 RENAME TABLE mysql.proxies_priv_bak TO mysql.proxies_priv;
 RENAME TABLE mysql.tables_priv_bak TO mysql.tables_priv;
+
+#restore the state of the session user
+INSERT IGNORE INTO mysql.user VALUES ('localhost','mysql.session',
+  'N','N','N','N','N','N','N','N','N','N','N','N','N','N','N','Y','N','N','N',
+  'N','N','N','N','N','N','N','N','N','N','','','','',0,0,0,0,
+  'caching_sha2_password','$A$005$THISISACOMBINATIONOFINVALIDSALTANDPASSWORDTHATMUSTNEVERBRBEUSED',
+  'N',CURRENT_TIMESTAMP,NULL,'Y', 'N', 'N', NULL, NULL, NULL, NULL);
+INSERT IGNORE INTO mysql.tables_priv VALUES ('localhost', 'mysql',
+ 'mysql.session', 'user', 'root\@localhost',
+  CURRENT_TIMESTAMP, 'Select', '');
+INSERT IGNORE INTO mysql.db VALUES ('localhost', 'performance\_schema',
+ 'mysql.session','Y','N','N','N','N','N','N','N','N','N','N','N',
+ 'N','N','N','N','N','N','N');
+--disable_query_log ONCE
+--eval UPDATE mysql.tables_priv SET timestamp ='$sess_user_account_priv' WHERE USER= 'mysql.session'
+--disable_query_log ONCE
+--eval UPDATE mysql.user SET password_last_changed= '$date_to_restore' WHERE USER= 'mysql.session'
 
 FLUSH PRIVILEGES;
 

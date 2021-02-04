@@ -1,13 +1,25 @@
-/* Copyright (c) 2000, 2017, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2000, 2019, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
+
+   Without limiting anything contained in the foregoing, this file,
+   which is part of C Driver for MySQL (Connector/C), is also subject to the
+   Universal FOSS Exception, version 1.0, a copy of which can be found at
+   http://oss.oracle.com/licenses/universal-foss-exception.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -20,6 +32,8 @@
 
 #include <string.h>
 #include <sys/types.h>
+
+#include <algorithm>
 
 #include "my_alloc.h"
 #include "my_dbug.h"
@@ -41,53 +55,45 @@
       alloc_increment	Increment for adding new elements
 
   DESCRIPTION
-    init_dynamic_array() initiates array and allocate space for 
-    init_alloc eilements. 
+    init_dynamic_array() initiates array and allocate space for
+    init_alloc eilements.
     Array is usable even if space allocation failed, hence, the
-    function never returns TRUE.
+    function never returns true.
     Static buffers must begin immediately after the array structure.
 
   RETURN VALUE
-    FALSE	Ok
+    false	Ok
 */
 
-bool my_init_dynamic_array(DYNAMIC_ARRAY *array,
-                           PSI_memory_key psi_key,
-                           uint element_size,
-                           void *init_buffer,
-                           uint init_alloc,
-                           uint alloc_increment)
-{
-  DBUG_ENTER("my_init_dynamic_array");
-  if (!alloc_increment)
-  {
-    alloc_increment=MY_MAX((8192-MALLOC_OVERHEAD)/element_size,16);
+bool my_init_dynamic_array(DYNAMIC_ARRAY *array, PSI_memory_key psi_key,
+                           uint element_size, void *init_buffer,
+                           uint init_alloc, uint alloc_increment) {
+  DBUG_TRACE;
+  if (!alloc_increment) {
+    alloc_increment = std::max((8192 - MALLOC_OVERHEAD) / element_size, 16U);
     if (init_alloc > 8 && alloc_increment > init_alloc * 2)
-      alloc_increment=init_alloc*2;
+      alloc_increment = init_alloc * 2;
   }
 
-  if (!init_alloc)
-  {
-    init_alloc=alloc_increment;
-    init_buffer= 0;
+  if (!init_alloc) {
+    init_alloc = alloc_increment;
+    init_buffer = nullptr;
   }
-  array->elements=0;
-  array->max_element=init_alloc;
-  array->alloc_increment=alloc_increment;
-  array->size_of_element=element_size;
-  array->m_psi_key= psi_key;
-  if ((array->buffer= static_cast<uchar*>(init_buffer)))
-    DBUG_RETURN(FALSE);
-  /* 
+  array->elements = 0;
+  array->max_element = init_alloc;
+  array->alloc_increment = alloc_increment;
+  array->size_of_element = element_size;
+  array->m_psi_key = psi_key;
+  if ((array->buffer = static_cast<uchar *>(init_buffer))) return false;
+  /*
     Since the dynamic array is usable even if allocation fails here malloc
     should not throw an error
   */
-  if (!(array->buffer= (uchar*) my_malloc(psi_key,
-                                          element_size*init_alloc, MYF(0))))
-    array->max_element=0;
-  DBUG_RETURN(FALSE);
-} 
-
+  if (!(array->buffer =
+            (uchar *)my_malloc(psi_key, element_size * init_alloc, MYF(0))))
+    array->max_element = 0;
+  return false;
+}
 
 /*
   Insert element at the end of array. Allocate memory if needed.
@@ -98,30 +104,24 @@ bool my_init_dynamic_array(DYNAMIC_ARRAY *array,
       element
 
   RETURN VALUE
-    TRUE	Insert failed
-    FALSE	Ok
+    true	Insert failed
+    false	Ok
 */
 
-bool insert_dynamic(DYNAMIC_ARRAY *array, const void *element)
-{
-  uchar* buffer;
-  if (array->elements == array->max_element)
-  {						/* Call only when nessesary */
-    if (!(buffer= static_cast<uchar*>(alloc_dynamic(array))))
-      return TRUE;
-  }
-  else
-  {
-    buffer=array->buffer+(array->elements * array->size_of_element);
+bool insert_dynamic(DYNAMIC_ARRAY *array, const void *element) {
+  uchar *buffer;
+  if (array->elements == array->max_element) { /* Call only when nessesary */
+    if (!(buffer = static_cast<uchar *>(alloc_dynamic(array)))) return true;
+  } else {
+    buffer = array->buffer + (array->elements * array->size_of_element);
     array->elements++;
   }
-  memcpy(buffer,element,(size_t) array->size_of_element);
-  return FALSE;
+  memcpy(buffer, element, (size_t)array->size_of_element);
+  return false;
 }
 
-
 /*
-  Alloc space for next element(s) 
+  Alloc space for next element(s)
 
   SYNOPSIS
     alloc_dynamic()
@@ -137,71 +137,32 @@ bool insert_dynamic(DYNAMIC_ARRAY *array, const void *element)
     0		Error
 */
 
-void *alloc_dynamic(DYNAMIC_ARRAY *array)
-{
-  if (array->elements == array->max_element)
-  {
+void *alloc_dynamic(DYNAMIC_ARRAY *array) {
+  if (array->elements == array->max_element) {
     char *new_ptr;
-    if (array->buffer == (uchar *)(array + 1))
-    {
+    if (array->buffer == (uchar *)(array + 1)) {
       /*
         In this senerio, the buffer is statically preallocated,
         so we have to create an all-new malloc since we overflowed
       */
-      if (!(new_ptr= (char *) my_malloc(array->m_psi_key,
-                                        (array->max_element+
-                                         array->alloc_increment) *
-                                        array->size_of_element,
-                                        MYF(MY_WME))))
-        return 0;
-      memcpy(new_ptr, array->buffer, 
-             array->elements * array->size_of_element);
-    }
-    else
-    if (!(new_ptr=(char*) my_realloc(array->m_psi_key,
-                                     array->buffer,(array->max_element+
-                                     array->alloc_increment)*
-                                     array->size_of_element,
-                                     MYF(MY_WME | MY_ALLOW_ZERO_PTR))))
-      return 0;
-    array->buffer= (uchar*) new_ptr;
-    array->max_element+=array->alloc_increment;
+      if (!(new_ptr = (char *)my_malloc(
+                array->m_psi_key,
+                (array->max_element + array->alloc_increment) *
+                    array->size_of_element,
+                MYF(MY_WME))))
+        return nullptr;
+      memcpy(new_ptr, array->buffer, array->elements * array->size_of_element);
+    } else if (!(new_ptr = (char *)my_realloc(
+                     array->m_psi_key, array->buffer,
+                     (array->max_element + array->alloc_increment) *
+                         array->size_of_element,
+                     MYF(MY_WME | MY_ALLOW_ZERO_PTR))))
+      return nullptr;
+    array->buffer = (uchar *)new_ptr;
+    array->max_element += array->alloc_increment;
   }
-  return array->buffer+(array->elements++ * array->size_of_element);
+  return array->buffer + (array->elements++ * array->size_of_element);
 }
-
-
-/*
-  Pop last element from array.
-
-  SYNOPSIS
-    pop_dynamic()
-      array
-  
-  RETURN VALUE    
-    pointer	Ok
-    0		Array is empty
-*/
-
-void *pop_dynamic(DYNAMIC_ARRAY *array)
-{
-  if (array->elements)
-    return array->buffer+(--array->elements * array->size_of_element);
-  return 0;
-}
-
-
-void claim_dynamic(DYNAMIC_ARRAY *array)
-{
-  /*
-    Check for a static buffer
-  */
-  if (array->buffer == (uchar *)(array + 1))
-    return;
-
-  my_claim(array->buffer);
-}
-
 
 /*
   Empty array by freeing all memory
@@ -211,48 +172,15 @@ void claim_dynamic(DYNAMIC_ARRAY *array)
       array	Array to be deleted
 */
 
-void delete_dynamic(DYNAMIC_ARRAY *array)
-{
+void delete_dynamic(DYNAMIC_ARRAY *array) {
   /*
     Just mark as empty if we are using a static buffer
   */
   if (array->buffer == (uchar *)(array + 1))
-    array->elements= 0;
-  else
-  if (array->buffer)
-  {
+    array->elements = 0;
+  else if (array->buffer) {
     my_free(array->buffer);
-    array->buffer=0;
-    array->elements=array->max_element=0;
-  }
-}
-
-
-/*
-  Free unused memory
-
-  SYNOPSIS
-    freeze_size()
-      array	Array to be freed
-
-*/
-
-void freeze_size(DYNAMIC_ARRAY *array)
-{
-  uint elements=MY_MAX(array->elements,1);
-
-  /*
-    Do nothing if we are using a static buffer
-  */
-  if (array->buffer == (uchar *)(array + 1))
-    return;
-    
-  if (array->buffer && array->max_element != elements)
-  {
-    array->buffer=(uchar*) my_realloc(array->m_psi_key,
-                                      array->buffer,
-                                     elements*array->size_of_element,
-                                     MYF(MY_WME));
-    array->max_element=elements;
+    array->buffer = nullptr;
+    array->elements = array->max_element = 0;
   }
 }

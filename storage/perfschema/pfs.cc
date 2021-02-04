@@ -1,17 +1,45 @@
-/* Copyright (c) 2008, 2017, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2008, 2020, Oracle and/or its affiliates.
 
   This program is free software; you can redistribute it and/or modify
-  it under the terms of the GNU General Public License as published by
-  the Free Software Foundation; version 2 of the License.
+  it under the terms of the GNU General Public License, version 2.0,
+  as published by the Free Software Foundation.
+
+  This program is also distributed with certain software (including
+  but not limited to OpenSSL) that is licensed under separate terms,
+  as designated in a particular file or component or in included license
+  documentation.  The authors of MySQL hereby grant you an additional
+  permission to link the program and your derivative works with the
+  separately licensed software that they have included with MySQL.
 
   This program is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  GNU General Public License for more details.
+  GNU General Public License, version 2.0, for more details.
 
   You should have received a copy of the GNU General Public License
-  along with this program; if not, write to the Free Software Foundation,
-  51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
+  along with this program; if not, write to the Free Software
+  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
+
+#define HAVE_PSI_COND_INTERFACE
+#define HAVE_PSI_DATA_LOCK_INTERFACE
+#define HAVE_PSI_ERROR_INTERFACE
+#define HAVE_PSI_FILE_INTERFACE
+#define HAVE_PSI_IDLE_INTERFACE
+#define HAVE_PSI_MEMORY_INTERFACE
+#define HAVE_PSI_METADATA_INTERFACE
+#define HAVE_PSI_MUTEX_INTERFACE
+#define HAVE_PSI_PS_INTERFACE
+#define HAVE_PSI_RWLOCK_INTERFACE
+#define HAVE_PSI_SOCKET_INTERFACE
+#define HAVE_PSI_SP_INTERFACE
+#define HAVE_PSI_STAGE_INTERFACE
+#define HAVE_PSI_STATEMENT_DIGEST_INTERFACE
+#define HAVE_PSI_STATEMENT_INTERFACE
+#define HAVE_PSI_SYSTEM_INTERFACE
+#define HAVE_PSI_TABLE_INTERFACE
+#define HAVE_PSI_THREAD_INTERFACE
+#define HAVE_PSI_TRANSACTION_INTERFACE
+#define HAVE_PSI_TLS_CHANNEL_INTERFACE
 
 #include "storage/perfschema/pfs.h"
 
@@ -19,6 +47,25 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <mysql/components/component_implementation.h>
+#include <mysql/components/service.h>
+#include <mysql/components/service_implementation.h>
+#include <mysql/components/services/psi_cond_service.h>
+#include <mysql/components/services/psi_error_service.h>
+#include <mysql/components/services/psi_file_service.h>
+#include <mysql/components/services/psi_idle_service.h>
+#include <mysql/components/services/psi_mdl_service.h>
+#include <mysql/components/services/psi_memory_service.h>
+#include <mysql/components/services/psi_mutex_service.h>
+#include <mysql/components/services/psi_rwlock_service.h>
+#include <mysql/components/services/psi_socket_service.h>
+#include <mysql/components/services/psi_stage_service.h>
+#include <mysql/components/services/psi_statement_service.h>
+#include <mysql/components/services/psi_system_service.h>
+#include <mysql/components/services/psi_table_service.h>
+#include <mysql/components/services/psi_thread_service.h>
+#include <mysql/components/services/psi_tls_channel_service.h>
+#include <mysql/components/services/psi_transaction_service.h>
 #include <sys/types.h>
 #include <time.h>
 
@@ -27,7 +74,6 @@
   The performance schema implementation of all instruments.
 */
 #include "lex_string.h"
-#include "mdl.h" /* mdl_key_init */
 #include "my_compiler.h"
 #include "my_dbug.h"
 #include "my_inttypes.h"
@@ -35,41 +81,49 @@
 #include "my_macros.h"
 #include "my_thread.h"
 #include "mysql/psi/mysql_thread.h"
-#include "pfs_account.h"
-#include "pfs_column_values.h"
-#include "pfs_data_lock.h"
-#include "pfs_digest.h"
-#include "pfs_error.h"
 #include "pfs_error_provider.h"
-#include "pfs_events_stages.h"
-#include "pfs_events_statements.h"
-#include "pfs_events_transactions.h"
-#include "pfs_events_waits.h"
 /* Make sure exported prototypes match the implementation. */
 #include "pfs_file_provider.h"
-#include "pfs_global.h"
-#include "pfs_host.h"
 #include "pfs_idle_provider.h"
-#include "pfs_instr.h"
-#include "pfs_instr_class.h"
 #include "pfs_memory_provider.h"
 #include "pfs_metadata_provider.h"
-#include "pfs_prepared_stmt.h"
-#include "pfs_program.h"
-#include "pfs_setup_actor.h"
-#include "pfs_setup_object.h"
 #include "pfs_socket_provider.h"
 #include "pfs_stage_provider.h"
 #include "pfs_statement_provider.h"
+#include "pfs_system_provider.h"
 #include "pfs_table_provider.h"
 #include "pfs_thread_provider.h"
-#include "pfs_timer.h"
 #include "pfs_transaction_provider.h"
-#include "pfs_user.h"
-#include "sp_head.h"
-#include "sql_const.h"
-#include "sql_error.h"
+#include "sql/mdl.h" /* mdl_key_init */
+#include "sql/sp_head.h"
+#include "sql/sql_const.h"
+#include "sql/sql_error.h"
+#include "storage/perfschema/pfs_account.h"
+#include "storage/perfschema/pfs_column_values.h"
+#include "storage/perfschema/pfs_data_lock.h"
+#include "storage/perfschema/pfs_digest.h"
+#include "storage/perfschema/pfs_error.h"
+#include "storage/perfschema/pfs_events_stages.h"
+#include "storage/perfschema/pfs_events_statements.h"
+#include "storage/perfschema/pfs_events_transactions.h"
+#include "storage/perfschema/pfs_events_waits.h"
+#include "storage/perfschema/pfs_global.h"
+#include "storage/perfschema/pfs_host.h"
+#include "storage/perfschema/pfs_instr.h"
+#include "storage/perfschema/pfs_instr_class.h"
+#include "storage/perfschema/pfs_plugin_table.h"
+#include "storage/perfschema/pfs_prepared_stmt.h"
+#include "storage/perfschema/pfs_program.h"
+#include "storage/perfschema/pfs_services.h"
+#include "storage/perfschema/pfs_setup_actor.h"
+#include "storage/perfschema/pfs_setup_object.h"
+#include "storage/perfschema/pfs_timer.h"
+#include "storage/perfschema/pfs_tls_channel.h"
+#include "storage/perfschema/pfs_user.h"
+#include "storage/perfschema/service_pfs_notification.h"
 #include "thr_lock.h"
+
+using std::min;
 
 /*
   Exporting cmake compilation flags to doxygen,
@@ -77,24 +131,26 @@
 */
 #ifdef IN_DOXYGEN
 #define HAVE_PSI_2
-#define DISABLE_PSI_MUTEX
-#define DISABLE_PSI_RWLOCK
 #define DISABLE_PSI_COND
+#define DISABLE_PSI_DATA_LOCK
+#define DISABLE_PSI_ERROR
 #define DISABLE_PSI_FILE
-#define DISABLE_PSI_THREAD
-#define DISABLE_PSI_TABLE
+#define DISABLE_PSI_IDLE
+#define DISABLE_PSI_MEMORY
+#define DISABLE_PSI_METADATA
+#define DISABLE_PSI_MUTEX
+#define DISABLE_PSI_PS
+#define DISABLE_PSI_RWLOCK
+#define DISABLE_PSI_SOCKET
+#define DISABLE_PSI_SP
 #define DISABLE_PSI_STAGE
 #define DISABLE_PSI_STATEMENT
-#define DISABLE_PSI_SP
-#define DISABLE_PSI_PS
 #define DISABLE_PSI_STATEMENT_DIGEST
-#define DISABLE_PSI_SOCKET
-#define DISABLE_PSI_MEMORY
-#define DISABLE_PSI_ERROR
-#define DISABLE_PSI_IDLE
-#define DISABLE_PSI_METADATA
+#define DISABLE_PSI_SYSTEM
+#define DISABLE_PSI_TABLE
+#define DISABLE_PSI_THREAD
 #define DISABLE_PSI_TRANSACTION
-#define DISABLE_PSI_DATA_LOCK
+#define DISABLE_PSI_TLS_CHANNEL
 #endif /* IN_DOXYGEN */
 
 /*
@@ -104,35 +160,29 @@
 #undef PFS_PARANOID
 
 #ifdef PFS_PARANOID
-static void
-report_memory_accounting_error(const char *api_name,
-                               PFS_thread *new_thread,
-                               size_t size,
-                               PFS_memory_class *klass,
-                               PFS_thread *old_thread)
-{
+static void report_memory_accounting_error(const char *api_name,
+                                           PFS_thread *new_thread, size_t size,
+                                           PFS_memory_class *klass,
+                                           PFS_thread *old_thread) {
   pfs_print_error(
-    "%s "
-    "thread <%d> of class <%s> "
-    "not owner of <%d> bytes in class <%s> "
-    "allocated by thread <%d> of class <%s>\n",
-    api_name,
-    new_thread->m_thread_internal_id,
-    new_thread->m_class->m_name,
-    size,
-    klass->m_name,
-    old_thread->m_thread_internal_id,
-    old_thread->m_class->m_name);
+      "%s "
+      "thread <%d> of class <%s> "
+      "not owner of <%d> bytes in class <%s> "
+      "allocated by thread <%d> of class <%s>\n",
+      api_name, new_thread->m_thread_internal_id, new_thread->m_class->m_name,
+      size, klass->m_name, old_thread->m_thread_internal_id,
+      old_thread->m_class->m_name);
 
   DBUG_ASSERT(strcmp(new_thread->m_class->m_name, "thread/sql/event_worker") !=
               0);
   DBUG_ASSERT(
-    strcmp(new_thread->m_class->m_name, "thread/sql/event_scheduler") != 0);
+      strcmp(new_thread->m_class->m_name, "thread/sql/event_scheduler") != 0);
   DBUG_ASSERT(
-    strcmp(new_thread->m_class->m_name, "thread/sql/one_connection") != 0);
+      strcmp(new_thread->m_class->m_name, "thread/sql/one_connection") != 0);
 }
 #endif /* PFS_PARANOID */
 
+/* clang-format off */
 /**
   @page PAGE_PFS Performance Schema
   MySQL PERFORMANCE_SCHEMA implementation.
@@ -419,6 +469,14 @@ report_memory_accounting_error(const char *api_name,
   @subpage PAGE_PFS_DATA_LOCKS
 
   @subpage PAGE_PFS_NEW_TABLE
+
+  @subpage PAGE_PFS_NOTIFICATION_SERVICE
+
+  @subpage PAGE_PFS_RESOURCE_GROUP_SERVICE
+
+  @subpage PAGE_PFS_TABLE_PLUGIN_SERVICE
+
+  @subpage PAGE_PFS_TLS_CHANNEL
 */
 
 /**
@@ -427,6 +485,16 @@ report_memory_accounting_error(const char *api_name,
 
   @section PFS_PSI_INTRO Introduction
 
+  Any code can be instrumented with the performance schema,
+  regardless of the kind of code used:
+  - code within the server implementation itself
+  - code within various plugins, including storage engines,
+    compiled and delivered with the server (aka, static plugins)
+  - code within various plugins, including storage engines,
+    compiled and delivered separately from the server (aka, dynamic plugins)
+  - code from components, either provided by MySQL or by third parties,
+    compiled and delivered separately (and loaded dynamically).
+
   The instrumentation interface consist of two layers:
   - a raw ABI (Application Binary Interface) layer, that exposes the primitive
   instrumentation functions exported by the performance schema instrumentation
@@ -434,46 +502,132 @@ report_memory_accounting_error(const char *api_name,
   that provides many helpers for a developer instrumenting some code,
   to make the instrumentation as easy as possible.
 
-  The ABI layer consists of files such as:
-@code
-#include "mysql/psi/psi_mutex.h"
-#include "mysql/psi/psi_file.h"
-@endcode
+  In each case, the API may expand into different code paths,
+  and use different ABI infrastructure, depending on how the code is built.
+  In each case, the API exposed is consistent:
+  instrumented source code is the same, regardless of where it is built.
 
-  The API layer consists of files such as:
-@code
-#include "mysql/psi/mutex_mutex.h"
-#include "mysql/psi/mutex_file.h"
-@endcode
+  The following sections details what happens technically for each type of code.
+  The same instrumentation (a mutex) is used, to illustrate.
 
-  The first helper is for mutexes,
-  the second for file I/O.
+  @section PFS_PSI_NONE Non instrumented code
 
-  The API layer exposes C macros and typedefs which will expand:
-  - either to non-instrumented code, when compiled without the performance
-  schema instrumentation
-  - or to instrumented code, that will issue the raw calls to the ABI layer
-  so that the implementation can collect data.
+  Assume some existing code using a mutex, for example for linux
 
-  Note that all the names introduced (for example, @c mysql_mutex_lock) do not
-  collide with any other namespace.
-  In particular, the macro @c mysql_mutex_lock is on purpose not named
-  @c pthread_mutex_lock.
-  This is to:
-  - avoid overloading @c pthread_mutex_lock with yet another macro,
-  which is dangerous as it can affect user code and pollute
-  the end-user namespace.
-  - allow the developer instrumenting code to selectively instrument
-  some code but not all.
+  @code
+  #include <pthread.h>
 
-  @section PRINCIPLES Design principles
+  pthread_mutex_t foo;
 
-  The ABI part is designed as a facade, that exposes basic primitives.
-  The expectation is that each primitive will be very stable over time,
-  but the list will constantly grow when more instruments are supported.
-  To support binary compatibility with plugins compiled with a different
-  version of the instrumentation, the ABI itself is versioned
-  (see @c PSI_MUTEX_VERSION_1, @c PSI_MUTEX_VERSION_2).
+  void do_something()
+  {
+    pthread_mutex_lock(&foo);
+    ...
+    pthread_mutex_unlock(&foo);
+  }
+  @endcode
+
+  MySQL already provides some wrappers,
+  to make the code platform independent, as in
+
+  @code
+  #include "thr_mutex.h"
+
+  my_mutex_t foo;
+
+  void do_something()
+  {
+    my_mutex_lock(&foo);
+    ...
+    my_mutex_unlock(&foo);
+  }
+  @endcode
+
+  Code using @c my_mutex_t is not instrumented for performance measurement.
+
+  @section PFS_PSI_SERVER Instrumentation for server code
+
+  To instrument the code, use a @c mysql_mutex_t instead.
+  All the APIs provided are meant to be used as a simple replacement.
+
+  @code
+  #include "mysql/psi/mysql_mutex.h"
+
+  mysql_mutex_t foo;
+
+  void do_something()
+  {
+    mysql_mutex_lock(&foo);
+    ...
+    mysql_mutex_unlock(&foo);
+  }
+  @endcode
+
+  The server code can be built with or without each kind of instrumentation.
+
+  If cmake is configured with @c -DDISABLE_PSI_MUTEX,
+  the mutex instrumentation is not compiled.
+  In this case, @c HAVE_PSI_MUTEX_INTERFACE is not defined,
+  so that @c mysql_mutex_lock() expands into
+
+  @code
+static inline int
+inline_mysql_mutex_lock(mysql_mutex_t *that,
+                        const char *src_file MY_ATTRIBUTE((unused)),
+                        uint src_line MY_ATTRIBUTE((unused))
+                        )
+{
+  int result;
+
+  ... Non instrumented code ...
+  result = my_mutex_lock(&that->m_mutex);
+
+  return result;
+}
+  @endcode
+
+  In other words, when not building with instrumentation, @c mysql_mutex_lock()
+  is simply replaced with the actual call to @c my_mutex_lock(),
+
+  When building with the mutex instrumentation enabled (the default),
+  @c mysql_mutex_lock() expands into this sequence.
+
+  @code
+static inline int
+inline_mysql_mutex_lock(mysql_mutex_t *that,
+                        const char *src_file,
+                        uint src_line)
+{
+  int result;
+
+#ifdef HAVE_PSI_MUTEX_INTERFACE
+  if (that->m_psi != NULL)
+  {
+    ... (a) Instrumentation start ...
+    PSI_mutex_locker *locker;
+    PSI_mutex_locker_state state;
+    locker = PSI_MUTEX_CALL(start_mutex_wait)(
+      &state, that->m_psi, PSI_MUTEX_LOCK, src_file, src_line);
+
+    ... (b) Instrumented code ...
+    result = my_mutex_lock(&that->m_mutex);
+
+    ... (c) Instrumentation end ...
+    if (locker != NULL)
+    {
+      PSI_MUTEX_CALL(end_mutex_wait)(locker, result);
+    }
+
+    return result;
+  }
+#endif
+
+  ... Non instrumented code ...
+  result = my_mutex_lock(&that->m_mutex);
+
+  return result;
+}
+  @endcode
 
   For a given instrumentation point in the API, the basic coding pattern
   used is:
@@ -487,102 +641,588 @@ report_memory_accounting_error(const char *api_name,
   This pointer helps the implementation to keep context, for performances.
 
   The following code fragment is annotated to show how in detail this pattern
-  in implemented, when the instrumentation is compiled in:
+  in implemented, when the instrumentation is compiled in statically.
+  In this case,
+  the @c PSI_MUTEX_CALL macro expands to a function call,
+  which results in
 
-@verbatim
+  @code
 static inline int
-mysql_mutex_lock(
-  mysql_mutex_t *that, const char *src_file, uint src_line)
+inline_mysql_mutex_lock(mysql_mutex_t *that,
+                        const char *src_file,
+                        uint src_line)
 {
   int result;
-  struct PSI_mutex_locker_state state;
-  struct PSI_mutex_locker *locker= NULL;
 
-  ............... (a)
-  locker= PSI_MUTEX_CALL(start_mutex_wait)(&state, that->p_psi, PSI_MUTEX_LOCK,
-                                           src_file, src_line);
+#ifdef HAVE_PSI_MUTEX_INTERFACE
+  if (that->m_psi != NULL)
+  {
+    ... (a) Instrumentation start ...
+    PSI_mutex_locker *locker;
+    PSI_mutex_locker_state state;
+    locker = pfs_start_mutex_wait_v1(
+      &state, that->m_psi, PSI_MUTEX_LOCK, src_file, src_line);
 
-  ............... (b)
-  result= pthread_mutex_lock(&that->m_mutex);
+    ... (b) Instrumented code ...
+    result = my_mutex_lock(&that->m_mutex);
 
-  ............... (c)
-  PSI_MUTEX_CALL(end_mutex_wait)(locker, result);
+    ... (c) Instrumentation end ...
+    if (locker != NULL)
+    {
+      pfs_end_mutex_wait_v1(locker, result);
+    }
+
+    return result;
+  }
+#endif
+
+  ... Non instrumented code ...
+  result = my_mutex_lock(&that->m_mutex);
 
   return result;
 }
-@endverbatim
+  @endcode
 
-  When the performance schema instrumentation is not compiled in,
-  the code becomes simply a wrapper, expanded in line by the compiler:
+  When the performance schema is disabled at runtime, the @c m_psi pointer
+  is @c NULL, so the extra overhead is one if statement.
 
+  When the performance schema is enabled at runtime, the @c m_psi pointer
+  points to the actual instrumentation added to the mutex,
+  and two extra calls are present on the code path:
+  - a call to @c pfs_start_mutex_wait_v1() before the operation
+  - a call to @c pfs_end_mutex_wait_v1() after the operation
+
+  Both these calls are static, and point directly to the
+  performance_schema implementation.
+
+  @section PFS_PSI_PLUGIN Instrumentation for a plugin
+
+  Inside a plugin, @c PSI_MUTEX_CALL expands to a call using a function pointer.
+  This is to decouple the plugin binary from the implementation,
+  to avoid having hard coded references to symbols like
+  pfs_start_mutex_wait_v1()
+  from the plugin library (either shared or static).
+
+  The plugin library, however, still depends on a symbol
+  to be provided by the server,
+  in this case @c psi_mutex_service.
+
+  @code
+static inline int
+inline_mysql_mutex_lock(mysql_mutex_t *that,
+                        const char *src_file,
+                        uint src_line)
+{
+  int result;
+
+#ifdef HAVE_PSI_MUTEX_INTERFACE
+  if (that->m_psi != NULL)
+  {
+    ... (a) Instrumentation start ...
+    PSI_mutex_locker *locker;
+    PSI_mutex_locker_state state;
+    locker = psi_mutex_service->start_mutex_wait(
+      &state, that->m_psi, PSI_MUTEX_LOCK, src_file, src_line);
+
+    ... (b) Instrumented code ...
+    result = my_mutex_lock(&that->m_mutex);
+
+    ... (c) Instrumentation end ...
+    if (locker != NULL)
+    {
+      psi_mutex_service->end_mutex_wait(locker, result);
+    }
+
+    return result;
+  }
+#endif
+
+  ... Non instrumented code ...
+  result = my_mutex_lock(&that->m_mutex);
+
+  return result;
+}
+  @endcode
+
+  This solution works overall, but has some limitations.
+
+  @section PFS_PSI_COMPONENT Instrumentation for component
+
+  The goal when compiling a component is to have zero linker dependencies
+  on the server code, and have technical dependencies described as
+  references to services instead.
+
+  Another goal is to compile code the same way, independently of the
+  technical choices affecting the implementation (pthread mutexes
+  or native windows critical sections, SAFE_MUTEX debug helpers or not, etc)
+
+  For the mutex instrumentation in particular, the pattern used
+  is to have a service that delegates all decisions to the server code.
+  For this reason, all the parameters that might or might not be needed
+  depending on the ultimate implementation
+  (such as @c __FILE__ and @c __LINE__ for @c SAFE_MUTEX)
+  are provided in all cases.
+
+  In a component, the code is instrumented using a different header file,
+  everything else is the same.
+
+  @code
+  #include "mysql/component/services/mysql_mutex.h"
+
+  mysql_mutex_t foo;
+
+  void do_something()
+  {
+    mysql_mutex_lock(&foo);
+    ...
+    mysql_mutex_unlock(&foo);
+  }
+  @endcode
+
+  The call to @c mysql_mutex_lock() expands into
+
+  @code
+  REQUIRES_SERVICE_PLACEHOLDER(mysql_mutex_v1);
+
+  mysql_service_mysql_mutex_v1->lock(M, __FILE__, __LINE__);
+  @endcode
+
+  In the component metadata, the dependency on the mutex service needs
+  to be declared explicitly, as in:
+
+  @code
+  BEGIN_COMPONENT_REQUIRES(pfs_example)
+    REQUIRES_SERVICE(mysql_mutex_v1)
+  END_COMPONENT_REQUIRES();
+  @endcode
+
+  When the component is loaded:
+  - the loader inspects the COMPONENT_REQUIRES metadata,
+    and find the service dependencies
+  - service dependencies are resolved,
+    which assigns a proper value to the @c mysql_service_mysql_mutex_v1 pointer.
+
+  From this point, code compiled in the component can be executed normally,
+  and calls to @c mysql_mutex_lock() land into the service implementation,
+  which is a simple instrumented mutex lock compiled in the server.
+
+  @code
+  int
+  impl_mysql_mutex_lock(
+    mysql_mutex_t *that,
+    const char *src_file,
+    unsigned int src_line)
+  {
+    return mysql_mutex_lock_with_src(that, src_file, src_line);
+  }
+  @endcode
+
+  @section PFS_PSI_LIST List of available instrumentation
+
+  The current list of instrumentation provided by the performance schema
+  is as follows:
+
+  <table>
+  <caption id="list_pfs_instr">%List of available instrumentation</caption>
+  <tr>
+    <th rowspan="2">Scope</th>
+    <th colspan="2">User code</th>
+    <th colspan="2">Implementation entry point</th>
+  </tr>
+  <tr>
+    <th>Server or Plugin</th>
+    <th>Component</th>
+    <th>Server or Plugin</th>
+    <th>Component</th>
+  </tr>
+
+  <tr>
+    <td>Mutex (high level)</td>
+    <td>
 @verbatim
-static inline int mysql_mutex_lock(...)
-{
-  int result;
-
-  ............... (b)
-  result= pthread_mutex_lock(&that->m_mutex);
-
-  return result;
-}
+#include "mysql/psi/mysql_mutex.h"
+mysql_mutex_lock()
 @endverbatim
-
-  When the performance schema instrumentation is compiled in,
-  and when the code compiled is internal to the server implementation,
-  PSI_MUTEX_CALL expands directly to functions calls in the performance schema,
-  to make (a) and (c) calls as efficient as possible.
-
+    </td>
+    <td>
 @verbatim
-static inline int mysql_mutex_lock(...)
-{
-  int result;
-  struct PSI_mutex_locker_state state;
-  struct PSI_mutex_locker *locker= NULL;
-
-  ............... (a)
-  locker= pfs_start_mutex_wait_v1(&state, that->p_psi, PSI_MUTEX_LOCK,
-                                  src_file, src_line);
-
-  ............... (b)
-  result= pthread_mutex_lock(&that->m_mutex);
-
-  ............... (c)
-  pfs_end_mutex_wait_v1(locker, result);
-
-  return result;
-}
+#include "mysql/components/services/mysql_mutex.h"
+mysql_mutex_lock()
 @endverbatim
+    </td>
+    <td>@ref PSI_mutex_bootstrap</td>
+    <td>@ref REQUIRES_MYSQL_MUTEX_SERVICE</td>
+  </tr>
 
-  When the performance schema instrumentation is compiled in,
-  and when the code compiled is external to the server implementation
-  (typically, a dynamic plugin),
-  PSI_MUTEX_CALL expands to dynamic calls to the underlying implementation,
-  using the PSI_server entry point.
-  This makes (a) and (c) slower, as a function pointer
-  is used instead of a static call,
-  but also independent of the implementation, for binary compatibility.
-
+  <tr>
+    <td>Rwlock (high level)</td>
+    <td>
 @verbatim
-static inline int mysql_mutex_lock(...)
-{
-  int result;
-  struct PSI_mutex_locker_state state;
-  struct PSI_mutex_locker *locker= NULL;
-
-  ............... (a)
-  locker= PSI_server->start_mutex_wait(&state, that->p_psi, PSI_MUTEX_LOCK,
-                                       src_file, src_line);
-
-  ............... (b)
-  result= pthread_mutex_lock(&that->m_mutex);
-
-  ............... (c)
-  PSI_server->end_mutex_wait(locker, result);
-
-  return result;
-}
+#include "mysql/psi/mysql_rwlock.h"
+mysql_rwlock_rdlock()
 @endverbatim
+    </td>
+    <td>
+@verbatim
+#include "mysql/components/services/mysql_rwlock.h"
+mysql_rwlock_rdlock()
+@endverbatim
+    </td>
+    <td>@ref PSI_rwlock_bootstrap</td>
+    <td>@ref REQUIRES_MYSQL_RWLOCK_SERVICE</td>
+  </tr>
 
+  <tr>
+    <td>Conditions (high level)</td>
+    <td>
+@verbatim
+#include "mysql/psi/mysql_cond.h"
+mysql_cond_wait()
+@endverbatim
+    </td>
+    <td>
+@verbatim
+#include "mysql/components/services/mysql_cond.h"
+mysql_cond_wait()
+@endverbatim
+    </td>
+    <td>@ref PSI_cond_bootstrap</td>
+    <td>@ref REQUIRES_MYSQL_COND_SERVICE</td>
+  </tr>
+
+  <tr>
+    <td>Mutex (low level)</td>
+    <td>
+@verbatim
+#include "mysql/psi/psi_mutex.h"
+PSI_MUTEX_CALL(start_mutex_wait)(...)
+PSI_MUTEX_CALL(end_mutex_wait)(...)
+@endverbatim
+    </td>
+    <td>
+@verbatim
+#include "mysql/components/services/psi_mutex.h"
+PSI_MUTEX_CALL(start_mutex_wait)(...)
+PSI_MUTEX_CALL(end_mutex_wait)(...)
+@endverbatim
+    </td>
+    <td>@ref PSI_mutex_bootstrap</td>
+    <td>@ref REQUIRES_PSI_MUTEX_SERVICE</td>
+  </tr>
+
+  <tr>
+    <td>Rwlock (low level)</td>
+    <td>
+@verbatim
+#include "mysql/psi/psi_rwlock.h"
+PSI_RWLOCK_CALL(start_rwlock_rdwait)(...)
+PSI_RWLOCK_CALL(end_rwlock_rdwait)(...)
+@endverbatim
+    </td>
+    <td>
+@verbatim
+#include "mysql/components/services/psi_rwlock.h"
+PSI_RWLOCK_CALL(start_rwlock_rdwait)(...)
+PSI_RWLOCK_CALL(end_rwlock_rdwait)(...)
+@endverbatim
+    </td>
+    <td>@ref PSI_rwlock_bootstrap</td>
+    <td>@ref REQUIRES_PSI_RWLOCK_SERVICE</td>
+  </tr>
+
+  <tr>
+    <td>Conditions (low level)</td>
+    <td>
+@verbatim
+#include "mysql/psi/mysql_cond.h"
+PSI_COND_CALL(start_cond_wait)(...)
+PSI_COND_CALL(end_cond_wait)(...)
+@endverbatim
+    </td>
+    <td>
+@verbatim
+#include "mysql/components/services/psi_cond.h"
+PSI_COND_CALL(start_cond_wait)(...)
+PSI_COND_CALL(end_cond_wait)(...)
+@endverbatim
+    </td>
+    <td>@ref PSI_cond_bootstrap</td>
+    <td>@ref REQUIRES_PSI_COND_SERVICE</td>
+  </tr>
+
+  <tr>
+    <td>Errors</td>
+    <td>
+@verbatim
+#include "mysql/psi/psi_error.h"
+PSI_ERROR_CALL(log_error)(...)
+@endverbatim
+    </td>
+    <td>
+@verbatim
+#include "mysql/components/services/psi_error.h"
+PSI_ERROR_CALL(log_error)(...)
+@endverbatim
+    </td>
+    <td>@ref PSI_error_bootstrap</td>
+    <td>@ref REQUIRES_PSI_ERROR_SERVICE</td>
+  </tr>
+
+  <tr>
+    <td>File</td>
+    <td>
+@verbatim
+#include "mysql/psi/psi_file.h"
+PSI_FILE_CALL(start_file_wait)(...)
+PSI_FILE_CALL(end_file_wait)(...)
+@endverbatim
+    </td>
+    <td>
+@verbatim
+#include "mysql/components/services/psi_file.h"
+PSI_FILE_CALL(start_file_wait)(...)
+PSI_FILE_CALL(end_file_wait)(...)
+@endverbatim
+    </td>
+    <td>@ref PSI_file_bootstrap</td>
+    <td>@ref REQUIRES_PSI_FILE_SERVICE</td>
+  </tr>
+
+  <tr>
+    <td>Idle</td>
+    <td>
+@verbatim
+#include "mysql/psi/psi_idle.h"
+PSI_IDLE_CALL(start_idle_wait)(...)
+PSI_IDLE_CALL(end_idle_wait)(...)
+@endverbatim
+    </td>
+    <td>
+@verbatim
+#include "mysql/components/services/psi_idle.h"
+PSI_IDLE_CALL(start_idle_wait)(...)
+PSI_IDLE_CALL(end_idle_wait)(...)
+@endverbatim
+    </td>
+    <td>@ref PSI_idle_bootstrap</td>
+    <td>@ref REQUIRES_PSI_IDLE_SERVICE</td>
+  </tr>
+
+  <tr>
+    <td>Metadata locks</td>
+    <td>
+@verbatim
+#include "mysql/psi/psi_mdl.h"
+PSI_METADATA_CALL(start_metadata_wait)(...)
+PSI_METADATA_CALL(end_metadata_wait)(...)
+@endverbatim
+    </td>
+    <td>
+@verbatim
+#include "mysql/components/services/psi_mdl.h"
+PSI_METADATA_CALL(start_metadata_wait)(...)
+PSI_METADATA_CALL(end_metadata_wait)(...)
+@endverbatim
+    </td>
+    <td>@ref PSI_mdl_bootstrap</td>
+    <td>@ref REQUIRES_PSI_MDL_SERVICE</td>
+  </tr>
+
+  <tr>
+    <td>Memory</td>
+    <td>
+@verbatim
+#include "mysql/psi/psi_memory.h"
+PSI_MEMORY_CALL(memory_alloc)(...)
+PSI_MEMORY_CALL(memory_free)(...)
+@endverbatim
+    </td>
+    <td>
+@verbatim
+#include "mysql/components/services/psi_memory.h"
+PSI_MEMORY_CALL(memory_alloc)(...)
+PSI_MEMORY_CALL(memory_free)(...)
+@endverbatim
+    </td>
+    <td>@ref PSI_memory_bootstrap</td>
+    <td>@ref REQUIRES_PSI_MEMORY_SERVICE</td>
+  </tr>
+
+  <tr>
+    <td>Socket</td>
+    <td>
+@verbatim
+#include "mysql/psi/psi_socket.h"
+PSI_SOCKET_CALL(start_socket_wait)(...)
+PSI_SOCKET_CALL(end_socket_wait)(...)
+@endverbatim
+    </td>
+    <td>
+@verbatim
+#include "mysql/components/services/psi_socket.h"
+PSI_SOCKET_CALL(start_socket_wait)(...)
+PSI_SOCKET_CALL(end_socket_wait)(...)
+@endverbatim
+    </td>
+    <td>@ref PSI_socket_bootstrap</td>
+    <td>@ref REQUIRES_PSI_SOCKET_SERVICE</td>
+  </tr>
+
+  <tr>
+    <td>Stage</td>
+    <td>
+@verbatim
+#include "mysql/psi/psi_stage.h"
+PSI_STAGE_CALL(start_stage)(...)
+@endverbatim
+    </td>
+    <td>
+@verbatim
+#include "mysql/components/services/psi_stage.h"
+PSI_STAGE_CALL(start_stage)(...)
+@endverbatim
+    </td>
+    <td>@ref PSI_stage_bootstrap</td>
+    <td>@ref REQUIRES_PSI_STAGE_SERVICE</td>
+  </tr>
+
+  <tr>
+    <td>Statement</td>
+    <td>
+@verbatim
+#include "mysql/psi/psi_statement.h"
+PSI_STATEMENT_CALL(start_statement)(...)
+PSI_STATEMENT_CALL(end_statement)(...)
+
+Extra helpers available:
+MYSQL_START_STATEMENT()
+MYSQL_END_STATEMENT()
+@endverbatim
+    </td>
+    <td>
+@verbatim
+#include "mysql/components/services/psi_statement.h"
+PSI_STATEMENT_CALL(start_statement)(...)
+PSI_STATEMENT_CALL(end_statement)(...)
+@endverbatim
+    </td>
+    <td>@ref PSI_statement_bootstrap</td>
+    <td>@ref REQUIRES_PSI_STATEMENT_SERVICE</td>
+  </tr>
+
+  <tr>
+    <td>%Table</td>
+    <td>
+@verbatim
+#include "mysql/psi/psi_table.h"
+PSI_TABLE_CALL(start_table_io_wait)(...)
+PSI_TABLE_CALL(end_table_io_wait)(...)
+@endverbatim
+    </td>
+    <td>
+@verbatim
+#include "mysql/components/services/psi_table.h"
+PSI_TABLE_CALL(start_table_io_wait)(...)
+PSI_TABLE_CALL(end_table_io_wait)(...)
+@endverbatim
+    </td>
+    <td>@ref PSI_table_bootstrap</td>
+    <td>@ref REQUIRES_PSI_TABLE_SERVICE</td>
+  </tr>
+
+  <tr>
+    <td>System</td>
+    <td>
+@verbatim
+#include "mysql/psi/psi_system.h"
+PSI_SYSTEM_CALL(plugin_unload)(...)
+@endverbatim
+    </td>
+    <td>
+@verbatim
+#include "mysql/components/services/psi_system.h"
+PSI_SYSTEM_CALL(plugin_unload)(...)
+@endverbatim
+    </td>
+    <td>@ref PSI_system_bootstrap</td>
+    <td>@ref REQUIRES_PSI_SYSTEM_SERVICE</td>
+  </tr>
+
+  <tr>
+    <td>Thread</td>
+    <td>
+@verbatim
+#include "mysql/psi/psi_thread.h"
+PSI_THREAD_CALL(spawn_thread)(...)
+PSI_THREAD_CALL(delete_thread)(...)
+@endverbatim
+    </td>
+    <td>
+@verbatim
+#include "mysql/components/services/psi_thread.h"
+PSI_THREAD_CALL(spawn_thread)(...)
+PSI_THREAD_CALL(delete_thread)(...)
+@endverbatim
+    </td>
+    <td>@ref PSI_thread_bootstrap</td>
+    <td>@ref REQUIRES_PSI_THREAD_SERVICE</td>
+  </tr>
+
+  <tr>
+    <td>Transaction</td>
+    <td>
+@verbatim
+#include "mysql/psi/psi_transaction.h"
+PSI_TRANSACTION_CALL(start_transaction)(...)
+PSI_TRANSACTION_CALL(end_transaction)(...)
+@endverbatim
+    </td>
+    <td>
+@verbatim
+#include "mysql/components/services/psi_transaction.h"
+PSI_TRANSACTION_CALL(start_transaction)(...)
+PSI_TRANSACTION_CALL(end_transaction)(...)
+@endverbatim
+    </td>
+    <td>@ref PSI_transaction_bootstrap</td>
+    <td>@ref REQUIRES_PSI_TRANSACTION_SERVICE</td>
+  </tr>
+
+  <tr>
+    <td>Data locks</td>
+    <td>
+@verbatim
+#include "mysql/psi/psi_data_lock.h"
+PSI_DATA_LOCK_CALL(register_data_lock)(...)
+PSI_DATA_LOCK_CALL(unregister_data_lock)(...)
+@endverbatim
+    </td>
+    <td> Not available as a service.</td>
+    <td>@ref PSI_data_lock_bootstrap</td>
+    <td>Not available as a service.</td>
+  </tr>
+
+  <tr>
+    <td> TLS Channels</td>
+    <td>
+@verbatim
+#include "mysql/psi/psi_tls_channel.h"
+PSI_TLS_CHANNEL_CALL(register_tls_channel)(...)
+PSI_TLS_CHANNEL_CALL(unregister_tls_channel)(...)
+@endverbatim
+    </td>
+    <td>
+@verbatim
+#include "mysql/components/services/psi_tls_channel.h"
+PSI_TLS_CHANNEL_CALL(register_tls_channel)(...)
+PSI_TLS_CHANNEL_CALL(unregister_tls_channel)(...)
+@endverbatim
+    </td>
+    <td>@ref PSI_tls_channel_bootstrap</td>
+    <td>@ref REQUIRES_PSI_TLS_CHANNEL_SERVICE</td>
+  </tr>
+
+  </table>
 */
 
 /**
@@ -975,8 +1615,8 @@ static inline int mysql_mutex_lock(...)
 @endverbatim
 
   Implemented as:
-  - [1] #pfs_start_rwlock_rdwait_v1(), #pfs_end_rwlock_rdwait_v1(), ...
-  - [2] #pfs_destroy_rwlock_v1()
+  - [1] #pfs_start_rwlock_rdwait_v2(), #pfs_end_rwlock_rdwait_v2(), ...
+  - [2] #pfs_destroy_rwlock_v2()
   - [A] EVENTS_WAITS_SUMMARY_BY_THREAD_BY_EVENT_NAME,
         @c table_ews_by_thread_by_event_name::make_row()
   - [B] EVENTS_WAITS_SUMMARY_BY_INSTANCE,
@@ -1255,12 +1895,12 @@ static inline int mysql_mutex_lock(...)
 @endverbatim
 
   Implemented as:
-  - [1] #pfs_start_statement_v1(), #pfs_end_statement_v1()
+  - [1] #pfs_start_statement_v2(), #pfs_end_statement_v2()
        (1a, 1b) is an aggregation by EVENT_NAME,
         (1c, 1d, 1e) is an aggregation by TIME,
         (1f) is an aggregation by DIGEST
         all of these are orthogonal,
-        and implemented in #pfs_end_statement_v1().
+        and implemented in #pfs_end_statement_v2().
   - [2] #pfs_delete_thread_v1(), #aggregate_thread_statements()
   - [3] @c PFS_account::aggregate_statements()
   - [4] @c PFS_host::aggregate_statements()
@@ -1391,9 +2031,9 @@ static inline int mysql_mutex_lock(...)
 @endverbatim
 
   Implemented as:
-  - [1] #pfs_memory_alloc_v1(),
-        #pfs_memory_realloc_v1(),
-        #pfs_memory_free_v1().
+  - [1] #pfs_memory_alloc_vc(),
+        #pfs_memory_realloc_vc(),
+        #pfs_memory_free_vc().
   - [1+] are overflows that can happen during [1a],
         implemented with @c carry_memory_stat_delta()
   - [2] #pfs_delete_thread_v1(), #aggregate_thread_memory()
@@ -1460,6 +2100,7 @@ static inline int mysql_mutex_lock(...)
   - [E] EVENTS_ERRORS_SUMMARY_GLOBAL_BY_ERROR,
         @c table_ees_global_by_error::make_row()
 */
+/* clang-format on */
 
 /**
   @defgroup performance_schema Performance Schema
@@ -1473,34 +2114,12 @@ static inline int mysql_mutex_lock(...)
   @ingroup performance_schema_implementation
 */
 
-thread_local_key_t THR_PFS;
-thread_local_key_t THR_PFS_VG;   // global_variables
-thread_local_key_t THR_PFS_SV;   // session_variables
-thread_local_key_t THR_PFS_VBT;  // variables_by_thread
-thread_local_key_t THR_PFS_SG;   // global_status
-thread_local_key_t THR_PFS_SS;   // session_status
-thread_local_key_t THR_PFS_SBT;  // status_by_thread
-thread_local_key_t THR_PFS_SBU;  // status_by_user
-thread_local_key_t THR_PFS_SBH;  // status_by_host
-thread_local_key_t THR_PFS_SBA;  // status_by_account
+thread_local PFS_thread *THR_PFS = nullptr;
+thread_local PFS_table_context *THR_PFS_contexts[THR_PFS_NUM_KEYS];
 
-bool THR_PFS_initialized = false;
+static inline PFS_thread *my_thread_get_THR_PFS() { return THR_PFS; }
 
-static inline PFS_thread *
-my_thread_get_THR_PFS()
-{
-  DBUG_ASSERT(THR_PFS_initialized);
-  PFS_thread *thread = static_cast<PFS_thread *>(my_get_thread_local(THR_PFS));
-  DBUG_ASSERT(thread == NULL || sanitize_thread(thread) != NULL);
-  return thread;
-}
-
-static inline void
-my_thread_set_THR_PFS(PFS_thread *pfs)
-{
-  DBUG_ASSERT(THR_PFS_initialized);
-  my_set_thread_local(THR_PFS, pfs);
-}
+static inline void my_thread_set_THR_PFS(PFS_thread *pfs) { THR_PFS = pfs; }
 
 /**
   Conversion map from PSI_mutex_operation to enum_operation_type.
@@ -1514,18 +2133,21 @@ static enum_operation_type mutex_operation_map[] = {OPERATION_TYPE_LOCK,
   Indexed by enum PSI_rwlock_operation.
 */
 static enum_operation_type rwlock_operation_map[] = {
-  OPERATION_TYPE_READLOCK,
-  OPERATION_TYPE_WRITELOCK,
-  OPERATION_TYPE_TRYREADLOCK,
-  OPERATION_TYPE_TRYWRITELOCK,
+    OPERATION_TYPE_READLOCK,
+    OPERATION_TYPE_WRITELOCK,
+    OPERATION_TYPE_TRYREADLOCK,
+    OPERATION_TYPE_TRYWRITELOCK,
+    OPERATION_TYPE_UNLOCK,
 
-  OPERATION_TYPE_SHAREDLOCK,
-  OPERATION_TYPE_SHAREDEXCLUSIVELOCK,
-  OPERATION_TYPE_EXCLUSIVELOCK,
-  OPERATION_TYPE_TRYSHAREDLOCK,
-  OPERATION_TYPE_TRYSHAREDEXCLUSIVELOCK,
-  OPERATION_TYPE_TRYEXCLUSIVELOCK,
-};
+    OPERATION_TYPE_SHAREDLOCK,
+    OPERATION_TYPE_SHAREDEXCLUSIVELOCK,
+    OPERATION_TYPE_EXCLUSIVELOCK,
+    OPERATION_TYPE_TRYSHAREDLOCK,
+    OPERATION_TYPE_TRYSHAREDEXCLUSIVELOCK,
+    OPERATION_TYPE_TRYEXCLUSIVELOCK,
+    OPERATION_TYPE_SHAREDUNLOCK,
+    OPERATION_TYPE_SHAREDEXCLUSIVEUNLOCK,
+    OPERATION_TYPE_EXCLUSIVEUNLOCK};
 
 /**
   Conversion map from PSI_cond_operation to enum_operation_type.
@@ -1539,50 +2161,41 @@ static enum_operation_type cond_operation_map[] = {OPERATION_TYPE_WAIT,
   Indexed by enum PSI_file_operation.
 */
 static enum_operation_type file_operation_map[] = {
-  OPERATION_TYPE_FILECREATE,
-  OPERATION_TYPE_FILECREATETMP,
-  OPERATION_TYPE_FILEOPEN,
-  OPERATION_TYPE_FILESTREAMOPEN,
-  OPERATION_TYPE_FILECLOSE,
-  OPERATION_TYPE_FILESTREAMCLOSE,
-  OPERATION_TYPE_FILEREAD,
-  OPERATION_TYPE_FILEWRITE,
-  OPERATION_TYPE_FILESEEK,
-  OPERATION_TYPE_FILETELL,
-  OPERATION_TYPE_FILEFLUSH,
-  OPERATION_TYPE_FILESTAT,
-  OPERATION_TYPE_FILEFSTAT,
-  OPERATION_TYPE_FILECHSIZE,
-  OPERATION_TYPE_FILEDELETE,
-  OPERATION_TYPE_FILERENAME,
-  OPERATION_TYPE_FILESYNC};
+    OPERATION_TYPE_FILECREATE, OPERATION_TYPE_FILECREATETMP,
+    OPERATION_TYPE_FILEOPEN,   OPERATION_TYPE_FILESTREAMOPEN,
+    OPERATION_TYPE_FILECLOSE,  OPERATION_TYPE_FILESTREAMCLOSE,
+    OPERATION_TYPE_FILEREAD,   OPERATION_TYPE_FILEWRITE,
+    OPERATION_TYPE_FILESEEK,   OPERATION_TYPE_FILETELL,
+    OPERATION_TYPE_FILEFLUSH,  OPERATION_TYPE_FILESTAT,
+    OPERATION_TYPE_FILEFSTAT,  OPERATION_TYPE_FILECHSIZE,
+    OPERATION_TYPE_FILEDELETE, OPERATION_TYPE_FILERENAME,
+    OPERATION_TYPE_FILESYNC};
 
 /**
   Conversion map from PSI_table_operation to enum_operation_type.
   Indexed by enum PSI_table_io_operation.
 */
 static enum_operation_type table_io_operation_map[] = {
-  OPERATION_TYPE_TABLE_FETCH,
-  OPERATION_TYPE_TABLE_WRITE_ROW,
-  OPERATION_TYPE_TABLE_UPDATE_ROW,
-  OPERATION_TYPE_TABLE_DELETE_ROW};
+    OPERATION_TYPE_TABLE_FETCH, OPERATION_TYPE_TABLE_WRITE_ROW,
+    OPERATION_TYPE_TABLE_UPDATE_ROW, OPERATION_TYPE_TABLE_DELETE_ROW};
 
 /**
   Conversion map from enum PFS_TL_LOCK_TYPE to enum_operation_type.
   Indexed by enum PFS_TL_LOCK_TYPE.
 */
 static enum_operation_type table_lock_operation_map[] = {
-  OPERATION_TYPE_TL_READ_NORMAL,             /* PFS_TL_READ */
-  OPERATION_TYPE_TL_READ_WITH_SHARED_LOCKS,  /* PFS_TL_READ_WITH_SHARED_LOCKS */
-  OPERATION_TYPE_TL_READ_HIGH_PRIORITY,      /* PFS_TL_READ_HIGH_PRIORITY */
-  OPERATION_TYPE_TL_READ_NO_INSERTS,         /* PFS_TL_READ_NO_INSERT */
-  OPERATION_TYPE_TL_WRITE_ALLOW_WRITE,       /* PFS_TL_WRITE_ALLOW_WRITE */
-  OPERATION_TYPE_TL_WRITE_CONCURRENT_INSERT, /* PFS_TL_WRITE_CONCURRENT_INSERT
+    OPERATION_TYPE_TL_READ_NORMAL,             /* PFS_TL_READ */
+    OPERATION_TYPE_TL_READ_WITH_SHARED_LOCKS,  /* PFS_TL_READ_WITH_SHARED_LOCKS
                                                 */
-  OPERATION_TYPE_TL_WRITE_LOW_PRIORITY,      /* PFS_TL_WRITE_LOW_PRIORITY */
-  OPERATION_TYPE_TL_WRITE_NORMAL,            /* PFS_TL_WRITE */
-  OPERATION_TYPE_TL_READ_EXTERNAL,           /* PFS_TL_READ_EXTERNAL */
-  OPERATION_TYPE_TL_WRITE_EXTERNAL           /* PFS_TL_WRITE_EXTERNAL */
+    OPERATION_TYPE_TL_READ_HIGH_PRIORITY,      /* PFS_TL_READ_HIGH_PRIORITY */
+    OPERATION_TYPE_TL_READ_NO_INSERTS,         /* PFS_TL_READ_NO_INSERT */
+    OPERATION_TYPE_TL_WRITE_ALLOW_WRITE,       /* PFS_TL_WRITE_ALLOW_WRITE */
+    OPERATION_TYPE_TL_WRITE_CONCURRENT_INSERT, /* PFS_TL_WRITE_CONCURRENT_INSERT
+                                                */
+    OPERATION_TYPE_TL_WRITE_LOW_PRIORITY,      /* PFS_TL_WRITE_LOW_PRIORITY */
+    OPERATION_TYPE_TL_WRITE_NORMAL,            /* PFS_TL_WRITE */
+    OPERATION_TYPE_TL_READ_EXTERNAL,           /* PFS_TL_READ_EXTERNAL */
+    OPERATION_TYPE_TL_WRITE_EXTERNAL           /* PFS_TL_WRITE_EXTERNAL */
 };
 
 /**
@@ -1590,21 +2203,14 @@ static enum_operation_type table_lock_operation_map[] = {
   Indexed by enum PSI_socket_operation.
 */
 static enum_operation_type socket_operation_map[] = {
-  OPERATION_TYPE_SOCKETCREATE,
-  OPERATION_TYPE_SOCKETCONNECT,
-  OPERATION_TYPE_SOCKETBIND,
-  OPERATION_TYPE_SOCKETCLOSE,
-  OPERATION_TYPE_SOCKETSEND,
-  OPERATION_TYPE_SOCKETRECV,
-  OPERATION_TYPE_SOCKETSENDTO,
-  OPERATION_TYPE_SOCKETRECVFROM,
-  OPERATION_TYPE_SOCKETSENDMSG,
-  OPERATION_TYPE_SOCKETRECVMSG,
-  OPERATION_TYPE_SOCKETSEEK,
-  OPERATION_TYPE_SOCKETOPT,
-  OPERATION_TYPE_SOCKETSTAT,
-  OPERATION_TYPE_SOCKETSHUTDOWN,
-  OPERATION_TYPE_SOCKETSELECT};
+    OPERATION_TYPE_SOCKETCREATE,  OPERATION_TYPE_SOCKETCONNECT,
+    OPERATION_TYPE_SOCKETBIND,    OPERATION_TYPE_SOCKETCLOSE,
+    OPERATION_TYPE_SOCKETSEND,    OPERATION_TYPE_SOCKETRECV,
+    OPERATION_TYPE_SOCKETSENDTO,  OPERATION_TYPE_SOCKETRECVFROM,
+    OPERATION_TYPE_SOCKETSENDMSG, OPERATION_TYPE_SOCKETRECVMSG,
+    OPERATION_TYPE_SOCKETSEEK,    OPERATION_TYPE_SOCKETOPT,
+    OPERATION_TYPE_SOCKETSTAT,    OPERATION_TYPE_SOCKETSHUTDOWN,
+    OPERATION_TYPE_SOCKETSELECT};
 
 /**
   Build the prefix name of a class of instruments in a category.
@@ -1618,26 +2224,19 @@ static enum_operation_type socket_operation_map[] = {
   @param [out] output_length  Length of the resulting output string.
   @return 0 for success, non zero for errors
 */
-static int
-build_prefix(const LEX_STRING *prefix,
-             const char *category,
-             char *output,
-             size_t *output_length)
-{
+static int build_prefix(const LEX_CSTRING *prefix, const char *category,
+                        char *output, size_t *output_length) {
   size_t len = strlen(category);
   char *out_ptr = output;
   size_t prefix_length = prefix->length;
 
-  if (unlikely((prefix_length + len + 2) >= PFS_MAX_FULL_PREFIX_NAME_LENGTH))
-  {
+  if (unlikely((prefix_length + len + 2) >= PFS_MAX_FULL_PREFIX_NAME_LENGTH)) {
     pfs_print_error("build_prefix: prefix+category is too long <%s> <%s>\n",
-                    prefix->str,
-                    category);
+                    prefix->str, category);
     return 1;
   }
 
-  if (unlikely(strchr(category, '/') != NULL))
-  {
+  if (unlikely(strchr(category, '/') != nullptr)) {
     pfs_print_error("build_prefix: invalid category <%s>\n", category);
     return 1;
   }
@@ -1645,8 +2244,7 @@ build_prefix(const LEX_STRING *prefix,
   /* output = prefix + '/' + category + '/' */
   memcpy(out_ptr, prefix->str, prefix_length);
   out_ptr += prefix_length;
-  if (len > 0)
-  {
+  if (len > 0) {
     *out_ptr = '/';
     out_ptr++;
     memcpy(out_ptr, category, len);
@@ -1659,135 +2257,119 @@ build_prefix(const LEX_STRING *prefix,
   return 0;
 }
 
-#define REGISTER_BODY_V1(KEY_T, PREFIX, REGISTER_FUNC)                      \
-  KEY_T key;                                                                \
-  char formatted_name[PFS_MAX_INFO_NAME_LENGTH];                            \
-  size_t prefix_length;                                                     \
-  size_t len;                                                               \
-  size_t full_length;                                                       \
-                                                                            \
-  DBUG_ASSERT(category != NULL);                                            \
-  DBUG_ASSERT(info != NULL);                                                \
-  if (unlikely(                                                             \
-        build_prefix(&PREFIX, category, formatted_name, &prefix_length)) || \
-      !pfs_initialized)                                                     \
-  {                                                                         \
-    for (; count > 0; count--, info++)                                      \
-      *(info->m_key) = 0;                                                   \
-    return;                                                                 \
-  }                                                                         \
-                                                                            \
-  for (; count > 0; count--, info++)                                        \
-  {                                                                         \
-    DBUG_ASSERT(info->m_key != NULL);                                       \
-    DBUG_ASSERT(info->m_name != NULL);                                      \
-    len = strlen(info->m_name);                                             \
-    full_length = prefix_length + len;                                      \
-    if (likely(full_length <= PFS_MAX_INFO_NAME_LENGTH))                    \
-    {                                                                       \
-      memcpy(formatted_name + prefix_length, info->m_name, len);            \
-      key = REGISTER_FUNC(formatted_name, (uint)full_length, info);         \
-    }                                                                       \
-    else                                                                    \
-    {                                                                       \
-      pfs_print_error("REGISTER_BODY_V1: name too long <%s> <%s>\n",        \
-                      category,                                             \
-                      info->m_name);                                        \
-      key = 0;                                                              \
-    }                                                                       \
-                                                                            \
-    *(info->m_key) = key;                                                   \
-  }                                                                         \
+#define REGISTER_BODY_V1(KEY_T, PREFIX, REGISTER_FUNC)                         \
+  KEY_T key;                                                                   \
+  char formatted_name[PFS_MAX_INFO_NAME_LENGTH];                               \
+  size_t prefix_length;                                                        \
+  size_t len;                                                                  \
+  size_t full_length;                                                          \
+                                                                               \
+  DBUG_ASSERT(category != nullptr);                                            \
+  DBUG_ASSERT(info != nullptr);                                                \
+  if (unlikely(                                                                \
+          build_prefix(&PREFIX, category, formatted_name, &prefix_length)) ||  \
+      !pfs_initialized) {                                                      \
+    for (; count > 0; count--, info++) *(info->m_key) = 0;                     \
+    return;                                                                    \
+  }                                                                            \
+                                                                               \
+  for (; count > 0; count--, info++) {                                         \
+    DBUG_ASSERT(info->m_key != nullptr);                                       \
+    DBUG_ASSERT(info->m_name != nullptr);                                      \
+    len = strlen(info->m_name);                                                \
+    full_length = prefix_length + len;                                         \
+    if (likely(full_length <= PFS_MAX_INFO_NAME_LENGTH)) {                     \
+      memcpy(formatted_name + prefix_length, info->m_name, len);               \
+      key = REGISTER_FUNC(formatted_name, (uint)full_length, info);            \
+    } else {                                                                   \
+      pfs_print_error("REGISTER_BODY_V1: name too long <%s> <%s>\n", category, \
+                      info->m_name);                                           \
+      key = 0;                                                                 \
+    }                                                                          \
+                                                                               \
+    *(info->m_key) = key;                                                      \
+  }                                                                            \
   return
 
 /* Use C linkage for the interface functions. */
-
-C_MODE_START
 
 /**
   Implementation of the mutex instrumentation interface.
   @sa PSI_v1::register_mutex.
 */
-void
-pfs_register_mutex_v1(const char *category, PSI_mutex_info_v1 *info, int count)
-{
-  REGISTER_BODY_V1(
-    PSI_mutex_key, mutex_instrument_prefix, register_mutex_class);
+void pfs_register_mutex_v1(const char *category, PSI_mutex_info_v1 *info,
+                           int count) {
+  REGISTER_BODY_V1(PSI_mutex_key, mutex_instrument_prefix,
+                   register_mutex_class);
 }
 
 /**
   Implementation of the rwlock instrumentation interface.
-  @sa PSI_v1::register_rwlock.
+  @sa PSI_v2::register_rwlock.
 */
-void
-pfs_register_rwlock_v1(const char *category,
-                       PSI_rwlock_info_v1 *info,
-                       int count)
-{
+void pfs_register_rwlock_v2(const char *category, PSI_rwlock_info_v1 *info,
+                            int count) {
   PSI_rwlock_key key;
+  char pr_formatted_name[PFS_MAX_INFO_NAME_LENGTH];
   char rw_formatted_name[PFS_MAX_INFO_NAME_LENGTH];
   char sx_formatted_name[PFS_MAX_INFO_NAME_LENGTH];
+  size_t pr_prefix_length;
   size_t rw_prefix_length;
   size_t sx_prefix_length;
   size_t len;
   size_t full_length;
 
-  DBUG_ASSERT(category != NULL);
-  DBUG_ASSERT(info != NULL);
-  if (build_prefix(&rwlock_instrument_prefix,
-                   category,
-                   rw_formatted_name,
+  DBUG_ASSERT(category != nullptr);
+  DBUG_ASSERT(info != nullptr);
+  if (build_prefix(&prlock_instrument_prefix, category, pr_formatted_name,
+                   &pr_prefix_length) ||
+      build_prefix(&rwlock_instrument_prefix, category, rw_formatted_name,
                    &rw_prefix_length) ||
-      build_prefix(&sxlock_instrument_prefix,
-                   category,
-                   sx_formatted_name,
+      build_prefix(&sxlock_instrument_prefix, category, sx_formatted_name,
                    &sx_prefix_length) ||
-      !pfs_initialized)
-  {
-    for (; count > 0; count--, info++)
-    {
+      !pfs_initialized) {
+    for (; count > 0; count--, info++) {
       *(info->m_key) = 0;
     }
     return;
   }
 
-  for (; count > 0; count--, info++)
-  {
-    DBUG_ASSERT(info->m_key != NULL);
-    DBUG_ASSERT(info->m_name != NULL);
+  for (; count > 0; count--, info++) {
+    DBUG_ASSERT(info->m_key != nullptr);
+    DBUG_ASSERT(info->m_name != nullptr);
     len = strlen(info->m_name);
 
-    if (info->m_flags & PSI_RWLOCK_FLAG_SX)
-    {
+    if (info->m_flags & PSI_FLAG_RWLOCK_SX) {
       full_length = sx_prefix_length + len;
-      if (likely(full_length <= PFS_MAX_INFO_NAME_LENGTH))
-      {
+      if (likely(full_length <= PFS_MAX_INFO_NAME_LENGTH)) {
         memcpy(sx_formatted_name + sx_prefix_length, info->m_name, len);
         key = register_rwlock_class(sx_formatted_name, (uint)full_length, info);
-      }
-      else
-      {
+      } else {
         pfs_print_error(
-          "pfs_register_rwlock_v1: (sx) name too long <%s> <%s>\n",
-          category,
-          info->m_name);
+            "pfs_register_rwlock_v2: (sx) name too long <%s> <%s>\n", category,
+            info->m_name);
         key = 0;
       }
-    }
-    else
-    {
+    } else if (info->m_flags & PSI_FLAG_RWLOCK_PR) {
+      full_length = pr_prefix_length + len;
+      if (likely(full_length <= PFS_MAX_INFO_NAME_LENGTH)) {
+        memcpy(pr_formatted_name + pr_prefix_length, info->m_name, len);
+        key = register_rwlock_class(pr_formatted_name, (uint)full_length, info);
+      } else {
+        pfs_print_error(
+            "pfs_register_rwlock_v2: (pr) name too long <%s> <%s>\n", category,
+            info->m_name);
+        key = 0;
+      }
+    } else {
       full_length = rw_prefix_length + len;
-      if (likely(full_length <= PFS_MAX_INFO_NAME_LENGTH))
-      {
+      if (likely(full_length <= PFS_MAX_INFO_NAME_LENGTH)) {
         memcpy(rw_formatted_name + rw_prefix_length, info->m_name, len);
         key = register_rwlock_class(rw_formatted_name, (uint)full_length, info);
-      }
-      else
-      {
+      } else {
         pfs_print_error(
-          "pfs_register_rwlock_v1: (rw) name too long <%s> <%s>\n",
-          category,
-          info->m_name);
+            "pfs_register_rwlock_v2: (rw) name too long <%s> <%s>\n", category,
+            info->m_name);
         key = 0;
       }
     }
@@ -1801,9 +2383,8 @@ pfs_register_rwlock_v1(const char *category,
   Implementation of the cond instrumentation interface.
   @sa PSI_v1::register_cond.
 */
-void
-pfs_register_cond_v1(const char *category, PSI_cond_info_v1 *info, int count)
-{
+void pfs_register_cond_v1(const char *category, PSI_cond_info_v1 *info,
+                          int count) {
   REGISTER_BODY_V1(PSI_cond_key, cond_instrument_prefix, register_cond_class);
 }
 
@@ -1811,110 +2392,86 @@ pfs_register_cond_v1(const char *category, PSI_cond_info_v1 *info, int count)
   Implementation of the thread instrumentation interface.
   @sa PSI_v1::register_thread.
 */
-void
-pfs_register_thread_v1(const char *category,
-                       PSI_thread_info_v1 *info,
-                       int count)
-{
-  REGISTER_BODY_V1(
-    PSI_thread_key, thread_instrument_prefix, register_thread_class);
+void pfs_register_thread_vc(const char *category, PSI_thread_info *info,
+                            int count) {
+  REGISTER_BODY_V1(PSI_thread_key, thread_instrument_prefix,
+                   register_thread_class);
 }
 
 /**
   Implementation of the file instrumentation interface.
   @sa PSI_v1::register_file.
 */
-void
-pfs_register_file_v1(const char *category, PSI_file_info_v1 *info, int count)
-{
+void pfs_register_file_vc(const char *category, PSI_file_info_v1 *info,
+                          int count) {
   REGISTER_BODY_V1(PSI_file_key, file_instrument_prefix, register_file_class);
 }
 
-void
-pfs_register_stage_v1(const char *category,
-                      PSI_stage_info_v1 **info_array,
-                      int count)
-{
+void pfs_register_stage_v1(const char *category, PSI_stage_info_v1 **info_array,
+                           int count) {
   char formatted_name[PFS_MAX_INFO_NAME_LENGTH];
   size_t prefix_length;
   size_t len;
   size_t full_length;
   PSI_stage_info_v1 *info;
 
-  DBUG_ASSERT(category != NULL);
-  DBUG_ASSERT(info_array != NULL);
-  if (unlikely(build_prefix(
-        &stage_instrument_prefix, category, formatted_name, &prefix_length)) ||
-      !pfs_initialized)
-  {
-    for (; count > 0; count--, info_array++)
-    {
+  DBUG_ASSERT(category != nullptr);
+  DBUG_ASSERT(info_array != nullptr);
+  if (unlikely(build_prefix(&stage_instrument_prefix, category, formatted_name,
+                            &prefix_length)) ||
+      !pfs_initialized) {
+    for (; count > 0; count--, info_array++) {
       (*info_array)->m_key = 0;
     }
     return;
   }
 
-  for (; count > 0; count--, info_array++)
-  {
+  for (; count > 0; count--, info_array++) {
     info = *info_array;
-    DBUG_ASSERT(info != NULL);
-    DBUG_ASSERT(info->m_name != NULL);
+    DBUG_ASSERT(info != nullptr);
+    DBUG_ASSERT(info->m_name != nullptr);
     len = strlen(info->m_name);
     full_length = prefix_length + len;
-    if (likely(full_length <= PFS_MAX_INFO_NAME_LENGTH))
-    {
+    if (likely(full_length <= PFS_MAX_INFO_NAME_LENGTH)) {
       memcpy(formatted_name + prefix_length, info->m_name, len);
-      info->m_key = register_stage_class(
-        formatted_name, (uint)prefix_length, (uint)full_length, info);
-    }
-    else
-    {
-      pfs_print_error(
-        "register_stage_v1: name too long <%s> <%s>\n", category, info->m_name);
+      info->m_key = register_stage_class(formatted_name, (uint)prefix_length,
+                                         (uint)full_length, info);
+    } else {
+      pfs_print_error("register_stage_v1: name too long <%s> <%s>\n", category,
+                      info->m_name);
       info->m_key = 0;
     }
   }
   return;
 }
 
-void
-pfs_register_statement_v1(const char *category,
-                          PSI_statement_info_v1 *info,
-                          int count)
-{
+void pfs_register_statement_v2(const char *category, PSI_statement_info *info,
+                               int count) {
   char formatted_name[PFS_MAX_INFO_NAME_LENGTH];
   size_t prefix_length;
   size_t len;
   size_t full_length;
 
-  DBUG_ASSERT(category != NULL);
-  DBUG_ASSERT(info != NULL);
-  if (unlikely(build_prefix(&statement_instrument_prefix,
-                            category,
-                            formatted_name,
-                            &prefix_length)) ||
-      !pfs_initialized)
-  {
-    for (; count > 0; count--, info++)
-    {
+  DBUG_ASSERT(category != nullptr);
+  DBUG_ASSERT(info != nullptr);
+  if (unlikely(build_prefix(&statement_instrument_prefix, category,
+                            formatted_name, &prefix_length)) ||
+      !pfs_initialized) {
+    for (; count > 0; count--, info++) {
       info->m_key = 0;
     }
     return;
   }
 
-  for (; count > 0; count--, info++)
-  {
-    DBUG_ASSERT(info->m_name != NULL);
+  for (; count > 0; count--, info++) {
+    DBUG_ASSERT(info->m_name != nullptr);
     len = strlen(info->m_name);
     full_length = prefix_length + len;
-    if (likely(full_length <= PFS_MAX_INFO_NAME_LENGTH))
-    {
+    if (likely(full_length <= PFS_MAX_INFO_NAME_LENGTH)) {
       memcpy(formatted_name + prefix_length, info->m_name, len);
       info->m_key =
-        register_statement_class(formatted_name, (uint)full_length, info);
-    }
-    else
-    {
+          register_statement_class(formatted_name, (uint)full_length, info);
+    } else {
       pfs_print_error("register_statement_v1: name too long <%s>\n",
                       info->m_name);
       info->m_key = 0;
@@ -1923,75 +2480,72 @@ pfs_register_statement_v1(const char *category,
   return;
 }
 
-void
-pfs_register_socket_v1(const char *category,
-                       PSI_socket_info_v1 *info,
-                       int count)
-{
-  REGISTER_BODY_V1(
-    PSI_socket_key, socket_instrument_prefix, register_socket_class);
+void pfs_register_socket_v1(const char *category, PSI_socket_info_v1 *info,
+                            int count) {
+  REGISTER_BODY_V1(PSI_socket_key, socket_instrument_prefix,
+                   register_socket_class);
 }
 
 /**
   Implementation of the mutex instrumentation interface.
   @sa PSI_v1::init_mutex.
 */
-PSI_mutex *
-pfs_init_mutex_v1(PSI_mutex_key key, const void *identity)
-{
+PSI_mutex *pfs_init_mutex_v1(PSI_mutex_key key, const void *identity) {
   PFS_mutex_class *klass;
   PFS_mutex *pfs;
   klass = find_mutex_class(key);
-  if (unlikely(klass == NULL))
-  {
-    return NULL;
+  if (unlikely(klass == nullptr)) {
+    return nullptr;
   }
   pfs = create_mutex(klass, identity);
-  return reinterpret_cast<PSI_mutex *>(pfs);
+
+  /*
+    PFS_mutex is a PSI_mutex,
+    and the caller will use PSI_mutex::m_enabled.
+  */
+  return pfs;
 }
 
 /**
   Implementation of the mutex instrumentation interface.
   @sa PSI_v1::destroy_mutex.
 */
-void
-pfs_destroy_mutex_v1(PSI_mutex *mutex)
-{
+void pfs_destroy_mutex_v1(PSI_mutex *mutex) {
   PFS_mutex *pfs = reinterpret_cast<PFS_mutex *>(mutex);
 
-  DBUG_ASSERT(pfs != NULL);
+  DBUG_ASSERT(pfs != nullptr);
 
   destroy_mutex(pfs);
 }
 
 /**
   Implementation of the rwlock instrumentation interface.
-  @sa PSI_v1::init_rwlock.
+  @sa PSI_v2::init_rwlock.
 */
-PSI_rwlock *
-pfs_init_rwlock_v1(PSI_rwlock_key key, const void *identity)
-{
+PSI_rwlock *pfs_init_rwlock_v2(PSI_rwlock_key key, const void *identity) {
   PFS_rwlock_class *klass;
   PFS_rwlock *pfs;
   klass = find_rwlock_class(key);
-  if (unlikely(klass == NULL))
-  {
-    return NULL;
+  if (unlikely(klass == nullptr)) {
+    return nullptr;
   }
   pfs = create_rwlock(klass, identity);
-  return reinterpret_cast<PSI_rwlock *>(pfs);
+
+  /*
+    PFS_rwlock is a PSI_rwlock,
+    and the caller will use PSI_rwlock::m_enabled.
+  */
+  return pfs;
 }
 
 /**
   Implementation of the rwlock instrumentation interface.
-  @sa PSI_v1::destroy_rwlock.
+  @sa PSI_v2::destroy_rwlock.
 */
-void
-pfs_destroy_rwlock_v1(PSI_rwlock *rwlock)
-{
+void pfs_destroy_rwlock_v2(PSI_rwlock *rwlock) {
   PFS_rwlock *pfs = reinterpret_cast<PFS_rwlock *>(rwlock);
 
-  DBUG_ASSERT(pfs != NULL);
+  DBUG_ASSERT(pfs != nullptr);
 
   destroy_rwlock(pfs);
 }
@@ -2000,30 +2554,30 @@ pfs_destroy_rwlock_v1(PSI_rwlock *rwlock)
   Implementation of the cond instrumentation interface.
   @sa PSI_v1::init_cond.
 */
-PSI_cond *
-pfs_init_cond_v1(PSI_cond_key key, const void *identity)
-{
+PSI_cond *pfs_init_cond_v1(PSI_cond_key key, const void *identity) {
   PFS_cond_class *klass;
   PFS_cond *pfs;
   klass = find_cond_class(key);
-  if (unlikely(klass == NULL))
-  {
-    return NULL;
+  if (unlikely(klass == nullptr)) {
+    return nullptr;
   }
   pfs = create_cond(klass, identity);
-  return reinterpret_cast<PSI_cond *>(pfs);
+
+  /*
+    PFS_cond is a PSI_cond,
+    and the caller will use PSI_cond::m_enabled.
+  */
+  return pfs;
 }
 
 /**
   Implementation of the cond instrumentation interface.
   @sa PSI_v1::destroy_cond.
 */
-void
-pfs_destroy_cond_v1(PSI_cond *cond)
-{
+void pfs_destroy_cond_v1(PSI_cond *cond) {
   PFS_cond *pfs = reinterpret_cast<PFS_cond *>(cond);
 
-  DBUG_ASSERT(pfs != NULL);
+  DBUG_ASSERT(pfs != nullptr);
 
   destroy_cond(pfs);
 }
@@ -2032,19 +2586,15 @@ pfs_destroy_cond_v1(PSI_cond *cond)
   Implementation of the table instrumentation interface.
   @sa PSI_v1::get_table_share.
 */
-PSI_table_share *
-pfs_get_table_share_v1(bool temporary, TABLE_SHARE *share)
-{
-  /* Ignore temporary tables and views. */
-  if (temporary || share->is_view)
-  {
-    return NULL;
+PSI_table_share *pfs_get_table_share_v1(bool temporary, TABLE_SHARE *share) {
+  /* Ignore temporary tables, views and secondary tables. */
+  if (temporary || share->is_view || share->is_secondary_engine()) {
+    return nullptr;
   }
   /* An instrumented thread is required, for LF_PINS. */
   PFS_thread *pfs_thread = my_thread_get_THR_PFS();
-  if (unlikely(pfs_thread == NULL))
-  {
-    return NULL;
+  if (unlikely(pfs_thread == nullptr)) {
+    return nullptr;
   }
   PFS_table_share *pfs_share;
   pfs_share = find_or_create_table_share(pfs_thread, temporary, share);
@@ -2055,13 +2605,10 @@ pfs_get_table_share_v1(bool temporary, TABLE_SHARE *share)
   Implementation of the table instrumentation interface.
   @sa PSI_v1::release_table_share.
 */
-void
-pfs_release_table_share_v1(PSI_table_share *share)
-{
+void pfs_release_table_share_v1(PSI_table_share *share) {
   PFS_table_share *pfs = reinterpret_cast<PFS_table_share *>(share);
 
-  if (unlikely(pfs == NULL))
-  {
+  if (unlikely(pfs == nullptr)) {
     return;
   }
 
@@ -2072,56 +2619,41 @@ pfs_release_table_share_v1(PSI_table_share *share)
   Implementation of the table instrumentation interface.
   @sa PSI_v1::drop_table_share.
 */
-void
-pfs_drop_table_share_v1(bool temporary,
-                        const char *schema_name,
-                        int schema_name_length,
-                        const char *table_name,
-                        int table_name_length)
-{
+void pfs_drop_table_share_v1(bool temporary, const char *schema_name,
+                             int schema_name_length, const char *table_name,
+                             int table_name_length) {
   /* Ignore temporary tables. */
-  if (temporary)
-  {
+  if (temporary) {
     return;
   }
   PFS_thread *pfs_thread = my_thread_get_THR_PFS();
-  if (unlikely(pfs_thread == NULL))
-  {
+  if (unlikely(pfs_thread == nullptr)) {
     return;
   }
   /* TODO: temporary tables */
-  drop_table_share(pfs_thread,
-                   temporary,
-                   schema_name,
-                   schema_name_length,
-                   table_name,
-                   table_name_length);
+  drop_table_share(pfs_thread, temporary, schema_name, schema_name_length,
+                   table_name, table_name_length);
 }
 
 /**
   Implementation of the table instrumentation interface.
   @sa PSI_v1::open_table.
 */
-PSI_table *
-pfs_open_table_v1(PSI_table_share *share, const void *identity)
-{
+PSI_table *pfs_open_table_v1(PSI_table_share *share, const void *identity) {
   PFS_table_share *pfs_table_share = reinterpret_cast<PFS_table_share *>(share);
 
-  if (unlikely(pfs_table_share == NULL))
-  {
-    return NULL;
+  if (unlikely(pfs_table_share == nullptr)) {
+    return nullptr;
   }
 
   /* This object is not to be instrumented. */
-  if (!pfs_table_share->m_enabled)
-  {
-    return NULL;
+  if (!pfs_table_share->m_enabled) {
+    return nullptr;
   }
 
   /* This object is instrumented, but all table instruments are disabled. */
-  if (!global_table_io_class.m_enabled && !global_table_lock_class.m_enabled)
-  {
-    return NULL;
+  if (!global_table_io_class.m_enabled && !global_table_lock_class.m_enabled) {
+    return nullptr;
   }
 
   /*
@@ -2129,15 +2661,13 @@ pfs_open_table_v1(PSI_table_share *share, const void *identity)
     Table handles have short life cycle, instrumentation will happen
     again if needed during the next open().
   */
-  if (!flag_global_instrumentation)
-  {
-    return NULL;
+  if (!flag_global_instrumentation) {
+    return nullptr;
   }
 
   PFS_thread *thread = my_thread_get_THR_PFS();
-  if (unlikely(thread == NULL))
-  {
-    return NULL;
+  if (unlikely(thread == nullptr)) {
+    return nullptr;
   }
 
   PFS_table *pfs_table = create_table(pfs_table_share, thread, identity);
@@ -2148,13 +2678,10 @@ pfs_open_table_v1(PSI_table_share *share, const void *identity)
   Implementation of the table instrumentation interface.
   @sa PSI_v1::unbind_table.
 */
-void
-pfs_unbind_table_v1(PSI_table *table)
-{
+void pfs_unbind_table_v1(PSI_table *table) {
   PFS_table *pfs = reinterpret_cast<PFS_table *>(table);
-  if (likely(pfs != NULL))
-  {
-    pfs->m_thread_owner = NULL;
+  if (likely(pfs != nullptr)) {
+    pfs->m_thread_owner = nullptr;
     pfs->m_owner_event_id = 0;
   }
 }
@@ -2163,44 +2690,34 @@ pfs_unbind_table_v1(PSI_table *table)
   Implementation of the table instrumentation interface.
   @sa PSI_v1::rebind_table.
 */
-PSI_table *
-pfs_rebind_table_v1(PSI_table_share *share,
-                    const void *identity,
-                    PSI_table *table)
-{
+PSI_table *pfs_rebind_table_v1(PSI_table_share *share, const void *identity,
+                               PSI_table *table) {
   PFS_table *pfs = reinterpret_cast<PFS_table *>(table);
-  if (likely(pfs != NULL))
-  {
-    DBUG_ASSERT(pfs->m_thread_owner == NULL);
+  if (likely(pfs != nullptr)) {
+    DBUG_ASSERT(pfs->m_thread_owner == nullptr);
 
-    if (unlikely(!pfs->m_share->m_enabled))
-    {
+    if (unlikely(!pfs->m_share->m_enabled)) {
       destroy_table(pfs);
-      return NULL;
+      return nullptr;
     }
 
     if (unlikely(!global_table_io_class.m_enabled &&
-                 !global_table_lock_class.m_enabled))
-    {
+                 !global_table_lock_class.m_enabled)) {
       destroy_table(pfs);
-      return NULL;
+      return nullptr;
     }
 
-    if (unlikely(!flag_global_instrumentation))
-    {
+    if (unlikely(!flag_global_instrumentation)) {
       destroy_table(pfs);
-      return NULL;
+      return nullptr;
     }
 
     /* The table handle was already instrumented, reuse it for this thread. */
     PFS_thread *thread = my_thread_get_THR_PFS();
     pfs->m_thread_owner = thread;
-    if (thread != NULL)
-    {
+    if (thread != nullptr) {
       pfs->m_owner_event_id = thread->m_event_id;
-    }
-    else
-    {
+    } else {
       pfs->m_owner_event_id = 0;
     }
     return table;
@@ -2210,30 +2727,25 @@ pfs_rebind_table_v1(PSI_table_share *share,
 
   PFS_table_share *pfs_table_share = reinterpret_cast<PFS_table_share *>(share);
 
-  if (unlikely(pfs_table_share == NULL))
-  {
-    return NULL;
+  if (unlikely(pfs_table_share == nullptr)) {
+    return nullptr;
   }
 
-  if (!pfs_table_share->m_enabled)
-  {
-    return NULL;
+  if (!pfs_table_share->m_enabled) {
+    return nullptr;
   }
 
-  if (!global_table_io_class.m_enabled && !global_table_lock_class.m_enabled)
-  {
-    return NULL;
+  if (!global_table_io_class.m_enabled && !global_table_lock_class.m_enabled) {
+    return nullptr;
   }
 
-  if (!flag_global_instrumentation)
-  {
-    return NULL;
+  if (!flag_global_instrumentation) {
+    return nullptr;
   }
 
   PFS_thread *thread = my_thread_get_THR_PFS();
-  if (unlikely(thread == NULL))
-  {
-    return NULL;
+  if (unlikely(thread == nullptr)) {
+    return nullptr;
   }
 
   PFS_table *pfs_table = create_table(pfs_table_share, thread, identity);
@@ -2244,41 +2756,37 @@ pfs_rebind_table_v1(PSI_table_share *share,
   Implementation of the table instrumentation interface.
   @sa PSI_v1::close_table.
 */
-void
-pfs_close_table_v1(TABLE_SHARE *server_share, PSI_table *table)
-{
+void pfs_close_table_v1(TABLE_SHARE *server_share, PSI_table *table) {
   PFS_table *pfs = reinterpret_cast<PFS_table *>(table);
-  if (unlikely(pfs == NULL))
-  {
+  if (unlikely(pfs == nullptr)) {
     return;
   }
   pfs->aggregate(server_share);
   destroy_table(pfs);
 }
 
-PSI_socket *
-pfs_init_socket_v1(PSI_socket_key key,
-                   const my_socket *fd,
-                   const struct sockaddr *addr,
-                   socklen_t addr_len)
-{
+PSI_socket *pfs_init_socket_v1(PSI_socket_key key, const my_socket *fd,
+                               const struct sockaddr *addr,
+                               socklen_t addr_len) {
   PFS_socket_class *klass;
   PFS_socket *pfs;
   klass = find_socket_class(key);
-  if (unlikely(klass == NULL))
-  {
-    return NULL;
+  if (unlikely(klass == nullptr)) {
+    return nullptr;
   }
   pfs = create_socket(klass, fd, addr, addr_len);
-  return reinterpret_cast<PSI_socket *>(pfs);
+
+  /*
+    PFS_socket is a PSI_socket,
+    and the caller will use PSI_socket::m_enabled.
+  */
+  return pfs;
 }
 
-void
-pfs_destroy_socket_v1(PSI_socket *socket)
-{
+void pfs_destroy_socket_v1(PSI_socket *socket) {
   PFS_socket *pfs = reinterpret_cast<PFS_socket *>(socket);
 
-  DBUG_ASSERT(pfs != NULL);
+  DBUG_ASSERT(pfs != nullptr);
 
   destroy_socket(pfs);
 }
@@ -2287,37 +2795,29 @@ pfs_destroy_socket_v1(PSI_socket *socket)
   Implementation of the file instrumentation interface.
   @sa PSI_v1::create_file.
 */
-void
-pfs_create_file_v1(PSI_file_key key, const char *name, File file)
-{
-  if (!flag_global_instrumentation)
-  {
+void pfs_create_file_vc(PSI_file_key key, const char *name, File file) {
+  if (!flag_global_instrumentation) {
     return;
   }
   int index = (int)file;
-  if (unlikely(index < 0))
-  {
+  if (unlikely(index < 0)) {
     return;
   }
   PFS_file_class *klass = find_file_class(key);
-  if (unlikely(klass == NULL))
-  {
+  if (unlikely(klass == nullptr)) {
     return;
   }
-  if (!klass->m_enabled)
-  {
+  if (!klass->m_enabled) {
     return;
   }
 
   /* A thread is needed for LF_PINS */
   PFS_thread *pfs_thread = my_thread_get_THR_PFS();
-  if (unlikely(pfs_thread == NULL))
-  {
+  if (unlikely(pfs_thread == nullptr)) {
     return;
   }
 
-  if (flag_thread_instrumentation && !pfs_thread->m_enabled)
-  {
+  if (flag_thread_instrumentation && !pfs_thread->m_enabled) {
     return;
   }
 
@@ -2325,8 +2825,7 @@ pfs_create_file_v1(PSI_file_key key, const char *name, File file)
     We want this check after pfs_thread->m_enabled,
     to avoid reporting false loss.
   */
-  if (unlikely(index >= file_handle_max))
-  {
+  if (unlikely(index >= file_handle_max)) {
     file_handle_lost++;
     return;
   }
@@ -2342,8 +2841,7 @@ pfs_create_file_v1(PSI_file_key key, const char *name, File file)
   This data is used when spawning a new instrumented thread.
   @sa pfs_spawn_thread.
 */
-struct PFS_spawn_thread_arg
-{
+struct PFS_spawn_thread_arg {
   ulonglong m_thread_internal_id;
   char m_username[USERNAME_LENGTH];
   uint m_username_length;
@@ -2357,9 +2855,7 @@ struct PFS_spawn_thread_arg
 };
 
 extern "C" {
-static void *
-pfs_spawn_thread(void *arg)
-{
+static void *pfs_spawn_thread(void *arg) {
   PFS_spawn_thread_arg *typed_arg = (PFS_spawn_thread_arg *)arg;
   void *user_arg;
   void *(*user_start_routine)(void *);
@@ -2368,11 +2864,9 @@ pfs_spawn_thread(void *arg)
 
   /* First, attach instrumentation to this newly created pthread. */
   PFS_thread_class *klass = find_thread_class(typed_arg->m_child_key);
-  if (likely(klass != NULL))
-  {
+  if (likely(klass != nullptr)) {
     pfs = create_thread(klass, typed_arg->m_child_identity, 0);
-    if (likely(pfs != NULL))
-    {
+    if (likely(pfs != nullptr)) {
       pfs->m_thread_os_id = my_thread_os_id();
       clear_thread_account(pfs);
 
@@ -2386,13 +2880,12 @@ pfs_spawn_thread(void *arg)
 
       set_thread_account(pfs);
     }
-  }
-  else
-  {
-    pfs = NULL;
+  } else {
+    pfs = nullptr;
   }
   my_thread_set_THR_PFS(pfs);
 
+  pfs_notify_thread_create((PSI_thread *)pfs);
   /*
     Secondly, free the memory allocated in spawn_thread_v1().
     It is preferable to do this before invoking the user
@@ -2406,29 +2899,24 @@ pfs_spawn_thread(void *arg)
   /* Then, execute the user code for this thread. */
   (*user_start_routine)(user_arg);
 
-  return NULL;
+  return nullptr;
 }
 }  // extern "C"
 
 /**
   Implementation of the thread instrumentation interface.
-  @sa PSI_v1::spawn_thread.
+  @sa PSI_v2::spawn_thread.
 */
-int
-pfs_spawn_thread_v1(PSI_thread_key key,
-                    my_thread_handle *thread,
-                    const my_thread_attr_t *attr,
-                    void *(*start_routine)(void *),
-                    void *arg)
-{
+int pfs_spawn_thread_vc(PSI_thread_key key, my_thread_handle *thread,
+                        const my_thread_attr_t *attr,
+                        void *(*start_routine)(void *), void *arg) {
   PFS_spawn_thread_arg *psi_arg;
   PFS_thread *parent;
 
   /* psi_arg can not be global, and can not be a local variable. */
   psi_arg = (PFS_spawn_thread_arg *)my_malloc(
-    PSI_NOT_INSTRUMENTED, sizeof(PFS_spawn_thread_arg), MYF(MY_WME));
-  if (unlikely(psi_arg == NULL))
-  {
+      PSI_NOT_INSTRUMENTED, sizeof(PFS_spawn_thread_arg), MYF(MY_WME));
+  if (unlikely(psi_arg == nullptr)) {
     return EAGAIN;
   }
 
@@ -2438,8 +2926,7 @@ pfs_spawn_thread_v1(PSI_thread_key key,
   psi_arg->m_user_arg = arg;
 
   parent = my_thread_get_THR_PFS();
-  if (parent != NULL)
-  {
+  if (parent != nullptr) {
     /*
       Make a copy of the parent attributes.
       This is required, because instrumentation for this thread (the parent)
@@ -2447,24 +2934,21 @@ pfs_spawn_thread_v1(PSI_thread_key key,
     */
     psi_arg->m_thread_internal_id = parent->m_thread_internal_id;
 
-    memcpy(
-      psi_arg->m_username, parent->m_username, sizeof(psi_arg->m_username));
+    memcpy(psi_arg->m_username, parent->m_username,
+           sizeof(psi_arg->m_username));
     psi_arg->m_username_length = parent->m_username_length;
 
-    memcpy(
-      psi_arg->m_hostname, parent->m_hostname, sizeof(psi_arg->m_hostname));
+    memcpy(psi_arg->m_hostname, parent->m_hostname,
+           sizeof(psi_arg->m_hostname));
     psi_arg->m_hostname_length = parent->m_hostname_length;
-  }
-  else
-  {
+  } else {
     psi_arg->m_thread_internal_id = 0;
     psi_arg->m_username_length = 0;
     psi_arg->m_hostname_length = 0;
   }
 
   int result = my_thread_create(thread, attr, pfs_spawn_thread, psi_arg);
-  if (unlikely(result != 0))
-  {
+  if (unlikely(result != 0)) {
     my_free(psi_arg);
   }
   return result;
@@ -2472,23 +2956,21 @@ pfs_spawn_thread_v1(PSI_thread_key key,
 
 /**
   Implementation of the thread instrumentation interface.
-  @sa PSI_v1::new_thread.
+  @sa PSI_v2::new_thread.
 */
-PSI_thread *
-pfs_new_thread_v1(PSI_thread_key key,
-                  const void *identity,
-                  ulonglong processlist_id)
-{
+PSI_thread *pfs_new_thread_vc(PSI_thread_key key, const void *identity,
+                              ulonglong processlist_id) {
   PFS_thread *pfs;
 
   PFS_thread_class *klass = find_thread_class(key);
-  if (likely(klass != NULL))
-  {
+  if (likely(klass != nullptr)) {
     pfs = create_thread(klass, identity, processlist_id);
+  } else {
+    pfs = nullptr;
   }
-  else
-  {
-    pfs = NULL;
+
+  if (pfs) {
+    pfs_notify_thread_create((PSI_thread *)pfs);
   }
 
   return reinterpret_cast<PSI_thread *>(pfs);
@@ -2496,14 +2978,11 @@ pfs_new_thread_v1(PSI_thread_key key,
 
 /**
   Implementation of the thread instrumentation interface.
-  @sa PSI_v1::set_thread_id.
+  @sa PSI_v2::set_thread_id.
 */
-void
-pfs_set_thread_id_v1(PSI_thread *thread, ulonglong processlist_id)
-{
+void pfs_set_thread_id_vc(PSI_thread *thread, ulonglong processlist_id) {
   PFS_thread *pfs = reinterpret_cast<PFS_thread *>(thread);
-  if (unlikely(pfs == NULL))
-  {
+  if (unlikely(pfs == nullptr)) {
     return;
   }
   pfs->m_processlist_id = (ulong)processlist_id;
@@ -2511,14 +2990,45 @@ pfs_set_thread_id_v1(PSI_thread *thread, ulonglong processlist_id)
 
 /**
   Implementation of the thread instrumentation interface.
-  @sa PSI_v1::set_thread_THD.
+  @sa PSI_v2::get_current_thread_internal_id.
 */
-void
-pfs_set_thread_THD_v1(PSI_thread *thread, THD *thd)
-{
+ulonglong pfs_get_current_thread_internal_id_vc() {
+  PFS_thread *pfs = my_thread_get_THR_PFS();
+  if (unlikely(pfs == nullptr)) {
+    return 0;
+  }
+  return pfs->m_thread_internal_id;
+}
+
+/**
+  Implementation of the thread instrumentation interface.
+  @sa PSI_v2::get_thread_internal_id.
+*/
+ulonglong pfs_get_thread_internal_id_vc(PSI_thread *thread) {
   PFS_thread *pfs = reinterpret_cast<PFS_thread *>(thread);
-  if (unlikely(pfs == NULL))
-  {
+  if (unlikely(pfs == nullptr)) {
+    return 0;
+  }
+  return pfs->m_thread_internal_id;
+}
+
+/**
+  Implementation of the thread instrumentation interface.
+  @sa PSI_v2::get_thread_by_id.
+*/
+PSI_thread *pfs_get_thread_by_id_vc(ulonglong processlist_id) {
+  PFS_thread *pfs = find_thread_by_processlist_id(processlist_id);
+  PSI_thread *psi = reinterpret_cast<PSI_thread *>(pfs);
+  return psi;
+}
+
+/**
+  Implementation of the thread instrumentation interface.
+  @sa PSI_v2::set_thread_THD.
+*/
+void pfs_set_thread_THD_vc(PSI_thread *thread, THD *thd) {
+  PFS_thread *pfs = reinterpret_cast<PFS_thread *>(thread);
+  if (unlikely(pfs == nullptr)) {
     return;
   }
   pfs->m_thd = thd;
@@ -2526,14 +3036,11 @@ pfs_set_thread_THD_v1(PSI_thread *thread, THD *thd)
 
 /**
   Implementation of the thread instrumentation interface.
-  @sa PSI_v1::set_thread_os_thread_id.
+  @sa PSI_v2::set_thread_os_thread_id.
 */
-void
-pfs_set_thread_os_id_v1(PSI_thread *thread)
-{
+void pfs_set_thread_os_id_vc(PSI_thread *thread) {
   PFS_thread *pfs = reinterpret_cast<PFS_thread *>(thread);
-  if (unlikely(pfs == NULL))
-  {
+  if (unlikely(pfs == nullptr)) {
     return;
   }
   pfs->m_thread_os_id = my_thread_os_id();
@@ -2541,31 +3048,26 @@ pfs_set_thread_os_id_v1(PSI_thread *thread)
 
 /**
   Implementation of the thread instrumentation interface.
-  @sa PSI_v1::get_thread_id.
+  @sa PSI_v2::get_thread.
 */
-PSI_thread *
-pfs_get_thread_v1(void)
-{
+PSI_thread *pfs_get_thread_vc(void) {
   PFS_thread *pfs = my_thread_get_THR_PFS();
   return reinterpret_cast<PSI_thread *>(pfs);
 }
 
 /**
   Implementation of the thread instrumentation interface.
-  @sa PSI_v1::set_thread_user.
+  @sa PSI_v2::set_thread_user.
 */
-void
-pfs_set_thread_user_v1(const char *user, int user_len)
-{
+void pfs_set_thread_user_vc(const char *user, int user_len) {
   pfs_dirty_state dirty_state;
   PFS_thread *pfs = my_thread_get_THR_PFS();
 
-  DBUG_ASSERT((user != NULL) || (user_len == 0));
+  DBUG_ASSERT((user != nullptr) || (user_len == 0));
   DBUG_ASSERT(user_len >= 0);
   DBUG_ASSERT((uint)user_len <= sizeof(pfs->m_username));
 
-  if (unlikely(pfs == NULL))
-  {
+  if (unlikely(pfs == nullptr)) {
     return;
   }
 
@@ -2575,8 +3077,7 @@ pfs_set_thread_user_v1(const char *user, int user_len)
 
   clear_thread_account(pfs);
 
-  if (user_len > 0)
-  {
+  if (user_len > 0) {
     memcpy(pfs->m_username, user, user_len);
   }
   pfs->m_username_length = user_len;
@@ -2585,25 +3086,15 @@ pfs_set_thread_user_v1(const char *user, int user_len)
 
   bool enabled;
   bool history;
-  if (pfs->m_account != NULL)
-  {
+  if (pfs->m_account != nullptr) {
     enabled = pfs->m_account->m_enabled;
     history = pfs->m_account->m_history;
-  }
-  else
-  {
-    if ((pfs->m_username_length > 0) && (pfs->m_hostname_length > 0))
-    {
-      lookup_setup_actor(pfs,
-                         pfs->m_username,
-                         pfs->m_username_length,
-                         pfs->m_hostname,
-                         pfs->m_hostname_length,
-                         &enabled,
+  } else {
+    if ((pfs->m_username_length > 0) && (pfs->m_hostname_length > 0)) {
+      lookup_setup_actor(pfs, pfs->m_username, pfs->m_username_length,
+                         pfs->m_hostname, pfs->m_hostname_length, &enabled,
                          &history);
-    }
-    else
-    {
+    } else {
       /* There is no setting for background threads */
       enabled = true;
       history = true;
@@ -2617,26 +3108,22 @@ pfs_set_thread_user_v1(const char *user, int user_len)
 
 /**
   Implementation of the thread instrumentation interface.
-  @sa PSI_v1::set_thread_account.
+  @sa PSI_v2::set_thread_account.
 */
-void
-pfs_set_thread_account_v1(const char *user,
-                          int user_len,
-                          const char *host,
-                          int host_len)
-{
+void pfs_set_thread_account_vc(const char *user, int user_len, const char *host,
+                               int host_len) {
   pfs_dirty_state dirty_state;
   PFS_thread *pfs = my_thread_get_THR_PFS();
 
-  DBUG_ASSERT((user != NULL) || (user_len == 0));
+  DBUG_ASSERT((user != nullptr) || (user_len == 0));
   DBUG_ASSERT(user_len >= 0);
   DBUG_ASSERT((uint)user_len <= sizeof(pfs->m_username));
-  DBUG_ASSERT((host != NULL) || (host_len == 0));
+  DBUG_ASSERT((host != nullptr) || (host_len == 0));
   DBUG_ASSERT(host_len >= 0);
-  DBUG_ASSERT((uint)host_len <= sizeof(pfs->m_hostname));
 
-  if (unlikely(pfs == NULL))
-  {
+  host_len = min<size_t>(host_len, sizeof(pfs->m_hostname));
+
+  if (unlikely(pfs == nullptr)) {
     return;
   }
 
@@ -2644,14 +3131,12 @@ pfs_set_thread_account_v1(const char *user,
 
   clear_thread_account(pfs);
 
-  if (host_len > 0)
-  {
+  if (host_len > 0) {
     memcpy(pfs->m_hostname, host, host_len);
   }
   pfs->m_hostname_length = host_len;
 
-  if (user_len > 0)
-  {
+  if (user_len > 0) {
     memcpy(pfs->m_username, user, user_len);
   }
   pfs->m_username_length = user_len;
@@ -2660,25 +3145,15 @@ pfs_set_thread_account_v1(const char *user,
 
   bool enabled;
   bool history;
-  if (pfs->m_account != NULL)
-  {
+  if (pfs->m_account != nullptr) {
     enabled = pfs->m_account->m_enabled;
     history = pfs->m_account->m_history;
-  }
-  else
-  {
-    if ((pfs->m_username_length > 0) && (pfs->m_hostname_length > 0))
-    {
-      lookup_setup_actor(pfs,
-                         pfs->m_username,
-                         pfs->m_username_length,
-                         pfs->m_hostname,
-                         pfs->m_hostname_length,
-                         &enabled,
+  } else {
+    if ((pfs->m_username_length > 0) && (pfs->m_hostname_length > 0)) {
+      lookup_setup_actor(pfs, pfs->m_username, pfs->m_username_length,
+                         pfs->m_hostname, pfs->m_hostname_length, &enabled,
                          &history);
-    }
-    else
-    {
+    } else {
       /* There is no setting for background threads */
       enabled = true;
       history = true;
@@ -2692,23 +3167,19 @@ pfs_set_thread_account_v1(const char *user,
 
 /**
   Implementation of the thread instrumentation interface.
-  @sa PSI_v1::set_thread_db.
+  @sa PSI_v2::set_thread_db.
 */
-void
-pfs_set_thread_db_v1(const char *db, int db_len)
-{
+void pfs_set_thread_db_vc(const char *db, int db_len) {
   PFS_thread *pfs = my_thread_get_THR_PFS();
 
-  DBUG_ASSERT((db != NULL) || (db_len == 0));
+  DBUG_ASSERT((db != nullptr) || (db_len == 0));
   DBUG_ASSERT(db_len >= 0);
   DBUG_ASSERT((uint)db_len <= sizeof(pfs->m_dbname));
 
-  if (likely(pfs != NULL))
-  {
+  if (likely(pfs != nullptr)) {
     pfs_dirty_state dirty_state;
     pfs->m_stmt_lock.allocated_to_dirty(&dirty_state);
-    if (db_len > 0)
-    {
+    if (db_len > 0) {
       memcpy(pfs->m_dbname, db, db_len);
     }
     pfs->m_dbname_length = db_len;
@@ -2718,51 +3189,42 @@ pfs_set_thread_db_v1(const char *db, int db_len)
 
 /**
   Implementation of the thread instrumentation interface.
-  @sa PSI_v1::set_thread_command.
+  @sa PSI_v2::set_thread_command.
 */
-void
-pfs_set_thread_command_v1(int command)
-{
+void pfs_set_thread_command_vc(int command) {
   PFS_thread *pfs = my_thread_get_THR_PFS();
 
   DBUG_ASSERT(command >= 0);
   DBUG_ASSERT(command <= (int)COM_END);
 
-  if (likely(pfs != NULL))
-  {
+  if (likely(pfs != nullptr)) {
     pfs->m_command = command;
   }
 }
 
 /**
-Implementation of the thread instrumentation interface.
-@sa PSI_v1::set_thread_connection_type.
+  Implementation of the thread instrumentation interface.
+  @sa PSI_v2::set_thread_connection_type.
 */
-void
-pfs_set_connection_type_v1(opaque_vio_type conn_type)
-{
+void pfs_set_connection_type_vc(opaque_vio_type conn_type) {
   PFS_thread *pfs = my_thread_get_THR_PFS();
 
   DBUG_ASSERT(conn_type >= FIRST_VIO_TYPE);
   DBUG_ASSERT(conn_type <= LAST_VIO_TYPE);
 
-  if (likely(pfs != NULL))
-  {
+  if (likely(pfs != nullptr)) {
     pfs->m_connection_type = static_cast<enum_vio_type>(conn_type);
   }
 }
 
 /**
   Implementation of the thread instrumentation interface.
-  @sa PSI_v1::set_thread_start_time.
+  @sa PSI_v2::set_thread_start_time.
 */
-void
-pfs_set_thread_start_time_v1(time_t start_time)
-{
+void pfs_set_thread_start_time_vc(time_t start_time) {
   PFS_thread *pfs = my_thread_get_THR_PFS();
 
-  if (likely(pfs != NULL))
-  {
+  if (likely(pfs != nullptr)) {
     pfs->m_start_time = start_time;
   }
 }
@@ -2771,86 +3233,285 @@ pfs_set_thread_start_time_v1(time_t start_time)
   Implementation of the thread instrumentation interface.
   @sa PSI_v1::set_thread_state.
 */
-void
-pfs_set_thread_state_v1(const char *)
-{
-  /* DEPRECATED. */
+void pfs_set_thread_state_v1(const char *) { /* DEPRECATED. */
 }
 
 /**
   Implementation of the thread instrumentation interface.
-  @sa PSI_v1::set_thread_info.
+  @sa PSI_v2::set_thread_info.
 */
-void
-pfs_set_thread_info_v1(const char *info, uint info_len)
-{
+void pfs_set_thread_info_vc(const char *info, uint info_len) {
   pfs_dirty_state dirty_state;
   PFS_thread *pfs = my_thread_get_THR_PFS();
 
-  DBUG_ASSERT((info != NULL) || (info_len == 0));
-
-  if (likely(pfs != NULL))
-  {
-    if ((info != NULL) && (info_len > 0))
-    {
-      if (info_len > sizeof(pfs->m_processlist_info))
-      {
-        info_len = sizeof(pfs->m_processlist_info);
-      }
-
-      pfs->m_stmt_lock.allocated_to_dirty(&dirty_state);
+  if (likely(pfs != nullptr)) {
+    if (info_len > sizeof(pfs->m_processlist_info)) {
+      info_len = sizeof(pfs->m_processlist_info);
+    }
+    pfs->m_stmt_lock.allocated_to_dirty(&dirty_state);
+    if (info != nullptr && info_len > 0) {
       memcpy(pfs->m_processlist_info, info, info_len);
-      pfs->m_processlist_info_length = info_len;
-      pfs->m_stmt_lock.dirty_to_allocated(&dirty_state);
     }
-    else
-    {
-      pfs->m_stmt_lock.allocated_to_dirty(&dirty_state);
-      pfs->m_processlist_info_length = 0;
-      pfs->m_stmt_lock.dirty_to_allocated(&dirty_state);
-    }
+    pfs->m_processlist_info_length = info_len;
+    pfs->m_stmt_lock.dirty_to_allocated(&dirty_state);
   }
 }
 
 /**
-  Implementation of the thread instrumentation interface.
-  @sa PSI_v1::set_thread.
+  Set the resource group name for a given thread.
+  @param pfs Thread instrumentation
+  @param group_name Group name
+  @param group_name_len Length of group_name
+  @param user_data  Optional pointer to user-defined data
+  @return 0 if successful, 1 otherwise
 */
-void
-pfs_set_thread_v1(PSI_thread *thread)
+int set_thread_resource_group(PFS_thread *pfs, const char *group_name,
+                              int group_name_len, void *user_data) {
+  int result = 0;
+  pfs_dirty_state dirty_state;
+
+  if (unlikely(pfs == nullptr || group_name_len <= 0)) {
+    return 1;
+  }
+
+  if ((size_t)group_name_len > sizeof(pfs->m_groupname)) {
+    return 1;
+  }
+
+  pfs->m_session_lock.allocated_to_dirty(&dirty_state);
+
+  memcpy(pfs->m_groupname, group_name, group_name_len);
+
+  pfs->m_groupname_length = group_name_len;
+  pfs->m_user_data = user_data;
+
+  pfs->m_session_lock.dirty_to_allocated(&dirty_state);
+  return result;
+}
+
+/**
+  Implementation of the thread instrumentation interface.
+  @sa PSI_v2::set_thread_resource_group
+*/
+int pfs_set_thread_resource_group_vc(const char *group_name, int group_name_len,
+                                     void *user_data) {
+  PFS_thread *pfs = my_thread_get_THR_PFS();
+  return set_thread_resource_group(pfs, group_name, group_name_len, user_data);
+}
+
+/**
+  Implementation of the thread instrumentation interface.
+  @sa PSI_v2::set_thread_resource_group_by_id
+*/
+int pfs_set_thread_resource_group_by_id_vc(PSI_thread *thread,
+                                           ulonglong thread_id,
+                                           const char *group_name,
+                                           int group_name_len,
+                                           void *user_data) {
+  PFS_thread *pfs = reinterpret_cast<PFS_thread *>(thread);
+  if (pfs == nullptr) {
+    pfs = find_thread_by_internal_id(thread_id);
+  }
+  return set_thread_resource_group(pfs, group_name, group_name_len, user_data);
+}
+
+/**
+  Get the system and session attributes for a given PFS_thread.
+  @param pfs thread instrumentation
+  @param current_thread true if pfs refers to the current thread
+  @param thread_attrs thread attribute structure
+  @return 0 if successful, non-zero otherwise
+*/
+int get_thread_attributes(PFS_thread *pfs, bool current_thread,
+                          PSI_thread_attrs *thread_attrs)
+
 {
+  int result = 0;
+  pfs_optimistic_state lock;
+  pfs_optimistic_state session_lock;
+
+  DBUG_ASSERT(thread_attrs != nullptr);
+
+  static_assert(PSI_NAME_LEN == NAME_LEN, "");
+  static_assert(PSI_USERNAME_LENGTH == USERNAME_LENGTH, "");
+  static_assert(PSI_HOSTNAME_LENGTH == HOSTNAME_LENGTH, "");
+
+  if (unlikely(pfs == nullptr)) {
+    return 1;
+  }
+
+  if (!current_thread) {
+    /* Protect this reader against a thread delete. */
+    pfs->m_lock.begin_optimistic_lock(&lock);
+    /* Protect this reader against writing on session attributes */
+    pfs->m_session_lock.begin_optimistic_lock(&session_lock);
+  }
+
+  thread_attrs->m_thread_internal_id = pfs->m_thread_internal_id;
+  thread_attrs->m_processlist_id = pfs->m_processlist_id;
+  thread_attrs->m_thread_os_id = pfs->m_thread_os_id;
+  thread_attrs->m_user_data = pfs->m_user_data;
+  thread_attrs->m_system_thread = pfs->m_system_thread;
+
+  DBUG_ASSERT(pfs->m_sock_addr_len <= sizeof(PSI_thread_attrs::m_sock_addr));
+  thread_attrs->m_sock_addr_length = pfs->m_sock_addr_len;
+  if (thread_attrs->m_sock_addr_length > 0) {
+    memcpy(&thread_attrs->m_sock_addr, &pfs->m_sock_addr, pfs->m_sock_addr_len);
+  }
+
+  DBUG_ASSERT(pfs->m_username_length <= sizeof(PSI_thread_attrs::m_username));
+  thread_attrs->m_username_length = pfs->m_username_length;
+  if (pfs->m_username_length > 0) {
+    memcpy(thread_attrs->m_username, pfs->m_username, pfs->m_username_length);
+  }
+
+  DBUG_ASSERT(pfs->m_hostname_length <= sizeof(PSI_thread_attrs::m_hostname));
+  thread_attrs->m_hostname_length = pfs->m_hostname_length;
+  if (pfs->m_hostname_length > 0) {
+    memcpy(thread_attrs->m_hostname, pfs->m_hostname, pfs->m_hostname_length);
+  }
+
+  DBUG_ASSERT(pfs->m_groupname_length <= sizeof(PSI_thread_attrs::m_groupname));
+  thread_attrs->m_groupname_length = pfs->m_groupname_length;
+  if (pfs->m_groupname_length > 0) {
+    memcpy(thread_attrs->m_groupname, pfs->m_groupname,
+           pfs->m_groupname_length);
+  }
+
+  if (!current_thread) {
+    if (!pfs->m_session_lock.end_optimistic_lock(&session_lock)) {
+      result = 1;
+    }
+
+    if (!pfs->m_lock.end_optimistic_lock(&lock)) {
+      result = 1;
+    }
+  }
+
+  return result;
+}
+
+/**
+  Implementation of the thread instrumentation interface.
+  @sa PSI_v2::get_thread_system_attrs.
+*/
+int pfs_get_thread_system_attrs_vc(PSI_thread_attrs *thread_attrs) {
+  PFS_thread *pfs = my_thread_get_THR_PFS();
+  return get_thread_attributes(pfs, true, thread_attrs);
+}
+
+/**
+  Implementation of the thread instrumentation interface.
+  @sa PSI_v2::get_thread_system_attrs_by_id.
+*/
+int pfs_get_thread_system_attrs_by_id_vc(PSI_thread *thread,
+                                         ulonglong thread_id,
+                                         PSI_thread_attrs *thread_attrs) {
+  PFS_thread *pfs = reinterpret_cast<PFS_thread *>(thread);
+  if (pfs == nullptr) {
+    pfs = find_thread_by_internal_id(thread_id);
+  }
+  return get_thread_attributes(pfs, false, thread_attrs);
+}
+
+/**
+  Implementation of the thread instrumentation interface.
+  @sa PSI_v2::register_notification.
+*/
+int pfs_register_notification_vc(const PSI_notification *callbacks,
+                                 bool with_ref_count) {
+  return pfs_register_notification(callbacks, with_ref_count);
+}
+
+/**
+  Implementation of the thread instrumentation interface.
+  @sa PSI_v2::unregister_notification.
+*/
+int pfs_unregister_notification_vc(int handle) {
+  return pfs_unregister_notification(handle);
+}
+
+/**
+  Implementation of the thread instrumentation interface.
+  @sa PSI_v2::notify_session_connect.
+*/
+void pfs_notify_session_connect_vc(PSI_thread *thread) {
+  pfs_notify_session_connect(thread);
+}
+
+/**
+  Implementation of the thread instrumentation interface.
+  @sa PSI_v2::notify_session_disconnect.
+*/
+void pfs_notify_session_disconnect_vc(
+    PSI_thread *thread MY_ATTRIBUTE((unused))) {
+  pfs_notify_session_disconnect(thread);
+}
+
+/**
+  Implementation of the thread instrumentation interface.
+  @sa PSI_v2::notify_session_change_user.
+*/
+void pfs_notify_session_change_user_vc(
+    PSI_thread *thread MY_ATTRIBUTE((unused))) {
+  pfs_notify_session_change_user(thread);
+}
+
+/**
+  Implementation of the thread instrumentation interface.
+  @sa PSI_v2::set_thread.
+*/
+void pfs_set_thread_vc(PSI_thread *thread) {
   PFS_thread *pfs = reinterpret_cast<PFS_thread *>(thread);
   my_thread_set_THR_PFS(pfs);
 }
 
 /**
   Implementation of the thread instrumentation interface.
-  @sa PSI_v1::delete_current_thread.
+  @sa PSI_v4::set_thread_peer_port
 */
-void
-pfs_delete_current_thread_v1(void)
-{
+void pfs_set_thread_peer_port_vc(PSI_thread *thread, uint port) {
+  PFS_thread *pfs = reinterpret_cast<PFS_thread *>(thread);
+  if (likely(pfs != nullptr)) {
+    pfs->m_peer_port = port;
+  }
+}
+
+/**
+  Implementation of the thread instrumentation interface.
+  @sa PSI_v2::aggregate_thread_status.
+*/
+void pfs_aggregate_thread_status_vc(PSI_thread *thread) {
+  PFS_thread *pfs = reinterpret_cast<PFS_thread *>(thread);
+  if (pfs != nullptr) {
+    aggregate_thread_status(pfs, pfs->m_account, pfs->m_user, pfs->m_host);
+  }
+}
+
+/**
+  Implementation of the thread instrumentation interface.
+  @sa PSI_v2::delete_current_thread.
+*/
+void pfs_delete_current_thread_vc(void) {
   PFS_thread *thread = my_thread_get_THR_PFS();
-  if (thread != NULL)
-  {
+  if (thread != nullptr) {
     aggregate_thread(thread, thread->m_account, thread->m_user, thread->m_host);
-    my_thread_set_THR_PFS(NULL);
+    my_thread_set_THR_PFS(nullptr);
+    pfs_notify_thread_destroy((PSI_thread *)thread);
     destroy_thread(thread);
   }
 }
 
 /**
   Implementation of the thread instrumentation interface.
-  @sa PSI_v1::delete_thread.
+  @sa PSI_v2::delete_thread.
 */
-void
-pfs_delete_thread_v1(PSI_thread *thread)
-{
+void pfs_delete_thread_vc(PSI_thread *thread) {
   PFS_thread *pfs = reinterpret_cast<PFS_thread *>(thread);
 
-  if (pfs != NULL)
-  {
+  if (pfs != nullptr) {
     aggregate_thread(pfs, pfs->m_account, pfs->m_user, pfs->m_host);
+    pfs_notify_thread_destroy(thread);
     destroy_thread(pfs);
   }
 }
@@ -2859,58 +3520,50 @@ pfs_delete_thread_v1(PSI_thread *thread)
   Implementation of the mutex instrumentation interface.
   @sa PSI_v1::start_mutex_wait.
 */
-PSI_mutex_locker *
-pfs_start_mutex_wait_v1(PSI_mutex_locker_state *state,
-                        PSI_mutex *mutex,
-                        PSI_mutex_operation op,
-                        const char *src_file,
-                        uint src_line)
-{
+PSI_mutex_locker *pfs_start_mutex_wait_v1(PSI_mutex_locker_state *state,
+                                          PSI_mutex *mutex,
+                                          PSI_mutex_operation op,
+                                          const char *src_file, uint src_line) {
   PFS_mutex *pfs_mutex = reinterpret_cast<PFS_mutex *>(mutex);
   DBUG_ASSERT((int)op >= 0);
   DBUG_ASSERT((uint)op < array_elements(mutex_operation_map));
-  DBUG_ASSERT(state != NULL);
+  DBUG_ASSERT(state != nullptr);
 
-  DBUG_ASSERT(pfs_mutex != NULL);
-  DBUG_ASSERT(pfs_mutex->m_class != NULL);
+  DBUG_ASSERT(pfs_mutex != nullptr);
+  DBUG_ASSERT(pfs_mutex->m_class != nullptr);
 
-  if (!pfs_mutex->m_enabled)
-  {
-    return NULL;
+  /* The caller checks for m_enabled. */
+#if 0
+  if (!pfs_mutex->m_enabled) {
+    return nullptr;
   }
+#endif
 
   uint flags;
   ulonglong timer_start = 0;
 
-  if (flag_thread_instrumentation)
-  {
+  if (flag_thread_instrumentation) {
     PFS_thread *pfs_thread = my_thread_get_THR_PFS();
-    if (unlikely(pfs_thread == NULL))
-    {
-      return NULL;
+    if (unlikely(pfs_thread == nullptr)) {
+      return nullptr;
     }
-    if (!pfs_thread->m_enabled)
-    {
-      return NULL;
+    if (!pfs_thread->m_enabled) {
+      return nullptr;
     }
     state->m_thread = reinterpret_cast<PSI_thread *>(pfs_thread);
     flags = STATE_FLAG_THREAD;
 
-    if (pfs_mutex->m_timed)
-    {
-      timer_start =
-        get_timer_raw_value_and_function(wait_timer, &state->m_timer);
+    if (pfs_mutex->m_timed) {
+      timer_start = get_wait_timer();
       state->m_timer_start = timer_start;
       flags |= STATE_FLAG_TIMED;
     }
 
-    if (flag_events_waits_current)
-    {
+    if (flag_events_waits_current) {
       if (unlikely(pfs_thread->m_events_waits_current >=
-                   &pfs_thread->m_events_waits_stack[WAIT_STACK_SIZE]))
-      {
+                   &pfs_thread->m_events_waits_stack[WAIT_STACK_SIZE])) {
         locker_lost++;
-        return NULL;
+        return nullptr;
       }
       PFS_events_waits *wait = pfs_thread->m_events_waits_current;
       state->m_wait = wait;
@@ -2935,25 +3588,19 @@ pfs_start_mutex_wait_v1(PSI_mutex_locker_state *state,
 
       pfs_thread->m_events_waits_current++;
     }
-  }
-  else
-  {
-    if (pfs_mutex->m_timed)
-    {
-      timer_start =
-        get_timer_raw_value_and_function(wait_timer, &state->m_timer);
+  } else {
+    if (pfs_mutex->m_timed) {
+      timer_start = get_wait_timer();
       state->m_timer_start = timer_start;
       flags = STATE_FLAG_TIMED;
-      state->m_thread = NULL;
-    }
-    else
-    {
+      state->m_thread = nullptr;
+    } else {
       /*
         Complete shortcut.
       */
       /* Aggregate to EVENTS_WAITS_SUMMARY_BY_INSTANCE (counted) */
       pfs_mutex->m_mutex_stat.m_wait_stat.aggregate_counted();
-      return NULL;
+      return nullptr;
     }
   }
 
@@ -2964,22 +3611,18 @@ pfs_start_mutex_wait_v1(PSI_mutex_locker_state *state,
 
 /**
   Implementation of the rwlock instrumentation interface.
-  @sa PSI_v1::start_rwlock_rdwait
-  @sa PSI_v1::start_rwlock_wrwait
+  @sa PSI_v2::start_rwlock_rdwait
+  @sa PSI_v2::start_rwlock_wrwait
 */
-static PSI_rwlock_locker *
-pfs_start_rwlock_wait_v1(PSI_rwlock_locker_state *state,
-                         PSI_rwlock *rwlock,
-                         PSI_rwlock_operation op,
-                         const char *src_file,
-                         uint src_line)
-{
+static PSI_rwlock_locker *pfs_start_rwlock_wait_v2(
+    PSI_rwlock_locker_state *state, PSI_rwlock *rwlock, PSI_rwlock_operation op,
+    const char *src_file, uint src_line) {
   PFS_rwlock *pfs_rwlock = reinterpret_cast<PFS_rwlock *>(rwlock);
   DBUG_ASSERT(static_cast<int>(op) >= 0);
   DBUG_ASSERT(static_cast<uint>(op) < array_elements(rwlock_operation_map));
-  DBUG_ASSERT(state != NULL);
-  DBUG_ASSERT(pfs_rwlock != NULL);
-  DBUG_ASSERT(pfs_rwlock->m_class != NULL);
+  DBUG_ASSERT(state != nullptr);
+  DBUG_ASSERT(pfs_rwlock != nullptr);
+  DBUG_ASSERT(pfs_rwlock->m_class != nullptr);
 
   /* Operations supported for READ WRITE LOCK */
 
@@ -2991,49 +3634,44 @@ pfs_start_rwlock_wait_v1(PSI_rwlock_locker_state *state,
   /* Operations supported for SHARED EXCLUSIVE LOCK */
 
   DBUG_ASSERT(
-    !pfs_rwlock->m_class->is_shared_exclusive() ||
-    (op == PSI_RWLOCK_SHAREDLOCK) || (op == PSI_RWLOCK_SHAREDEXCLUSIVELOCK) ||
-    (op == PSI_RWLOCK_EXCLUSIVELOCK) || (op == PSI_RWLOCK_TRYSHAREDLOCK) ||
-    (op == PSI_RWLOCK_TRYSHAREDEXCLUSIVELOCK) ||
-    (op == PSI_RWLOCK_TRYEXCLUSIVELOCK));
+      !pfs_rwlock->m_class->is_shared_exclusive() ||
+      (op == PSI_RWLOCK_SHAREDLOCK) || (op == PSI_RWLOCK_SHAREDEXCLUSIVELOCK) ||
+      (op == PSI_RWLOCK_EXCLUSIVELOCK) || (op == PSI_RWLOCK_TRYSHAREDLOCK) ||
+      (op == PSI_RWLOCK_TRYSHAREDEXCLUSIVELOCK) ||
+      (op == PSI_RWLOCK_TRYEXCLUSIVELOCK));
 
-  if (!pfs_rwlock->m_enabled)
-  {
-    return NULL;
+  /* The caller checks for m_enabled. */
+#if 0
+  if (!pfs_rwlock->m_enabled) {
+    return nullptr;
   }
+#endif
 
   uint flags;
   ulonglong timer_start = 0;
 
-  if (flag_thread_instrumentation)
-  {
+  if (flag_thread_instrumentation) {
     PFS_thread *pfs_thread = my_thread_get_THR_PFS();
-    if (unlikely(pfs_thread == NULL))
-    {
-      return NULL;
+    if (unlikely(pfs_thread == nullptr)) {
+      return nullptr;
     }
-    if (!pfs_thread->m_enabled)
-    {
-      return NULL;
+    if (!pfs_thread->m_enabled) {
+      return nullptr;
     }
     state->m_thread = reinterpret_cast<PSI_thread *>(pfs_thread);
     flags = STATE_FLAG_THREAD;
 
-    if (pfs_rwlock->m_timed)
-    {
-      timer_start =
-        get_timer_raw_value_and_function(wait_timer, &state->m_timer);
+    if (pfs_rwlock->m_timed) {
+      timer_start = get_wait_timer();
       state->m_timer_start = timer_start;
       flags |= STATE_FLAG_TIMED;
     }
 
-    if (flag_events_waits_current)
-    {
+    if (flag_events_waits_current) {
       if (unlikely(pfs_thread->m_events_waits_current >=
-                   &pfs_thread->m_events_waits_stack[WAIT_STACK_SIZE]))
-      {
+                   &pfs_thread->m_events_waits_stack[WAIT_STACK_SIZE])) {
         locker_lost++;
-        return NULL;
+        return nullptr;
       }
       PFS_events_waits *wait = pfs_thread->m_events_waits_current;
       state->m_wait = wait;
@@ -3058,25 +3696,19 @@ pfs_start_rwlock_wait_v1(PSI_rwlock_locker_state *state,
 
       pfs_thread->m_events_waits_current++;
     }
-  }
-  else
-  {
-    if (pfs_rwlock->m_timed)
-    {
-      timer_start =
-        get_timer_raw_value_and_function(wait_timer, &state->m_timer);
+  } else {
+    if (pfs_rwlock->m_timed) {
+      timer_start = get_wait_timer();
       state->m_timer_start = timer_start;
       flags = STATE_FLAG_TIMED;
-      state->m_thread = NULL;
-    }
-    else
-    {
+      state->m_thread = nullptr;
+    } else {
       /*
         Complete shortcut.
       */
       /* Aggregate to EVENTS_WAITS_SUMMARY_BY_INSTANCE (counted) */
       pfs_rwlock->m_rwlock_stat.m_wait_stat.aggregate_counted();
-      return NULL;
+      return nullptr;
     }
   }
 
@@ -3086,48 +3718,40 @@ pfs_start_rwlock_wait_v1(PSI_rwlock_locker_state *state,
   return reinterpret_cast<PSI_rwlock_locker *>(state);
 }
 
-PSI_rwlock_locker *
-pfs_start_rwlock_rdwait_v1(PSI_rwlock_locker_state *state,
-                           PSI_rwlock *rwlock,
-                           PSI_rwlock_operation op,
-                           const char *src_file,
-                           uint src_line)
-{
+PSI_rwlock_locker *pfs_start_rwlock_rdwait_v2(PSI_rwlock_locker_state *state,
+                                              PSI_rwlock *rwlock,
+                                              PSI_rwlock_operation op,
+                                              const char *src_file,
+                                              uint src_line) {
   DBUG_ASSERT((op == PSI_RWLOCK_READLOCK) || (op == PSI_RWLOCK_TRYREADLOCK) ||
               (op == PSI_RWLOCK_SHAREDLOCK) ||
               (op == PSI_RWLOCK_TRYSHAREDLOCK));
 
-  return pfs_start_rwlock_wait_v1(state, rwlock, op, src_file, src_line);
+  return pfs_start_rwlock_wait_v2(state, rwlock, op, src_file, src_line);
 }
 
-PSI_rwlock_locker *
-pfs_start_rwlock_wrwait_v1(PSI_rwlock_locker_state *state,
-                           PSI_rwlock *rwlock,
-                           PSI_rwlock_operation op,
-                           const char *src_file,
-                           uint src_line)
-{
+PSI_rwlock_locker *pfs_start_rwlock_wrwait_v2(PSI_rwlock_locker_state *state,
+                                              PSI_rwlock *rwlock,
+                                              PSI_rwlock_operation op,
+                                              const char *src_file,
+                                              uint src_line) {
   DBUG_ASSERT((op == PSI_RWLOCK_WRITELOCK) || (op == PSI_RWLOCK_TRYWRITELOCK) ||
               (op == PSI_RWLOCK_SHAREDEXCLUSIVELOCK) ||
               (op == PSI_RWLOCK_TRYSHAREDEXCLUSIVELOCK) ||
               (op == PSI_RWLOCK_EXCLUSIVELOCK) ||
               (op == PSI_RWLOCK_TRYEXCLUSIVELOCK));
 
-  return pfs_start_rwlock_wait_v1(state, rwlock, op, src_file, src_line);
+  return pfs_start_rwlock_wait_v2(state, rwlock, op, src_file, src_line);
 }
 
 /**
   Implementation of the cond instrumentation interface.
   @sa PSI_v1::start_cond_wait.
 */
-PSI_cond_locker *
-pfs_start_cond_wait_v1(PSI_cond_locker_state *state,
-                       PSI_cond *cond,
-                       PSI_mutex *mutex,
-                       PSI_cond_operation op,
-                       const char *src_file,
-                       uint src_line)
-{
+PSI_cond_locker *pfs_start_cond_wait_v1(PSI_cond_locker_state *state,
+                                        PSI_cond *cond, PSI_mutex *mutex,
+                                        PSI_cond_operation op,
+                                        const char *src_file, uint src_line) {
   /*
     Note about the unused PSI_mutex *mutex parameter:
     In the pthread library, a call to pthread_cond_wait()
@@ -3142,47 +3766,42 @@ pfs_start_cond_wait_v1(PSI_cond_locker_state *state,
   PFS_cond *pfs_cond = reinterpret_cast<PFS_cond *>(cond);
   DBUG_ASSERT(static_cast<int>(op) >= 0);
   DBUG_ASSERT(static_cast<uint>(op) < array_elements(cond_operation_map));
-  DBUG_ASSERT(state != NULL);
-  DBUG_ASSERT(pfs_cond != NULL);
-  DBUG_ASSERT(pfs_cond->m_class != NULL);
+  DBUG_ASSERT(state != nullptr);
+  DBUG_ASSERT(pfs_cond != nullptr);
+  DBUG_ASSERT(pfs_cond->m_class != nullptr);
 
-  if (!pfs_cond->m_enabled)
-  {
-    return NULL;
+  /* The caller checks for m_enabled. */
+#if 0
+  if (!pfs_cond->m_enabled) {
+    return nullptr;
   }
+#endif
 
   uint flags;
   ulonglong timer_start = 0;
 
-  if (flag_thread_instrumentation)
-  {
+  if (flag_thread_instrumentation) {
     PFS_thread *pfs_thread = my_thread_get_THR_PFS();
-    if (unlikely(pfs_thread == NULL))
-    {
-      return NULL;
+    if (unlikely(pfs_thread == nullptr)) {
+      return nullptr;
     }
-    if (!pfs_thread->m_enabled)
-    {
-      return NULL;
+    if (!pfs_thread->m_enabled) {
+      return nullptr;
     }
     state->m_thread = reinterpret_cast<PSI_thread *>(pfs_thread);
     flags = STATE_FLAG_THREAD;
 
-    if (pfs_cond->m_timed)
-    {
-      timer_start =
-        get_timer_raw_value_and_function(wait_timer, &state->m_timer);
+    if (pfs_cond->m_timed) {
+      timer_start = get_wait_timer();
       state->m_timer_start = timer_start;
       flags |= STATE_FLAG_TIMED;
     }
 
-    if (flag_events_waits_current)
-    {
+    if (flag_events_waits_current) {
       if (unlikely(pfs_thread->m_events_waits_current >=
-                   &pfs_thread->m_events_waits_stack[WAIT_STACK_SIZE]))
-      {
+                   &pfs_thread->m_events_waits_stack[WAIT_STACK_SIZE])) {
         locker_lost++;
-        return NULL;
+        return nullptr;
       }
       PFS_events_waits *wait = pfs_thread->m_events_waits_current;
       state->m_wait = wait;
@@ -3207,24 +3826,18 @@ pfs_start_cond_wait_v1(PSI_cond_locker_state *state,
 
       pfs_thread->m_events_waits_current++;
     }
-  }
-  else
-  {
-    if (pfs_cond->m_timed)
-    {
-      timer_start =
-        get_timer_raw_value_and_function(wait_timer, &state->m_timer);
+  } else {
+    if (pfs_cond->m_timed) {
+      timer_start = get_wait_timer();
       state->m_timer_start = timer_start;
       flags = STATE_FLAG_TIMED;
-    }
-    else
-    {
+    } else {
       /*
         Complete shortcut.
       */
       /* Aggregate to EVENTS_WAITS_SUMMARY_BY_INSTANCE (counted) */
       pfs_cond->m_cond_stat.m_wait_stat.aggregate_counted();
-      return NULL;
+      return nullptr;
     }
   }
 
@@ -3234,47 +3847,42 @@ pfs_start_cond_wait_v1(PSI_cond_locker_state *state,
   return reinterpret_cast<PSI_cond_locker *>(state);
 }
 
-static inline PFS_TL_LOCK_TYPE
-lock_flags_to_lock_type(uint flags)
-{
+static inline PFS_TL_LOCK_TYPE lock_flags_to_lock_type(uint flags) {
   enum thr_lock_type value = static_cast<enum thr_lock_type>(flags);
 
-  switch (value)
-  {
-  case TL_READ:
-    return PFS_TL_READ;
-  case TL_READ_WITH_SHARED_LOCKS:
-    return PFS_TL_READ_WITH_SHARED_LOCKS;
-  case TL_READ_HIGH_PRIORITY:
-    return PFS_TL_READ_HIGH_PRIORITY;
-  case TL_READ_NO_INSERT:
-    return PFS_TL_READ_NO_INSERT;
-  case TL_WRITE_ALLOW_WRITE:
-    return PFS_TL_WRITE_ALLOW_WRITE;
-  case TL_WRITE_CONCURRENT_INSERT:
-    return PFS_TL_WRITE_CONCURRENT_INSERT;
-  case TL_WRITE_LOW_PRIORITY:
-    return PFS_TL_WRITE_LOW_PRIORITY;
-  case TL_WRITE:
-    return PFS_TL_WRITE;
+  switch (value) {
+    case TL_READ:
+      return PFS_TL_READ;
+    case TL_READ_WITH_SHARED_LOCKS:
+      return PFS_TL_READ_WITH_SHARED_LOCKS;
+    case TL_READ_HIGH_PRIORITY:
+      return PFS_TL_READ_HIGH_PRIORITY;
+    case TL_READ_NO_INSERT:
+      return PFS_TL_READ_NO_INSERT;
+    case TL_WRITE_ALLOW_WRITE:
+      return PFS_TL_WRITE_ALLOW_WRITE;
+    case TL_WRITE_CONCURRENT_INSERT:
+      return PFS_TL_WRITE_CONCURRENT_INSERT;
+    case TL_WRITE_LOW_PRIORITY:
+      return PFS_TL_WRITE_LOW_PRIORITY;
+    case TL_WRITE:
+      return PFS_TL_WRITE;
 
-  case TL_WRITE_ONLY:
-  case TL_IGNORE:
-  case TL_UNLOCK:
-  case TL_READ_DEFAULT:
-  case TL_WRITE_DEFAULT:
-  case TL_WRITE_CONCURRENT_DEFAULT:
-  default:
-    DBUG_ASSERT(false);
+    case TL_WRITE_ONLY:
+    case TL_IGNORE:
+    case TL_UNLOCK:
+    case TL_READ_DEFAULT:
+    case TL_WRITE_DEFAULT:
+    case TL_WRITE_CONCURRENT_DEFAULT:
+    default:
+      DBUG_ASSERT(false);
   }
 
   /* Dead code */
   return PFS_TL_READ;
 }
 
-static inline PFS_TL_LOCK_TYPE
-external_lock_flags_to_lock_type(uint flags)
-{
+static inline PFS_TL_LOCK_TYPE external_lock_flags_to_lock_type(uint flags) {
   DBUG_ASSERT(flags == F_RDLCK || flags == F_WRLCK);
   return (flags == F_RDLCK ? PFS_TL_READ_EXTERNAL : PFS_TL_WRITE_EXTERNAL);
 }
@@ -3283,24 +3891,20 @@ external_lock_flags_to_lock_type(uint flags)
   Implementation of the table instrumentation interface.
   @sa PSI_v1::start_table_io_wait_v1
 */
-PSI_table_locker *
-pfs_start_table_io_wait_v1(PSI_table_locker_state *state,
-                           PSI_table *table,
-                           PSI_table_io_operation op,
-                           uint index,
-                           const char *src_file,
-                           uint src_line)
-{
+PSI_table_locker *pfs_start_table_io_wait_v1(PSI_table_locker_state *state,
+                                             PSI_table *table,
+                                             PSI_table_io_operation op,
+                                             uint index, const char *src_file,
+                                             uint src_line) {
   DBUG_ASSERT(static_cast<int>(op) >= 0);
   DBUG_ASSERT(static_cast<uint>(op) < array_elements(table_io_operation_map));
-  DBUG_ASSERT(state != NULL);
+  DBUG_ASSERT(state != nullptr);
   PFS_table *pfs_table = reinterpret_cast<PFS_table *>(table);
-  DBUG_ASSERT(pfs_table != NULL);
-  DBUG_ASSERT(pfs_table->m_share != NULL);
+  DBUG_ASSERT(pfs_table != nullptr);
+  DBUG_ASSERT(pfs_table->m_share != nullptr);
 
-  if (!pfs_table->m_io_enabled)
-  {
-    return NULL;
+  if (!pfs_table->m_io_enabled) {
+    return nullptr;
   }
 
   PFS_thread *pfs_thread = my_thread_get_THR_PFS();
@@ -3308,34 +3912,27 @@ pfs_start_table_io_wait_v1(PSI_table_locker_state *state,
   uint flags;
   ulonglong timer_start = 0;
 
-  if (flag_thread_instrumentation)
-  {
-    if (pfs_thread == NULL)
-    {
-      return NULL;
+  if (flag_thread_instrumentation) {
+    if (pfs_thread == nullptr) {
+      return nullptr;
     }
-    if (!pfs_thread->m_enabled)
-    {
-      return NULL;
+    if (!pfs_thread->m_enabled) {
+      return nullptr;
     }
     state->m_thread = reinterpret_cast<PSI_thread *>(pfs_thread);
     flags = STATE_FLAG_THREAD;
 
-    if (pfs_table->m_io_timed)
-    {
-      timer_start =
-        get_timer_raw_value_and_function(wait_timer, &state->m_timer);
+    if (pfs_table->m_io_timed) {
+      timer_start = get_wait_timer();
       state->m_timer_start = timer_start;
       flags |= STATE_FLAG_TIMED;
     }
 
-    if (flag_events_waits_current)
-    {
+    if (flag_events_waits_current) {
       if (unlikely(pfs_thread->m_events_waits_current >=
-                   &pfs_thread->m_events_waits_stack[WAIT_STACK_SIZE]))
-      {
+                   &pfs_thread->m_events_waits_stack[WAIT_STACK_SIZE])) {
         locker_lost++;
-        return NULL;
+        return nullptr;
       }
       PFS_events_waits *wait = pfs_thread->m_events_waits_current;
       state->m_wait = wait;
@@ -3366,18 +3963,12 @@ pfs_start_table_io_wait_v1(PSI_table_locker_state *state,
 
       pfs_thread->m_events_waits_current++;
     }
-  }
-  else
-  {
-    if (pfs_table->m_io_timed)
-    {
-      timer_start =
-        get_timer_raw_value_and_function(wait_timer, &state->m_timer);
+  } else {
+    if (pfs_table->m_io_timed) {
+      timer_start = get_wait_timer();
       state->m_timer_start = timer_start;
       flags = STATE_FLAG_TIMED;
-    }
-    else
-    {
+    } else {
       /* TODO: consider a shortcut here */
       flags = 0;
     }
@@ -3394,53 +3985,48 @@ pfs_start_table_io_wait_v1(PSI_table_locker_state *state,
   Implementation of the table instrumentation interface.
   @sa PSI_v1::start_table_lock_wait.
 */
-PSI_table_locker *
-pfs_start_table_lock_wait_v1(PSI_table_locker_state *state,
-                             PSI_table *table,
-                             PSI_table_lock_operation op,
-                             ulong op_flags,
-                             const char *src_file,
-                             uint src_line)
-{
-  DBUG_ASSERT(state != NULL);
+PSI_table_locker *pfs_start_table_lock_wait_v1(PSI_table_locker_state *state,
+                                               PSI_table *table,
+                                               PSI_table_lock_operation op,
+                                               ulong op_flags,
+                                               const char *src_file,
+                                               uint src_line) {
+  DBUG_ASSERT(state != nullptr);
   DBUG_ASSERT((op == PSI_TABLE_LOCK) || (op == PSI_TABLE_EXTERNAL_LOCK));
 
   PFS_table *pfs_table = reinterpret_cast<PFS_table *>(table);
 
-  DBUG_ASSERT(pfs_table != NULL);
-  DBUG_ASSERT(pfs_table->m_share != NULL);
+  DBUG_ASSERT(pfs_table != nullptr);
+  DBUG_ASSERT(pfs_table->m_share != nullptr);
 
-  if (!pfs_table->m_lock_enabled)
-  {
-    return NULL;
+  if (!pfs_table->m_lock_enabled) {
+    return nullptr;
   }
 
   PFS_thread *pfs_thread = my_thread_get_THR_PFS();
 
   PFS_TL_LOCK_TYPE lock_type;
 
-  switch (op)
-  {
-  case PSI_TABLE_LOCK:
-    lock_type = lock_flags_to_lock_type(op_flags);
-    pfs_table->m_internal_lock = lock_type;
-    break;
-  case PSI_TABLE_EXTERNAL_LOCK:
-    /*
-      See the handler::external_lock() API design,
-      there is no handler::external_unlock().
-    */
-    if (op_flags == F_UNLCK)
-    {
-      pfs_table->m_external_lock = PFS_TL_NONE;
-      return NULL;
-    }
-    lock_type = external_lock_flags_to_lock_type(op_flags);
-    pfs_table->m_external_lock = lock_type;
-    break;
-  default:
-    lock_type = PFS_TL_READ;
-    DBUG_ASSERT(false);
+  switch (op) {
+    case PSI_TABLE_LOCK:
+      lock_type = lock_flags_to_lock_type(op_flags);
+      pfs_table->m_internal_lock = lock_type;
+      break;
+    case PSI_TABLE_EXTERNAL_LOCK:
+      /*
+        See the handler::external_lock() API design,
+        there is no handler::external_unlock().
+      */
+      if (op_flags == F_UNLCK) {
+        pfs_table->m_external_lock = PFS_TL_NONE;
+        return nullptr;
+      }
+      lock_type = external_lock_flags_to_lock_type(op_flags);
+      pfs_table->m_external_lock = lock_type;
+      break;
+    default:
+      lock_type = PFS_TL_READ;
+      DBUG_ASSERT(false);
   }
 
   DBUG_ASSERT((uint)lock_type < array_elements(table_lock_operation_map));
@@ -3448,34 +4034,27 @@ pfs_start_table_lock_wait_v1(PSI_table_locker_state *state,
   uint flags;
   ulonglong timer_start = 0;
 
-  if (flag_thread_instrumentation)
-  {
-    if (pfs_thread == NULL)
-    {
-      return NULL;
+  if (flag_thread_instrumentation) {
+    if (pfs_thread == nullptr) {
+      return nullptr;
     }
-    if (!pfs_thread->m_enabled)
-    {
-      return NULL;
+    if (!pfs_thread->m_enabled) {
+      return nullptr;
     }
     state->m_thread = reinterpret_cast<PSI_thread *>(pfs_thread);
     flags = STATE_FLAG_THREAD;
 
-    if (pfs_table->m_lock_timed)
-    {
-      timer_start =
-        get_timer_raw_value_and_function(wait_timer, &state->m_timer);
+    if (pfs_table->m_lock_timed) {
+      timer_start = get_wait_timer();
       state->m_timer_start = timer_start;
       flags |= STATE_FLAG_TIMED;
     }
 
-    if (flag_events_waits_current)
-    {
+    if (flag_events_waits_current) {
       if (unlikely(pfs_thread->m_events_waits_current >=
-                   &pfs_thread->m_events_waits_stack[WAIT_STACK_SIZE]))
-      {
+                   &pfs_thread->m_events_waits_stack[WAIT_STACK_SIZE])) {
         locker_lost++;
-        return NULL;
+        return nullptr;
       }
       PFS_events_waits *wait = pfs_thread->m_events_waits_current;
       state->m_wait = wait;
@@ -3506,18 +4085,12 @@ pfs_start_table_lock_wait_v1(PSI_table_locker_state *state,
 
       pfs_thread->m_events_waits_current++;
     }
-  }
-  else
-  {
-    if (pfs_table->m_lock_timed)
-    {
-      timer_start =
-        get_timer_raw_value_and_function(wait_timer, &state->m_timer);
+  } else {
+    if (pfs_table->m_lock_timed) {
+      timer_start = get_wait_timer();
       state->m_timer_start = timer_start;
       flags = STATE_FLAG_TIMED;
-    }
-    else
-    {
+    } else {
       /* TODO: consider a shortcut here */
       flags = 0;
     }
@@ -3533,41 +4106,60 @@ pfs_start_table_lock_wait_v1(PSI_table_locker_state *state,
   Implementation of the file instrumentation interface.
   @sa PSI_v1::get_thread_file_name_locker.
 */
-PSI_file_locker *
-pfs_get_thread_file_name_locker_v1(PSI_file_locker_state *state,
-                                   PSI_file_key key,
-                                   PSI_file_operation op,
-                                   const char *name,
-                                   const void *)
-{
+PSI_file_locker *pfs_get_thread_file_name_locker_vc(
+    PSI_file_locker_state *state, PSI_file_key key, PSI_file_operation op,
+    const char *name, const void *) {
   DBUG_ASSERT(static_cast<int>(op) >= 0);
   DBUG_ASSERT(static_cast<uint>(op) < array_elements(file_operation_map));
-  DBUG_ASSERT(state != NULL);
+  DBUG_ASSERT(state != nullptr);
 
-  if (!flag_global_instrumentation)
-  {
-    return NULL;
+  if (!flag_global_instrumentation) {
+    return nullptr;
   }
+
   PFS_file_class *klass = find_file_class(key);
-  if (unlikely(klass == NULL))
-  {
-    return NULL;
-  }
-  if (!klass->m_enabled)
-  {
-    return NULL;
+  if (unlikely(klass == nullptr)) {
+    return nullptr;
   }
 
   /* Needed for the LF_HASH */
   PFS_thread *pfs_thread = my_thread_get_THR_PFS();
-  if (unlikely(pfs_thread == NULL))
-  {
-    return NULL;
+  if (unlikely(pfs_thread == nullptr)) {
+    return nullptr;
   }
 
-  if (flag_thread_instrumentation && !pfs_thread->m_enabled)
-  {
-    return NULL;
+  if (op == PSI_FILE_DELETE) {
+    uint len = (uint)strlen(name);
+    PFS_file *pfs_file = find_file(pfs_thread, nullptr, name, len);
+    /* For other operations, state->m_file is set by start_file_open_wait(). */
+    state->m_file = reinterpret_cast<PSI_file *>(pfs_file);
+
+    if (pfs_file) {
+      /*
+        To avoid a race condition on the filename, delete the filename
+        from the hash before the file is deleted by the file system.
+      */
+      delete_file_name(pfs_thread, pfs_file);
+      /*
+        Normally, end_file_close_wait() will destroy the file instrumentation
+        instance after the file is deleted. However, if the instrumentation
+        was disabled, then there's nothing else to do except destroy the
+        file instrumentation and return nullptr.
+      */
+      if (!klass->m_enabled || !pfs_file->m_enabled) {
+        destroy_file(pfs_thread, pfs_file, false);
+        return nullptr;
+      }
+    }
+  }
+
+  /* Instrumentation disabled, nothing to do. */
+  if (!klass->m_enabled) {
+    return nullptr;
+  }
+
+  if (flag_thread_instrumentation && !pfs_thread->m_enabled) {
+    return nullptr;
   }
 
   uint flags;
@@ -3575,18 +4167,15 @@ pfs_get_thread_file_name_locker_v1(PSI_file_locker_state *state,
   state->m_thread = reinterpret_cast<PSI_thread *>(pfs_thread);
   flags = STATE_FLAG_THREAD;
 
-  if (klass->m_timed)
-  {
+  if (klass->m_timed) {
     flags |= STATE_FLAG_TIMED;
   }
 
-  if (flag_events_waits_current)
-  {
+  if (flag_events_waits_current) {
     if (unlikely(pfs_thread->m_events_waits_current >=
-                 &pfs_thread->m_events_waits_stack[WAIT_STACK_SIZE]))
-    {
+                 &pfs_thread->m_events_waits_stack[WAIT_STACK_SIZE])) {
       locker_lost++;
-      return NULL;
+      return nullptr;
     }
     PFS_events_waits *wait = pfs_thread->m_events_waits_current;
     state->m_wait = wait;
@@ -3601,8 +4190,8 @@ pfs_get_thread_file_name_locker_v1(PSI_file_locker_state *state,
     wait->m_class = klass;
     wait->m_timer_start = 0;
     wait->m_timer_end = 0;
-    wait->m_object_instance_addr = NULL;
-    wait->m_weak_file = NULL;
+    wait->m_object_instance_addr = nullptr;
+    wait->m_weak_file = nullptr;
     wait->m_weak_version = 0;
     wait->m_event_id = pfs_thread->m_event_id++;
     wait->m_end_event_id = 0;
@@ -3613,7 +4202,10 @@ pfs_get_thread_file_name_locker_v1(PSI_file_locker_state *state,
   }
 
   state->m_flags = flags;
-  state->m_file = NULL;
+  if (op != PSI_FILE_DELETE) {
+    /* Set by start_file_open_wait(). */
+    state->m_file = nullptr;
+  }
   state->m_name = name;
   state->m_class = klass;
   state->m_operation = op;
@@ -3624,33 +4216,36 @@ pfs_get_thread_file_name_locker_v1(PSI_file_locker_state *state,
   Implementation of the file instrumentation interface.
   @sa PSI_v1::get_thread_file_stream_locker.
 */
-PSI_file_locker *
-pfs_get_thread_file_stream_locker_v1(PSI_file_locker_state *state,
-                                     PSI_file *file,
-                                     PSI_file_operation op)
-{
+PSI_file_locker *pfs_get_thread_file_stream_locker_vc(
+    PSI_file_locker_state *state, PSI_file *file, PSI_file_operation op) {
   PFS_file *pfs_file = reinterpret_cast<PFS_file *>(file);
   DBUG_ASSERT(static_cast<int>(op) >= 0);
   DBUG_ASSERT(static_cast<uint>(op) < array_elements(file_operation_map));
-  DBUG_ASSERT(state != NULL);
+  DBUG_ASSERT(state != nullptr);
 
-  if (unlikely(pfs_file == NULL))
-  {
-    return NULL;
+  if (unlikely(pfs_file == nullptr)) {
+    return nullptr;
   }
-  DBUG_ASSERT(pfs_file->m_class != NULL);
+  DBUG_ASSERT(pfs_file->m_class != nullptr);
   PFS_file_class *klass = pfs_file->m_class;
 
-  if (!pfs_file->m_enabled)
-  {
-    return NULL;
+  /*
+    Normally, end_file_close_wait() will release the file instrumentation
+    instance after the file is closed. However, if the instrumentation
+    was disabled, then there's nothing else to do except release the
+    file instance and return nullptr.
+  */
+  if (!klass->m_enabled || !pfs_file->m_enabled) {
+    if (op == PSI_FILE_STREAM_CLOSE) {
+      release_file(pfs_file);
+    }
+    return nullptr;
   }
 
   /* Needed for the LF_HASH */
   PFS_thread *pfs_thread = my_thread_get_THR_PFS();
-  if (unlikely(pfs_thread == NULL))
-  {
-    return NULL;
+  if (unlikely(pfs_thread == nullptr)) {
+    return nullptr;
   }
 
   uint flags;
@@ -3658,26 +4253,21 @@ pfs_get_thread_file_stream_locker_v1(PSI_file_locker_state *state,
   /* Always populated */
   state->m_thread = reinterpret_cast<PSI_thread *>(pfs_thread);
 
-  if (flag_thread_instrumentation)
-  {
-    if (!pfs_thread->m_enabled)
-    {
-      return NULL;
+  if (flag_thread_instrumentation) {
+    if (!pfs_thread->m_enabled) {
+      return nullptr;
     }
     flags = STATE_FLAG_THREAD;
 
-    if (pfs_file->m_timed)
-    {
+    if (pfs_file->m_timed) {
       flags |= STATE_FLAG_TIMED;
     }
 
-    if (flag_events_waits_current)
-    {
+    if (flag_events_waits_current) {
       if (unlikely(pfs_thread->m_events_waits_current >=
-                   &pfs_thread->m_events_waits_stack[WAIT_STACK_SIZE]))
-      {
+                   &pfs_thread->m_events_waits_stack[WAIT_STACK_SIZE])) {
         locker_lost++;
-        return NULL;
+        return nullptr;
       }
       PFS_events_waits *wait = pfs_thread->m_events_waits_current;
       state->m_wait = wait;
@@ -3702,15 +4292,10 @@ pfs_get_thread_file_stream_locker_v1(PSI_file_locker_state *state,
 
       pfs_thread->m_events_waits_current++;
     }
-  }
-  else
-  {
-    if (pfs_file->m_timed)
-    {
+  } else {
+    if (pfs_file->m_timed) {
       flags = STATE_FLAG_TIMED;
-    }
-    else
-    {
+    } else {
       /* TODO: consider a shortcut. */
       flags = 0;
     }
@@ -3719,7 +4304,7 @@ pfs_get_thread_file_stream_locker_v1(PSI_file_locker_state *state,
   state->m_flags = flags;
   state->m_file = reinterpret_cast<PSI_file *>(pfs_file);
   state->m_operation = op;
-  state->m_name = NULL;
+  state->m_name = nullptr;
   state->m_class = klass;
   return reinterpret_cast<PSI_file_locker *>(state);
 }
@@ -3728,26 +4313,30 @@ pfs_get_thread_file_stream_locker_v1(PSI_file_locker_state *state,
   Implementation of the file instrumentation interface.
   @sa PSI_v1::get_thread_file_descriptor_locker.
 */
-PSI_file_locker *
-pfs_get_thread_file_descriptor_locker_v1(PSI_file_locker_state *state,
-                                         File file,
-                                         PSI_file_operation op)
-{
+PSI_file_locker *pfs_get_thread_file_descriptor_locker_vc(
+    PSI_file_locker_state *state, File file, PSI_file_operation op) {
   int index = static_cast<int>(file);
   DBUG_ASSERT(static_cast<int>(op) >= 0);
   DBUG_ASSERT(static_cast<uint>(op) < array_elements(file_operation_map));
-  DBUG_ASSERT(state != NULL);
+  DBUG_ASSERT(state != nullptr);
 
-  if (unlikely((index < 0) || (index >= file_handle_max)))
-  {
-    return NULL;
+  if (unlikely((index < 0) || (index >= file_handle_max))) {
+    return nullptr;
   }
 
   PFS_file *pfs_file = file_handle_array[index];
-  if (unlikely(pfs_file == NULL))
-  {
-    return NULL;
+  if (unlikely(pfs_file == nullptr)) {
+    return nullptr;
   }
+
+  /* Needed for the LF_HASH */
+  PFS_thread *pfs_thread = my_thread_get_THR_PFS();
+  if (unlikely(pfs_thread == nullptr)) {
+    return nullptr;
+  }
+
+  DBUG_ASSERT(pfs_file->m_class != nullptr);
+  PFS_file_class *klass = pfs_file->m_class;
 
   /*
     We are about to close a file by descriptor number,
@@ -3757,24 +4346,36 @@ pfs_get_thread_file_descriptor_locker_v1(PSI_file_locker_state *state,
     conditions with another thread opening a file
     (that could be given the same descriptor).
   */
-  if (op == PSI_FILE_CLOSE)
-  {
-    file_handle_array[index] = NULL;
+  if (op == PSI_FILE_CLOSE) {
+    file_handle_array[index] = nullptr;
+    /*
+      Temporary filenames embed the file descriptor to ensure uniqueness.
+      To avoid a race on the filename when the descriptor is made available
+      by the file system, we must delete the filename from the filename hash
+      before the file is closed and the descriptor released.
+    */
+    if (pfs_file->m_temporary) {
+      delete_file_name(pfs_thread, pfs_file);
+    }
+    /*
+      Normally, end_file_close_wait() releases the pfs_file object after
+      the file is closed. However, if the instrumentation was disabled
+      prior to closing the file, then we must release or destroy the file
+      instrumentation before returning a NULL locker.
+    */
+    if (!klass->m_enabled || !pfs_file->m_enabled) {
+      if (pfs_file->m_temporary) {
+        destroy_file(pfs_thread, pfs_file, false);
+      } else {
+        release_file(pfs_file);
+      }
+      return nullptr;
+    }
   }
 
-  if (!pfs_file->m_enabled)
-  {
-    return NULL;
-  }
-
-  DBUG_ASSERT(pfs_file->m_class != NULL);
-  PFS_file_class *klass = pfs_file->m_class;
-
-  /* Needed for the LF_HASH */
-  PFS_thread *pfs_thread = my_thread_get_THR_PFS();
-  if (unlikely(pfs_thread == NULL))
-  {
-    return NULL;
+  /* Instrumentation disabled, nothing to do. */
+  if (!klass->m_enabled || !pfs_file->m_enabled) {
+    return nullptr;
   }
 
   uint flags;
@@ -3782,26 +4383,21 @@ pfs_get_thread_file_descriptor_locker_v1(PSI_file_locker_state *state,
   /* Always populated */
   state->m_thread = reinterpret_cast<PSI_thread *>(pfs_thread);
 
-  if (flag_thread_instrumentation)
-  {
-    if (!pfs_thread->m_enabled)
-    {
-      return NULL;
+  if (flag_thread_instrumentation) {
+    if (!pfs_thread->m_enabled) {
+      return nullptr;
     }
     flags = STATE_FLAG_THREAD;
 
-    if (pfs_file->m_timed)
-    {
+    if (pfs_file->m_timed) {
       flags |= STATE_FLAG_TIMED;
     }
 
-    if (flag_events_waits_current)
-    {
+    if (flag_events_waits_current) {
       if (unlikely(pfs_thread->m_events_waits_current >=
-                   &pfs_thread->m_events_waits_stack[WAIT_STACK_SIZE]))
-      {
+                   &pfs_thread->m_events_waits_stack[WAIT_STACK_SIZE])) {
         locker_lost++;
-        return NULL;
+        return nullptr;
       }
       PFS_events_waits *wait = pfs_thread->m_events_waits_current;
       state->m_wait = wait;
@@ -3826,15 +4422,10 @@ pfs_get_thread_file_descriptor_locker_v1(PSI_file_locker_state *state,
 
       pfs_thread->m_events_waits_current++;
     }
-  }
-  else
-  {
-    if (pfs_file->m_timed)
-    {
+  } else {
+    if (pfs_file->m_timed) {
       flags = STATE_FLAG_TIMED;
-    }
-    else
-    {
+    } else {
       /* TODO: consider a shortcut. */
       flags = 0;
     }
@@ -3843,39 +4434,37 @@ pfs_get_thread_file_descriptor_locker_v1(PSI_file_locker_state *state,
   state->m_flags = flags;
   state->m_file = reinterpret_cast<PSI_file *>(pfs_file);
   state->m_operation = op;
-  state->m_name = NULL;
+  state->m_name = nullptr;
   state->m_class = klass;
   return reinterpret_cast<PSI_file_locker *>(state);
 }
 
 /** Socket locker */
 
-PSI_socket_locker *
-pfs_start_socket_wait_v1(PSI_socket_locker_state *state,
-                         PSI_socket *socket,
-                         PSI_socket_operation op,
-                         size_t count,
-                         const char *src_file,
-                         uint src_line)
-{
+PSI_socket_locker *pfs_start_socket_wait_v1(PSI_socket_locker_state *state,
+                                            PSI_socket *socket,
+                                            PSI_socket_operation op,
+                                            size_t count, const char *src_file,
+                                            uint src_line) {
   DBUG_ASSERT(static_cast<int>(op) >= 0);
   DBUG_ASSERT(static_cast<uint>(op) < array_elements(socket_operation_map));
-  DBUG_ASSERT(state != NULL);
+  DBUG_ASSERT(state != nullptr);
   PFS_socket *pfs_socket = reinterpret_cast<PFS_socket *>(socket);
 
-  DBUG_ASSERT(pfs_socket != NULL);
-  DBUG_ASSERT(pfs_socket->m_class != NULL);
+  DBUG_ASSERT(pfs_socket != nullptr);
+  DBUG_ASSERT(pfs_socket->m_class != nullptr);
 
-  if (!pfs_socket->m_enabled || pfs_socket->m_idle)
-  {
-    return NULL;
+  /* The caller checks for m_enabled. */
+#if 0
+  if (!pfs_socket->m_enabled) {
+    return nullptr;
   }
+#endif
 
   uint flags = 0;
   ulonglong timer_start = 0;
 
-  if (flag_thread_instrumentation)
-  {
+  if (flag_thread_instrumentation) {
     /*
        Do not use pfs_socket->m_thread_owner here,
        as different threads may use concurrently the same socket,
@@ -3883,34 +4472,28 @@ pfs_start_socket_wait_v1(PSI_socket_locker_state *state,
     */
     PFS_thread *pfs_thread = my_thread_get_THR_PFS();
 
-    if (unlikely(pfs_thread == NULL))
-    {
-      return NULL;
+    if (unlikely(pfs_thread == nullptr)) {
+      return nullptr;
     }
 
-    if (!pfs_thread->m_enabled)
-    {
-      return NULL;
+    if (!pfs_thread->m_enabled) {
+      return nullptr;
     }
 
     state->m_thread = reinterpret_cast<PSI_thread *>(pfs_thread);
     flags = STATE_FLAG_THREAD;
 
-    if (pfs_socket->m_timed)
-    {
-      timer_start =
-        get_timer_raw_value_and_function(wait_timer, &state->m_timer);
+    if (pfs_socket->m_timed && !pfs_socket->m_idle) {
+      timer_start = get_wait_timer();
       state->m_timer_start = timer_start;
       flags |= STATE_FLAG_TIMED;
     }
 
-    if (flag_events_waits_current)
-    {
+    if (flag_events_waits_current) {
       if (unlikely(pfs_thread->m_events_waits_current >=
-                   &pfs_thread->m_events_waits_stack[WAIT_STACK_SIZE]))
-      {
+                   &pfs_thread->m_events_waits_stack[WAIT_STACK_SIZE])) {
         locker_lost++;
-        return NULL;
+        return nullptr;
       }
       PFS_events_waits *wait = pfs_thread->m_events_waits_current;
       state->m_wait = wait;
@@ -3937,39 +4520,32 @@ pfs_start_socket_wait_v1(PSI_socket_locker_state *state,
 
       pfs_thread->m_events_waits_current++;
     }
-  }
-  else
-  {
-    if (pfs_socket->m_timed)
-    {
-      timer_start =
-        get_timer_raw_value_and_function(wait_timer, &state->m_timer);
+  } else {
+    if (pfs_socket->m_timed && !pfs_socket->m_idle) {
+      timer_start = get_wait_timer();
       state->m_timer_start = timer_start;
       flags = STATE_FLAG_TIMED;
-    }
-    else
-    {
+    } else {
       /*
         Even if timing is disabled, end_socket_wait() still needs a locker to
         capture the number of bytes sent or received by the socket operation.
         For operations that do not have a byte count, then just increment the
         event counter and return a NULL locker.
       */
-      switch (op)
-      {
-      case PSI_SOCKET_CONNECT:
-      case PSI_SOCKET_CREATE:
-      case PSI_SOCKET_BIND:
-      case PSI_SOCKET_SEEK:
-      case PSI_SOCKET_OPT:
-      case PSI_SOCKET_STAT:
-      case PSI_SOCKET_SHUTDOWN:
-      case PSI_SOCKET_CLOSE:
-      case PSI_SOCKET_SELECT:
-        pfs_socket->m_socket_stat.m_io_stat.m_misc.aggregate_counted();
-        return NULL;
-      default:
-        break;
+      switch (op) {
+        case PSI_SOCKET_CONNECT:
+        case PSI_SOCKET_CREATE:
+        case PSI_SOCKET_BIND:
+        case PSI_SOCKET_SEEK:
+        case PSI_SOCKET_OPT:
+        case PSI_SOCKET_STAT:
+        case PSI_SOCKET_SHUTDOWN:
+        case PSI_SOCKET_CLOSE:
+        case PSI_SOCKET_SELECT:
+          pfs_socket->m_socket_stat.m_io_stat.m_misc.aggregate_counted();
+          return nullptr;
+        default:
+          break;
       }
     }
   }
@@ -3984,21 +4560,28 @@ pfs_start_socket_wait_v1(PSI_socket_locker_state *state,
   Implementation of the mutex instrumentation interface.
   @sa PSI_v1::unlock_mutex.
 */
-void
-pfs_unlock_mutex_v1(PSI_mutex *mutex)
-{
+void pfs_unlock_mutex_v1(PSI_mutex *mutex) {
   PFS_mutex *pfs_mutex = reinterpret_cast<PFS_mutex *>(mutex);
 
-  DBUG_ASSERT(pfs_mutex != NULL);
+  DBUG_ASSERT(pfs_mutex != nullptr);
 
   /*
     Note that this code is still protected by the instrumented mutex,
     and therefore is thread safe. See inline_mysql_mutex_unlock().
   */
 
-  /* Always update the instrumented state */
-  pfs_mutex->m_owner = NULL;
-  pfs_mutex->m_last_locked = 0;
+  /* The caller checks for m_enabled. */
+#if 0
+  if (!pfs_mutex->m_enabled) {
+    /*
+      Disabled mutexes are not updated,
+      to avoid bottlenecks.
+    */
+    return;
+  }
+#endif
+
+  pfs_mutex->m_owner = nullptr;
 
 #ifdef LATER_WL2333
   /*
@@ -4006,19 +4589,14 @@ pfs_unlock_mutex_v1(PSI_mutex *mutex)
     PFS_mutex::m_lock_stat is not exposed in user visible tables
     currently, so there is no point spending time computing it.
   */
-  if (!pfs_mutex->m_enabled)
-  {
-    return;
-  }
-
-  if (!pfs_mutex->m_timed)
-  {
+  if (!pfs_mutex->m_timed) {
     return;
   }
 
   ulonglong locked_time;
-  locked_time = get_timer_pico_value(wait_timer) - pfs_mutex->m_last_locked;
+  locked_time = get_wait_timer() - pfs_mutex->m_last_locked;
   pfs_mutex->m_mutex_stat.m_lock_stat.aggregate_value(locked_time);
+  pfs_mutex->m_last_locked = 0;
 #endif
 }
 
@@ -4026,17 +4604,13 @@ pfs_unlock_mutex_v1(PSI_mutex *mutex)
   Implementation of the rwlock instrumentation interface.
   @sa PSI_v1::unlock_rwlock.
 */
-void
-pfs_unlock_rwlock_v1(PSI_rwlock *rwlock)
-{
+void pfs_unlock_rwlock_v2(PSI_rwlock *rwlock,
+                          PSI_rwlock_operation op MY_ATTRIBUTE((unused))) {
   PFS_rwlock *pfs_rwlock = reinterpret_cast<PFS_rwlock *>(rwlock);
-  DBUG_ASSERT(pfs_rwlock != NULL);
+  DBUG_ASSERT(pfs_rwlock != nullptr);
   DBUG_ASSERT(pfs_rwlock == sanitize_rwlock(pfs_rwlock));
-  DBUG_ASSERT(pfs_rwlock->m_class != NULL);
+  DBUG_ASSERT(pfs_rwlock->m_class != nullptr);
   DBUG_ASSERT(pfs_rwlock->m_lock.is_populated());
-
-  bool last_writer = false;
-  bool last_reader = false;
 
   /*
     Note that this code is still protected by the instrumented rwlock,
@@ -4046,25 +4620,33 @@ pfs_unlock_rwlock_v1(PSI_rwlock *rwlock)
     See inline_mysql_rwlock_unlock()
   */
 
-  /* Always update the instrumented state */
-  if (pfs_rwlock->m_writer != NULL)
-  {
+  /* The caller checks for m_enabled. */
+#if 0
+  if (!pfs_rwlock->m_enabled) {
+    /*
+      Disabled rwlocks are not updated,
+      to avoid bottlenecks.
+    */
+    return;
+  }
+#endif
+
+  bool last_writer = false;
+  bool last_reader = false;
+
+  /* Update the instrumented state */
+  if (pfs_rwlock->m_writer != nullptr) {
     /* Nominal case, a writer is unlocking. */
     last_writer = true;
-    pfs_rwlock->m_writer = NULL;
+    pfs_rwlock->m_writer = nullptr;
     /* Reset the readers stats, they could be off */
     pfs_rwlock->m_readers = 0;
-  }
-  else if (likely(pfs_rwlock->m_readers > 0))
-  {
+  } else if (likely(pfs_rwlock->m_readers > 0)) {
     /* Nominal case, a reader is unlocking. */
-    if (--(pfs_rwlock->m_readers) == 0)
-    {
+    if (--(pfs_rwlock->m_readers) == 0) {
       last_reader = true;
     }
-  }
-  else
-  {
+  } else {
     /*
       Edge case, we have no writer and no readers,
       on an unlock event.
@@ -4080,25 +4662,16 @@ pfs_unlock_rwlock_v1(PSI_rwlock *rwlock)
 #ifdef LATER_WL2333
   /* See WL#2333: SHOW ENGINE ... LOCK STATUS. */
 
-  if (!pfs_rwlock->m_enabled)
-  {
-    return;
-  }
-
-  if (!pfs_rwlock->m_timed)
-  {
+  if (!pfs_rwlock->m_timed) {
     return;
   }
 
   ulonglong locked_time;
-  if (last_writer)
-  {
-    locked_time = get_timer_pico_value(wait_timer) - pfs_rwlock->m_last_written;
+  if (last_writer) {
+    locked_time = get_wait_timer() - pfs_rwlock->m_last_written;
     pfs_rwlock->m_rwlock_stat.m_write_lock_stat.aggregate_value(locked_time);
-  }
-  else if (last_reader)
-  {
-    locked_time = get_timer_pico_value(wait_timer) - pfs_rwlock->m_last_read;
+  } else if (last_reader) {
+    locked_time = get_wait_timer() - pfs_rwlock->m_last_read;
     pfs_rwlock->m_rwlock_stat.m_read_lock_stat.aggregate_value(locked_time);
   }
 #else
@@ -4111,13 +4684,11 @@ pfs_unlock_rwlock_v1(PSI_rwlock *rwlock)
   Implementation of the cond instrumentation interface.
   @sa PSI_v1::signal_cond.
 */
-void
-pfs_signal_cond_v1(PSI_cond *cond MY_ATTRIBUTE((unused)))
-{
+void pfs_signal_cond_v1(PSI_cond *cond MY_ATTRIBUTE((unused))) {
 #ifdef PFS_LATER
   PFS_cond *pfs_cond = reinterpret_cast<PFS_cond *>(cond);
 
-  DBUG_ASSERT(pfs_cond != NULL);
+  DBUG_ASSERT(pfs_cond != nullptr);
 
   pfs_cond->m_cond_stat.m_signal_count++;
 #endif
@@ -4127,13 +4698,11 @@ pfs_signal_cond_v1(PSI_cond *cond MY_ATTRIBUTE((unused)))
   Implementation of the cond instrumentation interface.
   @sa PSI_v1::broadcast_cond.
 */
-void
-pfs_broadcast_cond_v1(PSI_cond *cond MY_ATTRIBUTE((unused)))
-{
+void pfs_broadcast_cond_v1(PSI_cond *cond MY_ATTRIBUTE((unused))) {
 #ifdef PFS_LATER
   PFS_cond *pfs_cond = reinterpret_cast<PFS_cond *>(cond);
 
-  DBUG_ASSERT(pfs_cond != NULL);
+  DBUG_ASSERT(pfs_cond != nullptr);
 
   pfs_cond->m_cond_stat.m_broadcast_count++;
 #endif
@@ -4143,57 +4712,45 @@ pfs_broadcast_cond_v1(PSI_cond *cond MY_ATTRIBUTE((unused)))
   Implementation of the idle instrumentation interface.
   @sa PSI_v1::start_idle_wait.
 */
-PSI_idle_locker *
-pfs_start_idle_wait_v1(PSI_idle_locker_state *state,
-                       const char *src_file,
-                       uint src_line)
-{
-  DBUG_ASSERT(state != NULL);
+PSI_idle_locker *pfs_start_idle_wait_v1(PSI_idle_locker_state *state,
+                                        const char *src_file, uint src_line) {
+  DBUG_ASSERT(state != nullptr);
 
-  if (!flag_global_instrumentation)
-  {
-    return NULL;
+  if (!flag_global_instrumentation) {
+    return nullptr;
   }
 
-  if (!global_idle_class.m_enabled)
-  {
-    return NULL;
+  if (!global_idle_class.m_enabled) {
+    return nullptr;
   }
 
   uint flags = 0;
   ulonglong timer_start = 0;
 
-  if (flag_thread_instrumentation)
-  {
+  if (flag_thread_instrumentation) {
     PFS_thread *pfs_thread = my_thread_get_THR_PFS();
-    if (unlikely(pfs_thread == NULL))
-    {
-      return NULL;
+    if (unlikely(pfs_thread == nullptr)) {
+      return nullptr;
     }
-    if (!pfs_thread->m_enabled)
-    {
-      return NULL;
+    if (!pfs_thread->m_enabled) {
+      return nullptr;
     }
     state->m_thread = reinterpret_cast<PSI_thread *>(pfs_thread);
     flags = STATE_FLAG_THREAD;
 
     DBUG_ASSERT(pfs_thread->m_events_statements_count == 0);
 
-    if (global_idle_class.m_timed)
-    {
-      timer_start =
-        get_timer_raw_value_and_function(idle_timer, &state->m_timer);
+    if (global_idle_class.m_timed) {
+      timer_start = get_idle_timer();
       state->m_timer_start = timer_start;
       flags |= STATE_FLAG_TIMED;
     }
 
-    if (flag_events_waits_current)
-    {
+    if (flag_events_waits_current) {
       if (unlikely(pfs_thread->m_events_waits_current >=
-                   &pfs_thread->m_events_waits_stack[WAIT_STACK_SIZE]))
-      {
+                   &pfs_thread->m_events_waits_stack[WAIT_STACK_SIZE])) {
         locker_lost++;
-        return NULL;
+        return nullptr;
       }
       PFS_events_waits *wait = pfs_thread->m_events_waits_current;
       state->m_wait = wait;
@@ -4221,13 +4778,9 @@ pfs_start_idle_wait_v1(PSI_idle_locker_state *state,
 
       pfs_thread->m_events_waits_current++;
     }
-  }
-  else
-  {
-    if (global_idle_class.m_timed)
-    {
-      timer_start =
-        get_timer_raw_value_and_function(idle_timer, &state->m_timer);
+  } else {
+    if (global_idle_class.m_timed) {
+      timer_start = get_idle_timer();
       state->m_timer_start = timer_start;
       flags = STATE_FLAG_TIMED;
     }
@@ -4241,54 +4794,45 @@ pfs_start_idle_wait_v1(PSI_idle_locker_state *state,
   Implementation of the mutex instrumentation interface.
   @sa PSI_v1::end_idle_wait.
 */
-void
-pfs_end_idle_wait_v1(PSI_idle_locker *locker)
-{
+void pfs_end_idle_wait_v1(PSI_idle_locker *locker) {
   PSI_idle_locker_state *state =
-    reinterpret_cast<PSI_idle_locker_state *>(locker);
-  DBUG_ASSERT(state != NULL);
+      reinterpret_cast<PSI_idle_locker_state *>(locker);
+  DBUG_ASSERT(state != nullptr);
   ulonglong timer_end = 0;
   ulonglong wait_time = 0;
 
   uint flags = state->m_flags;
 
-  if (flags & STATE_FLAG_TIMED)
-  {
-    timer_end = state->m_timer();
+  if (flags & STATE_FLAG_TIMED) {
+    timer_end = get_idle_timer();
     wait_time = timer_end - state->m_timer_start;
   }
 
-  if (flags & STATE_FLAG_THREAD)
-  {
+  if (flags & STATE_FLAG_THREAD) {
     PFS_thread *thread = reinterpret_cast<PFS_thread *>(state->m_thread);
     PFS_single_stat *event_name_array;
     event_name_array = thread->write_instr_class_waits_stats();
 
-    if (flags & STATE_FLAG_TIMED)
-    {
+    if (flags & STATE_FLAG_TIMED) {
       /* Aggregate to EVENTS_WAITS_SUMMARY_BY_THREAD_BY_EVENT_NAME (timed) */
       event_name_array[GLOBAL_IDLE_EVENT_INDEX].aggregate_value(wait_time);
-    }
-    else
-    {
+    } else {
       /* Aggregate to EVENTS_WAITS_SUMMARY_BY_THREAD_BY_EVENT_NAME (counted) */
       event_name_array[GLOBAL_IDLE_EVENT_INDEX].aggregate_counted();
     }
 
-    if (flags & STATE_FLAG_EVENT)
-    {
+    if (flags & STATE_FLAG_EVENT) {
       PFS_events_waits *wait =
-        reinterpret_cast<PFS_events_waits *>(state->m_wait);
-      DBUG_ASSERT(wait != NULL);
+          reinterpret_cast<PFS_events_waits *>(state->m_wait);
+      DBUG_ASSERT(wait != nullptr);
 
       wait->m_timer_end = timer_end;
       wait->m_end_event_id = thread->m_event_id;
-      if (thread->m_flag_events_waits_history)
-      {
+
+      if (thread->m_flag_events_waits_history) {
         insert_events_waits_history(thread, wait);
       }
-      if (thread->m_flag_events_waits_history_long)
-      {
+      if (thread->m_flag_events_waits_history_long) {
         insert_events_waits_history_long(wait);
       }
       thread->m_events_waits_current--;
@@ -4297,13 +4841,10 @@ pfs_end_idle_wait_v1(PSI_idle_locker *locker)
     }
   }
 
-  if (flags & STATE_FLAG_TIMED)
-  {
+  if (flags & STATE_FLAG_TIMED) {
     /* Aggregate to EVENTS_WAITS_SUMMARY_GLOBAL_BY_EVENT_NAME (timed) */
     global_idle_stat.aggregate_value(wait_time);
-  }
-  else
-  {
+  } else {
     /* Aggregate to EVENTS_WAITS_SUMMARY_GLOBAL_BY_EVENT_NAME (counted) */
     global_idle_stat.aggregate_counted();
   }
@@ -4313,75 +4854,64 @@ pfs_end_idle_wait_v1(PSI_idle_locker *locker)
   Implementation of the mutex instrumentation interface.
   @sa PSI_v1::end_mutex_wait.
 */
-void
-pfs_end_mutex_wait_v1(PSI_mutex_locker *locker, int rc)
-{
+void pfs_end_mutex_wait_v1(PSI_mutex_locker *locker, int rc) {
   PSI_mutex_locker_state *state =
-    reinterpret_cast<PSI_mutex_locker_state *>(locker);
-  DBUG_ASSERT(state != NULL);
+      reinterpret_cast<PSI_mutex_locker_state *>(locker);
+  DBUG_ASSERT(state != nullptr);
 
   ulonglong timer_end = 0;
   ulonglong wait_time = 0;
 
   PFS_mutex *mutex = reinterpret_cast<PFS_mutex *>(state->m_mutex);
-  DBUG_ASSERT(mutex != NULL);
+  DBUG_ASSERT(mutex != nullptr);
   PFS_thread *thread = reinterpret_cast<PFS_thread *>(state->m_thread);
 
   uint flags = state->m_flags;
 
-  if (flags & STATE_FLAG_TIMED)
-  {
-    timer_end = state->m_timer();
+  if (flags & STATE_FLAG_TIMED) {
+    timer_end = get_wait_timer();
     wait_time = timer_end - state->m_timer_start;
     /* Aggregate to EVENTS_WAITS_SUMMARY_BY_INSTANCE (timed) */
     mutex->m_mutex_stat.m_wait_stat.aggregate_value(wait_time);
-  }
-  else
-  {
+  } else {
     /* Aggregate to EVENTS_WAITS_SUMMARY_BY_INSTANCE (counted) */
     mutex->m_mutex_stat.m_wait_stat.aggregate_counted();
   }
 
-  if (likely(rc == 0))
-  {
+  if (likely(rc == 0)) {
     mutex->m_owner = thread;
+#ifdef LATER_WL2333
     mutex->m_last_locked = timer_end;
+#endif /* LATER_WL2333 */
   }
 
-  if (flags & STATE_FLAG_THREAD)
-  {
+  if (flags & STATE_FLAG_THREAD) {
     PFS_single_stat *event_name_array;
     event_name_array = thread->write_instr_class_waits_stats();
     uint index = mutex->m_class->m_event_name_index;
 
     DBUG_ASSERT(index <= wait_class_max);
-    DBUG_ASSERT(sanitize_thread(thread) != NULL);
+    DBUG_ASSERT(sanitize_thread(thread) != nullptr);
 
-    if (flags & STATE_FLAG_TIMED)
-    {
+    if (flags & STATE_FLAG_TIMED) {
       /* Aggregate to EVENTS_WAITS_SUMMARY_BY_THREAD_BY_EVENT_NAME (timed) */
       event_name_array[index].aggregate_value(wait_time);
-    }
-    else
-    {
+    } else {
       /* Aggregate to EVENTS_WAITS_SUMMARY_BY_THREAD_BY_EVENT_NAME (counted) */
       event_name_array[index].aggregate_counted();
     }
 
-    if (flags & STATE_FLAG_EVENT)
-    {
+    if (flags & STATE_FLAG_EVENT) {
       PFS_events_waits *wait =
-        reinterpret_cast<PFS_events_waits *>(state->m_wait);
-      DBUG_ASSERT(wait != NULL);
+          reinterpret_cast<PFS_events_waits *>(state->m_wait);
+      DBUG_ASSERT(wait != nullptr);
 
       wait->m_timer_end = timer_end;
       wait->m_end_event_id = thread->m_event_id;
-      if (thread->m_flag_events_waits_history)
-      {
+      if (thread->m_flag_events_waits_history) {
         insert_events_waits_history(thread, wait);
       }
-      if (thread->m_flag_events_waits_history_long)
-      {
+      if (thread->m_flag_events_waits_history_long) {
         insert_events_waits_history_long(wait);
       }
       thread->m_events_waits_current--;
@@ -4393,36 +4923,30 @@ pfs_end_mutex_wait_v1(PSI_mutex_locker *locker, int rc)
 
 /**
   Implementation of the rwlock instrumentation interface.
-  @sa PSI_v1::end_rwlock_rdwait.
+  @sa PSI_v2::end_rwlock_rdwait.
 */
-void
-pfs_end_rwlock_rdwait_v1(PSI_rwlock_locker *locker, int rc)
-{
+void pfs_end_rwlock_rdwait_v2(PSI_rwlock_locker *locker, int rc) {
   PSI_rwlock_locker_state *state =
-    reinterpret_cast<PSI_rwlock_locker_state *>(locker);
-  DBUG_ASSERT(state != NULL);
+      reinterpret_cast<PSI_rwlock_locker_state *>(locker);
+  DBUG_ASSERT(state != nullptr);
 
   ulonglong timer_end = 0;
   ulonglong wait_time = 0;
 
   PFS_rwlock *rwlock = reinterpret_cast<PFS_rwlock *>(state->m_rwlock);
-  DBUG_ASSERT(rwlock != NULL);
+  DBUG_ASSERT(rwlock != nullptr);
 
-  if (state->m_flags & STATE_FLAG_TIMED)
-  {
-    timer_end = state->m_timer();
+  if (state->m_flags & STATE_FLAG_TIMED) {
+    timer_end = get_wait_timer();
     wait_time = timer_end - state->m_timer_start;
     /* Aggregate to EVENTS_WAITS_SUMMARY_BY_INSTANCE (timed) */
     rwlock->m_rwlock_stat.m_wait_stat.aggregate_value(wait_time);
-  }
-  else
-  {
+  } else {
     /* Aggregate to EVENTS_WAITS_SUMMARY_BY_INSTANCE (counted) */
     rwlock->m_rwlock_stat.m_wait_stat.aggregate_counted();
   }
 
-  if (rc == 0)
-  {
+  if (rc == 0) {
     /*
       Warning:
       Multiple threads can execute this section concurrently
@@ -4430,48 +4954,42 @@ pfs_end_rwlock_rdwait_v1(PSI_rwlock_locker *locker, int rc)
       The statistics generated are not safe, which is why they are
       just statistics, not facts.
     */
-    if (rwlock->m_readers == 0)
-    {
+#ifdef LATER_WL2333
+    if (rwlock->m_readers == 0) {
       rwlock->m_last_read = timer_end;
     }
-    rwlock->m_writer = NULL;
+#endif /* LATER_WL2333 */
+    rwlock->m_writer = nullptr;
     rwlock->m_readers++;
   }
 
-  if (state->m_flags & STATE_FLAG_THREAD)
-  {
+  if (state->m_flags & STATE_FLAG_THREAD) {
     PFS_thread *thread = reinterpret_cast<PFS_thread *>(state->m_thread);
-    DBUG_ASSERT(thread != NULL);
+    DBUG_ASSERT(thread != nullptr);
 
     PFS_single_stat *event_name_array;
     event_name_array = thread->write_instr_class_waits_stats();
     uint index = rwlock->m_class->m_event_name_index;
 
-    if (state->m_flags & STATE_FLAG_TIMED)
-    {
+    if (state->m_flags & STATE_FLAG_TIMED) {
       /* Aggregate to EVENTS_WAITS_SUMMARY_BY_THREAD_BY_EVENT_NAME (timed) */
       event_name_array[index].aggregate_value(wait_time);
-    }
-    else
-    {
+    } else {
       /* Aggregate to EVENTS_WAITS_SUMMARY_BY_THREAD_BY_EVENT_NAME (counted) */
       event_name_array[index].aggregate_counted();
     }
 
-    if (state->m_flags & STATE_FLAG_EVENT)
-    {
+    if (state->m_flags & STATE_FLAG_EVENT) {
       PFS_events_waits *wait =
-        reinterpret_cast<PFS_events_waits *>(state->m_wait);
-      DBUG_ASSERT(wait != NULL);
+          reinterpret_cast<PFS_events_waits *>(state->m_wait);
+      DBUG_ASSERT(wait != nullptr);
 
       wait->m_timer_end = timer_end;
       wait->m_end_event_id = thread->m_event_id;
-      if (thread->m_flag_events_waits_history)
-      {
+      if (thread->m_flag_events_waits_history) {
         insert_events_waits_history(thread, wait);
       }
-      if (thread->m_flag_events_waits_history_long)
-      {
+      if (thread->m_flag_events_waits_history_long) {
         insert_events_waits_history_long(wait);
       }
       thread->m_events_waits_current--;
@@ -4483,81 +5001,71 @@ pfs_end_rwlock_rdwait_v1(PSI_rwlock_locker *locker, int rc)
 
 /**
   Implementation of the rwlock instrumentation interface.
-  @sa PSI_v1::end_rwlock_wrwait.
+  @sa PSI_v2::end_rwlock_wrwait.
 */
-void
-pfs_end_rwlock_wrwait_v1(PSI_rwlock_locker *locker, int rc)
-{
+void pfs_end_rwlock_wrwait_v2(PSI_rwlock_locker *locker, int rc) {
   PSI_rwlock_locker_state *state =
-    reinterpret_cast<PSI_rwlock_locker_state *>(locker);
-  DBUG_ASSERT(state != NULL);
+      reinterpret_cast<PSI_rwlock_locker_state *>(locker);
+  DBUG_ASSERT(state != nullptr);
 
   ulonglong timer_end = 0;
   ulonglong wait_time = 0;
 
   PFS_rwlock *rwlock = reinterpret_cast<PFS_rwlock *>(state->m_rwlock);
-  DBUG_ASSERT(rwlock != NULL);
+  DBUG_ASSERT(rwlock != nullptr);
   PFS_thread *thread = reinterpret_cast<PFS_thread *>(state->m_thread);
 
-  if (state->m_flags & STATE_FLAG_TIMED)
-  {
-    timer_end = state->m_timer();
+  if (state->m_flags & STATE_FLAG_TIMED) {
+    timer_end = get_wait_timer();
     wait_time = timer_end - state->m_timer_start;
     /* Aggregate to EVENTS_WAITS_SUMMARY_BY_INSTANCE (timed) */
     rwlock->m_rwlock_stat.m_wait_stat.aggregate_value(wait_time);
-  }
-  else
-  {
+  } else {
     /* Aggregate to EVENTS_WAITS_SUMMARY_BY_INSTANCE (counted) */
     rwlock->m_rwlock_stat.m_wait_stat.aggregate_counted();
   }
 
-  if (likely(rc == 0))
-  {
+  if (likely(rc == 0)) {
     /* Thread safe : we are protected by the instrumented rwlock */
     rwlock->m_writer = thread;
+#ifdef LATER_WL2333
     rwlock->m_last_written = timer_end;
+#endif /* LATER_WL2333 */
 
     if ((state->m_operation != PSI_RWLOCK_SHAREDEXCLUSIVELOCK) &&
-        (state->m_operation != PSI_RWLOCK_TRYSHAREDEXCLUSIVELOCK))
-    {
+        (state->m_operation != PSI_RWLOCK_TRYSHAREDEXCLUSIVELOCK)) {
       /* Reset the readers stats, they could be off */
       rwlock->m_readers = 0;
+#ifdef LATER_WL2333
       rwlock->m_last_read = 0;
+#endif /* LATER_WL2333 */
     }
   }
 
-  if (state->m_flags & STATE_FLAG_THREAD)
-  {
+  if (state->m_flags & STATE_FLAG_THREAD) {
     PFS_single_stat *event_name_array;
     event_name_array = thread->write_instr_class_waits_stats();
     uint index = rwlock->m_class->m_event_name_index;
 
-    if (state->m_flags & STATE_FLAG_TIMED)
-    {
+    if (state->m_flags & STATE_FLAG_TIMED) {
       /* Aggregate to EVENTS_WAITS_SUMMARY_BY_THREAD_BY_EVENT_NAME (timed) */
       event_name_array[index].aggregate_value(wait_time);
-    }
-    else
-    {
+    } else {
       /* Aggregate to EVENTS_WAITS_SUMMARY_BY_THREAD_BY_EVENT_NAME (counted) */
       event_name_array[index].aggregate_counted();
     }
 
-    if (state->m_flags & STATE_FLAG_EVENT)
-    {
+    if (state->m_flags & STATE_FLAG_EVENT) {
       PFS_events_waits *wait =
-        reinterpret_cast<PFS_events_waits *>(state->m_wait);
-      DBUG_ASSERT(wait != NULL);
+          reinterpret_cast<PFS_events_waits *>(state->m_wait);
+      DBUG_ASSERT(wait != nullptr);
 
       wait->m_timer_end = timer_end;
       wait->m_end_event_id = thread->m_event_id;
-      if (thread->m_flag_events_waits_history)
-      {
+      if (thread->m_flag_events_waits_history) {
         insert_events_waits_history(thread, wait);
       }
-      if (thread->m_flag_events_waits_history_long)
-      {
+      if (thread->m_flag_events_waits_history_long) {
         insert_events_waits_history_long(wait);
       }
       thread->m_events_waits_current--;
@@ -4571,12 +5079,10 @@ pfs_end_rwlock_wrwait_v1(PSI_rwlock_locker *locker, int rc)
   Implementation of the cond instrumentation interface.
   @sa PSI_v1::end_cond_wait.
 */
-void
-pfs_end_cond_wait_v1(PSI_cond_locker *locker, int)
-{
+void pfs_end_cond_wait_v1(PSI_cond_locker *locker, int) {
   PSI_cond_locker_state *state =
-    reinterpret_cast<PSI_cond_locker_state *>(locker);
-  DBUG_ASSERT(state != NULL);
+      reinterpret_cast<PSI_cond_locker_state *>(locker);
+  DBUG_ASSERT(state != nullptr);
 
   ulonglong timer_end = 0;
   ulonglong wait_time = 0;
@@ -4584,53 +5090,43 @@ pfs_end_cond_wait_v1(PSI_cond_locker *locker, int)
   PFS_cond *cond = reinterpret_cast<PFS_cond *>(state->m_cond);
   /* PFS_mutex *mutex= reinterpret_cast<PFS_mutex *> (state->m_mutex); */
 
-  if (state->m_flags & STATE_FLAG_TIMED)
-  {
-    timer_end = state->m_timer();
+  if (state->m_flags & STATE_FLAG_TIMED) {
+    timer_end = get_wait_timer();
     wait_time = timer_end - state->m_timer_start;
     /* Aggregate to EVENTS_WAITS_SUMMARY_BY_INSTANCE (timed) */
     cond->m_cond_stat.m_wait_stat.aggregate_value(wait_time);
-  }
-  else
-  {
+  } else {
     /* Aggregate to EVENTS_WAITS_SUMMARY_BY_INSTANCE (counted) */
     cond->m_cond_stat.m_wait_stat.aggregate_counted();
   }
 
-  if (state->m_flags & STATE_FLAG_THREAD)
-  {
+  if (state->m_flags & STATE_FLAG_THREAD) {
     PFS_thread *thread = reinterpret_cast<PFS_thread *>(state->m_thread);
-    DBUG_ASSERT(thread != NULL);
+    DBUG_ASSERT(thread != nullptr);
 
     PFS_single_stat *event_name_array;
     event_name_array = thread->write_instr_class_waits_stats();
     uint index = cond->m_class->m_event_name_index;
 
-    if (state->m_flags & STATE_FLAG_TIMED)
-    {
+    if (state->m_flags & STATE_FLAG_TIMED) {
       /* Aggregate to EVENTS_WAITS_SUMMARY_BY_THREAD_BY_EVENT_NAME (timed) */
       event_name_array[index].aggregate_value(wait_time);
-    }
-    else
-    {
+    } else {
       /* Aggregate to EVENTS_WAITS_SUMMARY_BY_THREAD_BY_EVENT_NAME (counted) */
       event_name_array[index].aggregate_counted();
     }
 
-    if (state->m_flags & STATE_FLAG_EVENT)
-    {
+    if (state->m_flags & STATE_FLAG_EVENT) {
       PFS_events_waits *wait =
-        reinterpret_cast<PFS_events_waits *>(state->m_wait);
-      DBUG_ASSERT(wait != NULL);
+          reinterpret_cast<PFS_events_waits *>(state->m_wait);
+      DBUG_ASSERT(wait != nullptr);
 
       wait->m_timer_end = timer_end;
       wait->m_end_event_id = thread->m_event_id;
-      if (thread->m_flag_events_waits_history)
-      {
+      if (thread->m_flag_events_waits_history) {
         insert_events_waits_history(thread, wait);
       }
-      if (thread->m_flag_events_waits_history_long)
-      {
+      if (thread->m_flag_events_waits_history_long) {
         insert_events_waits_history_long(wait);
       }
       thread->m_events_waits_current--;
@@ -4644,18 +5140,16 @@ pfs_end_cond_wait_v1(PSI_cond_locker *locker, int)
   Implementation of the table instrumentation interface.
   @sa PSI_v1::end_table_io_wait.
 */
-void
-pfs_end_table_io_wait_v1(PSI_table_locker *locker, ulonglong numrows)
-{
+void pfs_end_table_io_wait_v1(PSI_table_locker *locker, ulonglong numrows) {
   PSI_table_locker_state *state =
-    reinterpret_cast<PSI_table_locker_state *>(locker);
-  DBUG_ASSERT(state != NULL);
+      reinterpret_cast<PSI_table_locker_state *>(locker);
+  DBUG_ASSERT(state != nullptr);
 
   ulonglong timer_end = 0;
   ulonglong wait_time = 0;
 
   PFS_table *table = reinterpret_cast<PFS_table *>(state->m_table);
-  DBUG_ASSERT(table != NULL);
+  DBUG_ASSERT(table != nullptr);
 
   PFS_single_stat *stat;
   PFS_table_io_stat *table_io_stat;
@@ -4666,43 +5160,38 @@ pfs_end_table_io_wait_v1(PSI_table_locker *locker, ulonglong numrows)
   table_io_stat = &table->m_table_stat.m_index_stat[state->m_index];
   table_io_stat->m_has_data = true;
 
-  switch (state->m_io_operation)
-  {
-  case PSI_TABLE_FETCH_ROW:
-    stat = &table_io_stat->m_fetch;
-    break;
-  case PSI_TABLE_WRITE_ROW:
-    stat = &table_io_stat->m_insert;
-    break;
-  case PSI_TABLE_UPDATE_ROW:
-    stat = &table_io_stat->m_update;
-    break;
-  case PSI_TABLE_DELETE_ROW:
-    stat = &table_io_stat->m_delete;
-    break;
-  default:
-    DBUG_ASSERT(false);
-    stat = NULL;
-    break;
+  switch (state->m_io_operation) {
+    case PSI_TABLE_FETCH_ROW:
+      stat = &table_io_stat->m_fetch;
+      break;
+    case PSI_TABLE_WRITE_ROW:
+      stat = &table_io_stat->m_insert;
+      break;
+    case PSI_TABLE_UPDATE_ROW:
+      stat = &table_io_stat->m_update;
+      break;
+    case PSI_TABLE_DELETE_ROW:
+      stat = &table_io_stat->m_delete;
+      break;
+    default:
+      DBUG_ASSERT(false);
+      stat = nullptr;
+      break;
   }
 
   uint flags = state->m_flags;
 
-  if (flags & STATE_FLAG_TIMED)
-  {
-    timer_end = state->m_timer();
+  if (flags & STATE_FLAG_TIMED) {
+    timer_end = get_wait_timer();
     wait_time = timer_end - state->m_timer_start;
     stat->aggregate_many_value(wait_time, numrows);
-  }
-  else
-  {
+  } else {
     stat->aggregate_counted(numrows);
   }
 
-  if (flags & STATE_FLAG_THREAD)
-  {
+  if (flags & STATE_FLAG_THREAD) {
     PFS_thread *thread = reinterpret_cast<PFS_thread *>(state->m_thread);
-    DBUG_ASSERT(thread != NULL);
+    DBUG_ASSERT(thread != nullptr);
 
     PFS_single_stat *event_name_array;
     event_name_array = thread->write_instr_class_waits_stats();
@@ -4711,31 +5200,25 @@ pfs_end_table_io_wait_v1(PSI_table_locker *locker, ulonglong numrows)
       Aggregate to EVENTS_WAITS_SUMMARY_BY_THREAD_BY_EVENT_NAME
       (for wait/io/table/sql/handler)
     */
-    if (flags & STATE_FLAG_TIMED)
-    {
+    if (flags & STATE_FLAG_TIMED) {
       event_name_array[GLOBAL_TABLE_IO_EVENT_INDEX].aggregate_many_value(
-        wait_time, numrows);
-    }
-    else
-    {
+          wait_time, numrows);
+    } else {
       event_name_array[GLOBAL_TABLE_IO_EVENT_INDEX].aggregate_counted(numrows);
     }
 
-    if (flags & STATE_FLAG_EVENT)
-    {
+    if (flags & STATE_FLAG_EVENT) {
       PFS_events_waits *wait =
-        reinterpret_cast<PFS_events_waits *>(state->m_wait);
-      DBUG_ASSERT(wait != NULL);
+          reinterpret_cast<PFS_events_waits *>(state->m_wait);
+      DBUG_ASSERT(wait != nullptr);
 
       wait->m_timer_end = timer_end;
       wait->m_end_event_id = thread->m_event_id;
       wait->m_number_of_bytes = static_cast<size_t>(numrows);
-      if (thread->m_flag_events_waits_history)
-      {
+      if (thread->m_flag_events_waits_history) {
         insert_events_waits_history(thread, wait);
       }
-      if (thread->m_flag_events_waits_history_long)
-      {
+      if (thread->m_flag_events_waits_history_long) {
         insert_events_waits_history_long(wait);
       }
       thread->m_events_waits_current--;
@@ -4751,39 +5234,33 @@ pfs_end_table_io_wait_v1(PSI_table_locker *locker, ulonglong numrows)
   Implementation of the table instrumentation interface.
   @sa PSI_v1::end_table_lock_wait.
 */
-void
-pfs_end_table_lock_wait_v1(PSI_table_locker *locker)
-{
+void pfs_end_table_lock_wait_v1(PSI_table_locker *locker) {
   PSI_table_locker_state *state =
-    reinterpret_cast<PSI_table_locker_state *>(locker);
-  DBUG_ASSERT(state != NULL);
+      reinterpret_cast<PSI_table_locker_state *>(locker);
+  DBUG_ASSERT(state != nullptr);
 
   ulonglong timer_end = 0;
   ulonglong wait_time = 0;
 
   PFS_table *table = reinterpret_cast<PFS_table *>(state->m_table);
-  DBUG_ASSERT(table != NULL);
+  DBUG_ASSERT(table != nullptr);
 
   PFS_single_stat *stat =
-    &table->m_table_stat.m_lock_stat.m_stat[state->m_index];
+      &table->m_table_stat.m_lock_stat.m_stat[state->m_index];
 
   uint flags = state->m_flags;
 
-  if (flags & STATE_FLAG_TIMED)
-  {
-    timer_end = state->m_timer();
+  if (flags & STATE_FLAG_TIMED) {
+    timer_end = get_wait_timer();
     wait_time = timer_end - state->m_timer_start;
     stat->aggregate_value(wait_time);
-  }
-  else
-  {
+  } else {
     stat->aggregate_counted();
   }
 
-  if (flags & STATE_FLAG_THREAD)
-  {
+  if (flags & STATE_FLAG_THREAD) {
     PFS_thread *thread = reinterpret_cast<PFS_thread *>(state->m_thread);
-    DBUG_ASSERT(thread != NULL);
+    DBUG_ASSERT(thread != nullptr);
 
     PFS_single_stat *event_name_array;
     event_name_array = thread->write_instr_class_waits_stats();
@@ -4792,30 +5269,24 @@ pfs_end_table_lock_wait_v1(PSI_table_locker *locker)
       Aggregate to EVENTS_WAITS_SUMMARY_BY_THREAD_BY_EVENT_NAME
       (for wait/lock/table/sql/handler)
     */
-    if (flags & STATE_FLAG_TIMED)
-    {
+    if (flags & STATE_FLAG_TIMED) {
       event_name_array[GLOBAL_TABLE_LOCK_EVENT_INDEX].aggregate_value(
-        wait_time);
-    }
-    else
-    {
+          wait_time);
+    } else {
       event_name_array[GLOBAL_TABLE_LOCK_EVENT_INDEX].aggregate_counted();
     }
 
-    if (flags & STATE_FLAG_EVENT)
-    {
+    if (flags & STATE_FLAG_EVENT) {
       PFS_events_waits *wait =
-        reinterpret_cast<PFS_events_waits *>(state->m_wait);
-      DBUG_ASSERT(wait != NULL);
+          reinterpret_cast<PFS_events_waits *>(state->m_wait);
+      DBUG_ASSERT(wait != nullptr);
 
       wait->m_timer_end = timer_end;
       wait->m_end_event_id = thread->m_event_id;
-      if (thread->m_flag_events_waits_history)
-      {
+      if (thread->m_flag_events_waits_history) {
         insert_events_waits_history(thread, wait);
       }
-      if (thread->m_flag_events_waits_history_long)
-      {
+      if (thread->m_flag_events_waits_history_long) {
         insert_events_waits_history_long(wait);
       }
       thread->m_events_waits_current--;
@@ -4827,23 +5298,18 @@ pfs_end_table_lock_wait_v1(PSI_table_locker *locker)
   table->m_has_lock_stats = true;
 }
 
-void pfs_start_file_wait_v1(PSI_file_locker *locker,
-                            size_t count,
-                            const char *src_file,
-                            uint src_line);
+void pfs_start_file_wait_vc(PSI_file_locker *locker, size_t count,
+                            const char *src_file, uint src_line);
 
-void pfs_end_file_wait_v1(PSI_file_locker *locker, size_t count);
+void pfs_end_file_wait_vc(PSI_file_locker *locker, size_t count);
 
 /**
   Implementation of the file instrumentation interface.
   @sa PSI_v1::start_file_open_wait.
 */
-void
-pfs_start_file_open_wait_v1(PSI_file_locker *locker,
-                            const char *src_file,
-                            uint src_line)
-{
-  pfs_start_file_wait_v1(locker, 0, src_file, src_line);
+void pfs_start_file_open_wait_vc(PSI_file_locker *locker, const char *src_file,
+                                 uint src_line) {
+  pfs_start_file_wait_vc(locker, 0, src_file, src_line);
 
   return;
 }
@@ -4852,38 +5318,35 @@ pfs_start_file_open_wait_v1(PSI_file_locker *locker,
   Implementation of the file instrumentation interface.
   @sa PSI_v1::end_file_open_wait.
 */
-PSI_file *
-pfs_end_file_open_wait_v1(PSI_file_locker *locker, void *result)
-{
+PSI_file *pfs_end_file_open_wait_vc(PSI_file_locker *locker, void *result) {
   PSI_file_locker_state *state =
-    reinterpret_cast<PSI_file_locker_state *>(locker);
-  DBUG_ASSERT(state != NULL);
+      reinterpret_cast<PSI_file_locker_state *>(locker);
+  DBUG_ASSERT(state != nullptr);
 
-  switch (state->m_operation)
-  {
-  case PSI_FILE_STAT:
-  case PSI_FILE_RENAME:
-    break;
-  case PSI_FILE_STREAM_OPEN:
-  case PSI_FILE_CREATE:
-  case PSI_FILE_OPEN:
-    if (result != NULL)
-    {
-      PFS_file_class *klass =
-        reinterpret_cast<PFS_file_class *>(state->m_class);
-      PFS_thread *thread = reinterpret_cast<PFS_thread *>(state->m_thread);
-      const char *name = state->m_name;
-      uint len = (uint)strlen(name);
-      PFS_file *pfs_file = find_or_create_file(thread, klass, name, len, true);
-      state->m_file = reinterpret_cast<PSI_file *>(pfs_file);
-    }
-    break;
-  default:
-    DBUG_ASSERT(false);
-    break;
+  switch (state->m_operation) {
+    case PSI_FILE_STAT:
+    case PSI_FILE_RENAME:
+      break;
+    case PSI_FILE_STREAM_OPEN:
+    case PSI_FILE_CREATE:
+    case PSI_FILE_OPEN:
+      if (result != nullptr) {
+        PFS_file_class *klass =
+            reinterpret_cast<PFS_file_class *>(state->m_class);
+        PFS_thread *thread = reinterpret_cast<PFS_thread *>(state->m_thread);
+        const char *name = state->m_name;
+        uint len = (uint)strlen(name);
+        PFS_file *pfs_file =
+            find_or_create_file(thread, klass, name, len, true);
+        state->m_file = reinterpret_cast<PSI_file *>(pfs_file);
+      }
+      break;
+    default:
+      DBUG_ASSERT(false);
+      break;
   }
 
-  pfs_end_file_wait_v1(locker, 0);
+  pfs_end_file_wait_vc(locker, 0);
 
   return state->m_file;
 }
@@ -4892,18 +5355,15 @@ pfs_end_file_open_wait_v1(PSI_file_locker *locker, void *result)
   Implementation of the file instrumentation interface.
   @sa PSI_v1::end_file_open_wait_and_bind_to_descriptor.
 */
-void
-pfs_end_file_open_wait_and_bind_to_descriptor_v1(PSI_file_locker *locker,
-                                                 File file)
-{
-  PFS_file *pfs_file = NULL;
+void pfs_end_file_open_wait_and_bind_to_descriptor_vc(PSI_file_locker *locker,
+                                                      File file) {
+  PFS_file *pfs_file = nullptr;
   int index = (int)file;
   PSI_file_locker_state *state =
-    reinterpret_cast<PSI_file_locker_state *>(locker);
-  DBUG_ASSERT(state != NULL);
+      reinterpret_cast<PSI_file_locker_state *>(locker);
+  DBUG_ASSERT(state != nullptr);
 
-  if (index >= 0)
-  {
+  if (index >= 0) {
     PFS_file_class *klass = reinterpret_cast<PFS_file_class *>(state->m_class);
     PFS_thread *thread = reinterpret_cast<PFS_thread *>(state->m_thread);
     const char *name = state->m_name;
@@ -4912,18 +5372,13 @@ pfs_end_file_open_wait_and_bind_to_descriptor_v1(PSI_file_locker *locker,
     state->m_file = reinterpret_cast<PSI_file *>(pfs_file);
   }
 
-  pfs_end_file_wait_v1(locker, 0);
+  pfs_end_file_wait_vc(locker, 0);
 
-  if (likely(index >= 0))
-  {
-    if (likely(index < file_handle_max))
-    {
+  if (likely(index >= 0)) {
+    if (likely(index < file_handle_max)) {
       file_handle_array[index] = pfs_file;
-    }
-    else
-    {
-      if (pfs_file != NULL)
-      {
+    } else {
+      if (pfs_file != nullptr) {
         release_file(pfs_file);
       }
       file_handle_lost++;
@@ -4935,23 +5390,19 @@ pfs_end_file_open_wait_and_bind_to_descriptor_v1(PSI_file_locker *locker,
   Implementation of the file instrumentation interface.
   @sa PSI_v1::end_temp_file_open_wait_and_bind_to_descriptor.
 */
-void
-pfs_end_temp_file_open_wait_and_bind_to_descriptor_v1(PSI_file_locker *locker,
-                                                      File file,
-                                                      const char *filename)
-{
-  DBUG_ASSERT(filename != NULL);
+void pfs_end_temp_file_open_wait_and_bind_to_descriptor_vc(
+    PSI_file_locker *locker, File file, const char *filename) {
+  DBUG_ASSERT(filename != nullptr);
   PSI_file_locker_state *state =
-    reinterpret_cast<PSI_file_locker_state *>(locker);
-  DBUG_ASSERT(state != NULL);
+      reinterpret_cast<PSI_file_locker_state *>(locker);
+  DBUG_ASSERT(state != nullptr);
 
   /* Set filename that was generated during creation of temporary file. */
   state->m_name = filename;
-  pfs_end_file_open_wait_and_bind_to_descriptor_v1(locker, file);
+  pfs_end_file_open_wait_and_bind_to_descriptor_vc(locker, file);
 
   PFS_file *pfs_file = reinterpret_cast<PFS_file *>(state->m_file);
-  if (pfs_file != NULL)
-  {
+  if (pfs_file != nullptr) {
     pfs_file->m_temporary = true;
   }
 }
@@ -4960,30 +5411,24 @@ pfs_end_temp_file_open_wait_and_bind_to_descriptor_v1(PSI_file_locker *locker,
   Implementation of the file instrumentation interface.
   @sa PSI_v1::start_file_wait.
 */
-void
-pfs_start_file_wait_v1(PSI_file_locker *locker,
-                       size_t count,
-                       const char *src_file,
-                       uint src_line)
-{
+void pfs_start_file_wait_vc(PSI_file_locker *locker, size_t count,
+                            const char *src_file, uint src_line) {
   ulonglong timer_start = 0;
   PSI_file_locker_state *state =
-    reinterpret_cast<PSI_file_locker_state *>(locker);
-  DBUG_ASSERT(state != NULL);
+      reinterpret_cast<PSI_file_locker_state *>(locker);
+  DBUG_ASSERT(state != nullptr);
 
   uint flags = state->m_flags;
 
-  if (flags & STATE_FLAG_TIMED)
-  {
-    timer_start = get_timer_raw_value_and_function(wait_timer, &state->m_timer);
+  if (flags & STATE_FLAG_TIMED) {
+    timer_start = get_wait_timer();
     state->m_timer_start = timer_start;
   }
 
-  if (flags & STATE_FLAG_EVENT)
-  {
+  if (flags & STATE_FLAG_EVENT) {
     PFS_events_waits *wait =
-      reinterpret_cast<PFS_events_waits *>(state->m_wait);
-    DBUG_ASSERT(wait != NULL);
+        reinterpret_cast<PFS_events_waits *>(state->m_wait);
+    DBUG_ASSERT(wait != nullptr);
 
     wait->m_timer_start = timer_start;
     wait->m_source_file = src_file;
@@ -4996,12 +5441,10 @@ pfs_start_file_wait_v1(PSI_file_locker *locker,
   Implementation of the file instrumentation interface.
   @sa PSI_v1::end_file_wait.
 */
-void
-pfs_end_file_wait_v1(PSI_file_locker *locker, size_t byte_count)
-{
+void pfs_end_file_wait_vc(PSI_file_locker *locker, size_t byte_count) {
   PSI_file_locker_state *state =
-    reinterpret_cast<PSI_file_locker_state *>(locker);
-  DBUG_ASSERT(state != NULL);
+      reinterpret_cast<PSI_file_locker_state *>(locker);
+  DBUG_ASSERT(state != nullptr);
   PFS_file *file = reinterpret_cast<PFS_file *>(state->m_file);
   PFS_file_class *klass = reinterpret_cast<PFS_file_class *>(state->m_class);
   PFS_thread *thread = reinterpret_cast<PFS_thread *>(state->m_thread);
@@ -5014,87 +5457,75 @@ pfs_end_file_wait_v1(PSI_file_locker *locker, size_t byte_count)
 
   PFS_file_stat *file_stat;
 
-  if (file != NULL)
-  {
+  if (file != nullptr) {
     file_stat = &file->m_file_stat;
-  }
-  else
-  {
+  } else {
     file_stat = &klass->m_file_stat;
   }
 
-  switch (state->m_operation)
-  {
-  /* Group read operations */
-  case PSI_FILE_READ:
-    byte_stat = &file_stat->m_io_stat.m_read;
-    break;
-  /* Group write operations */
-  case PSI_FILE_WRITE:
-    byte_stat = &file_stat->m_io_stat.m_write;
-    break;
-  /* Group remaining operations as miscellaneous */
-  case PSI_FILE_CREATE:
-  case PSI_FILE_CREATE_TMP:
-  case PSI_FILE_OPEN:
-  case PSI_FILE_STREAM_OPEN:
-  case PSI_FILE_STREAM_CLOSE:
-  case PSI_FILE_SEEK:
-  case PSI_FILE_TELL:
-  case PSI_FILE_FLUSH:
-  case PSI_FILE_FSTAT:
-  case PSI_FILE_CHSIZE:
-  case PSI_FILE_DELETE:
-  case PSI_FILE_RENAME:
-  case PSI_FILE_SYNC:
-  case PSI_FILE_STAT:
-  case PSI_FILE_CLOSE:
-    byte_stat = &file_stat->m_io_stat.m_misc;
-    break;
-  default:
-    DBUG_ASSERT(false);
-    byte_stat = NULL;
-    break;
+  switch (state->m_operation) {
+    /* Group read operations */
+    case PSI_FILE_READ:
+      byte_stat = &file_stat->m_io_stat.m_read;
+      break;
+    /* Group write operations */
+    case PSI_FILE_WRITE:
+      byte_stat = &file_stat->m_io_stat.m_write;
+      break;
+    /* Group remaining operations as miscellaneous */
+    case PSI_FILE_CREATE:
+    case PSI_FILE_CREATE_TMP:
+    case PSI_FILE_OPEN:
+    case PSI_FILE_STREAM_OPEN:
+    case PSI_FILE_STREAM_CLOSE:
+    case PSI_FILE_SEEK:
+    case PSI_FILE_TELL:
+    case PSI_FILE_FLUSH:
+    case PSI_FILE_FSTAT:
+    case PSI_FILE_CHSIZE:
+    case PSI_FILE_DELETE:
+    case PSI_FILE_RENAME:
+    case PSI_FILE_SYNC:
+    case PSI_FILE_STAT:
+    case PSI_FILE_CLOSE:
+      byte_stat = &file_stat->m_io_stat.m_misc;
+      break;
+    default:
+      DBUG_ASSERT(false);
+      byte_stat = nullptr;
+      break;
   }
 
   /* Aggregation for EVENTS_WAITS_SUMMARY_BY_INSTANCE */
-  if (flags & STATE_FLAG_TIMED)
-  {
-    timer_end = state->m_timer();
+  if (flags & STATE_FLAG_TIMED) {
+    timer_end = get_wait_timer();
     wait_time = timer_end - state->m_timer_start;
     /* Aggregate to EVENTS_WAITS_SUMMARY_BY_INSTANCE (timed) */
     byte_stat->aggregate(wait_time, bytes);
-  }
-  else
-  {
+  } else {
     /* Aggregate to EVENTS_WAITS_SUMMARY_BY_INSTANCE (counted) */
     byte_stat->aggregate_counted(bytes);
   }
 
-  if (flags & STATE_FLAG_THREAD)
-  {
-    DBUG_ASSERT(thread != NULL);
+  if (flags & STATE_FLAG_THREAD) {
+    DBUG_ASSERT(thread != nullptr);
 
     PFS_single_stat *event_name_array;
     event_name_array = thread->write_instr_class_waits_stats();
     uint index = klass->m_event_name_index;
 
-    if (flags & STATE_FLAG_TIMED)
-    {
+    if (flags & STATE_FLAG_TIMED) {
       /* Aggregate to EVENTS_WAITS_SUMMARY_BY_THREAD_BY_EVENT_NAME (timed) */
       event_name_array[index].aggregate_value(wait_time);
-    }
-    else
-    {
+    } else {
       /* Aggregate to EVENTS_WAITS_SUMMARY_BY_THREAD_BY_EVENT_NAME (counted) */
       event_name_array[index].aggregate_counted();
     }
 
-    if (state->m_flags & STATE_FLAG_EVENT)
-    {
+    if (state->m_flags & STATE_FLAG_EVENT) {
       PFS_events_waits *wait =
-        reinterpret_cast<PFS_events_waits *>(state->m_wait);
-      DBUG_ASSERT(wait != NULL);
+          reinterpret_cast<PFS_events_waits *>(state->m_wait);
+      DBUG_ASSERT(wait != nullptr);
 
       wait->m_timer_end = timer_end;
       wait->m_number_of_bytes = bytes;
@@ -5103,12 +5534,10 @@ pfs_end_file_wait_v1(PSI_file_locker *locker, size_t byte_count)
       wait->m_weak_file = file;
       wait->m_weak_version = (file ? file->get_version() : 0);
 
-      if (thread->m_flag_events_waits_history)
-      {
+      if (thread->m_flag_events_waits_history) {
         insert_events_waits_history(thread, wait);
       }
-      if (thread->m_flag_events_waits_history_long)
-      {
+      if (thread->m_flag_events_waits_history_long) {
         insert_events_waits_history_long(wait);
       }
       thread->m_events_waits_current--;
@@ -5122,37 +5551,26 @@ pfs_end_file_wait_v1(PSI_file_locker *locker, size_t byte_count)
   Implementation of the file instrumentation interface.
   @sa PSI_v1::start_file_close_wait.
 */
-void
-pfs_start_file_close_wait_v1(PSI_file_locker *locker,
-                             const char *src_file,
-                             uint src_line)
-{
-  PFS_thread *thread;
-  const char *name;
-  uint len;
-  PFS_file *pfs_file;
+void pfs_start_file_close_wait_vc(PSI_file_locker *locker, const char *src_file,
+                                  uint src_line) {
   PSI_file_locker_state *state =
-    reinterpret_cast<PSI_file_locker_state *>(locker);
-  DBUG_ASSERT(state != NULL);
+      reinterpret_cast<PSI_file_locker_state *>(locker);
+  DBUG_ASSERT(state != nullptr);
 
-  switch (state->m_operation)
-  {
-  case PSI_FILE_DELETE:
-    thread = reinterpret_cast<PFS_thread *>(state->m_thread);
-    name = state->m_name;
-    len = (uint)strlen(name);
-    pfs_file = find_or_create_file(thread, NULL, name, len, false);
-    state->m_file = reinterpret_cast<PSI_file *>(pfs_file);
-    break;
-  case PSI_FILE_STREAM_CLOSE:
-  case PSI_FILE_CLOSE:
-    break;
-  default:
-    DBUG_ASSERT(false);
-    break;
+  switch (state->m_operation) {
+    case PSI_FILE_DELETE:
+      /* state->m_file was set in get_thread_file_name_locker() */
+      break;
+    case PSI_FILE_STREAM_CLOSE:
+    case PSI_FILE_CLOSE:
+      /* state->m_file was set in get_thread_file_descriptor_locker() */
+      break;
+    default:
+      DBUG_ASSERT(false);
+      break;
   }
 
-  pfs_start_file_wait_v1(locker, 0, src_file, src_line);
+  pfs_start_file_wait_vc(locker, 0, src_file, src_line);
 
   return;
 }
@@ -5161,81 +5579,121 @@ pfs_start_file_close_wait_v1(PSI_file_locker *locker,
   Implementation of the file instrumentation interface.
   @sa PSI_v1::end_file_close_wait.
 */
-void
-pfs_end_file_close_wait_v1(PSI_file_locker *locker, int rc)
-{
+void pfs_end_file_close_wait_vc(PSI_file_locker *locker, int rc) {
   PSI_file_locker_state *state =
-    reinterpret_cast<PSI_file_locker_state *>(locker);
-  DBUG_ASSERT(state != NULL);
+      reinterpret_cast<PSI_file_locker_state *>(locker);
+  DBUG_ASSERT(state != nullptr);
+  PFS_file *file = reinterpret_cast<PFS_file *>(state->m_file);
 
-  pfs_end_file_wait_v1(locker, 0);
+  pfs_end_file_wait_vc(locker, 0);
 
-  if (rc == 0)
-  {
+  if (rc == 0) {
     PFS_thread *thread = reinterpret_cast<PFS_thread *>(state->m_thread);
-    PFS_file *file = reinterpret_cast<PFS_file *>(state->m_file);
-
-    /* Release or destroy the file if necessary */
-    switch (state->m_operation)
-    {
-    case PSI_FILE_CLOSE:
-      if (file != NULL)
-      {
-        if (file->m_temporary)
-        {
-          DBUG_ASSERT(file->m_file_stat.m_open_count <= 1);
-          destroy_file(thread, file);
+    /*
+      Release or destroy the file if necessary. For temporary or deleted
+      files, the file name has already been deleted from the cache.
+    */
+    switch (state->m_operation) {
+      case PSI_FILE_CLOSE:
+        if (file != nullptr) {
+          if (file->m_temporary) {
+            DBUG_ASSERT(file->m_file_stat.m_open_count <= 1);
+            destroy_file(thread, file, false);
+          } else {
+            release_file(file);
+          }
         }
-        else
-        {
+        break;
+      case PSI_FILE_STREAM_CLOSE:
+        if (file != nullptr) {
           release_file(file);
         }
-      }
-      break;
-    case PSI_FILE_STREAM_CLOSE:
-      if (file != NULL)
-      {
-        release_file(file);
-      }
-      break;
-    case PSI_FILE_DELETE:
-      if (file != NULL)
-      {
-        destroy_file(thread, file);
-      }
-      break;
-    default:
-      DBUG_ASSERT(false);
-      break;
+        break;
+      case PSI_FILE_DELETE:
+        if (file != nullptr) {
+          destroy_file(thread, file, !file->m_temporary);
+        }
+        break;
+      default:
+        DBUG_ASSERT(false);
+        break;
     }
   }
-  return;
 }
 
-PSI_stage_progress *
-pfs_start_stage_v1(PSI_stage_key key, const char *src_file, int src_line)
-{
+/**
+  Implementation of the file instrumentation interface.
+  @sa PSI_v1::start_file_rename_wait.
+*/
+void pfs_start_file_rename_wait_vc(PSI_file_locker *locker,
+                                   size_t count MY_ATTRIBUTE((unused)),
+                                   const char *old_name MY_ATTRIBUTE((unused)),
+                                   const char *new_name MY_ATTRIBUTE((unused)),
+                                   const char *src_file, uint src_line) {
+  PSI_file_locker_state *state =
+      reinterpret_cast<PSI_file_locker_state *>(locker);
+  DBUG_ASSERT(state != nullptr);
+
+  PFS_thread *thread = reinterpret_cast<PFS_thread *>(state->m_thread);
+  /*
+    To prevent a race on the old filename, delete the file from
+    the filename hash before renaming in the file system.
+  */
+  PFS_file *file = start_file_rename(thread, old_name);
+  state->m_file = reinterpret_cast<PSI_file *>(file);
+
+  pfs_start_file_wait_vc(locker, 0, src_file, src_line);
+}
+
+/**
+  Implementation of the file instrumentation interface.
+  @sa PSI_v1::end_file_rename_wait.
+*/
+void pfs_end_file_rename_wait_vc(PSI_file_locker *locker,
+                                 const char *old_name MY_ATTRIBUTE((unused)),
+                                 const char *new_name MY_ATTRIBUTE((unused)),
+                                 int rc) {
+  PSI_file_locker_state *state =
+      reinterpret_cast<PSI_file_locker_state *>(locker);
+  DBUG_ASSERT(state != nullptr);
+  DBUG_ASSERT(state->m_operation == PSI_FILE_RENAME);
+
+  PFS_thread *thread = reinterpret_cast<PFS_thread *>(state->m_thread);
+  PFS_file *file = reinterpret_cast<PFS_file *>(state->m_file);
+  /*
+    If rename() was successful, then add the new name to the filename hash,
+    otherwise restore the old filename. If end_file_rename() fails, then
+    it will deallocate the file instrumentation.
+  */
+  if (file != nullptr) {
+    if (end_file_rename(thread, file, new_name, rc) != 0) {
+      state->m_file = nullptr;
+    }
+  }
+
+  pfs_end_file_wait_vc(locker, 0);
+}
+
+PSI_stage_progress *pfs_start_stage_v1(PSI_stage_key key, const char *src_file,
+                                       int src_line) {
   ulonglong timer_value = 0;
 
   PFS_thread *pfs_thread = my_thread_get_THR_PFS();
-  if (unlikely(pfs_thread == NULL))
-  {
-    return NULL;
+  if (unlikely(pfs_thread == nullptr)) {
+    return nullptr;
   }
 
   /* Always update column threads.processlist_state. */
   pfs_thread->m_stage = key;
   /* Default value when the stage is not instrumented for progress */
-  pfs_thread->m_stage_progress = NULL;
+  pfs_thread->m_stage_progress = nullptr;
 
-  if (!flag_global_instrumentation)
-  {
-    return NULL;
+  if (!flag_global_instrumentation) {
+    return nullptr;
   }
 
-  if (flag_thread_instrumentation && !pfs_thread->m_enabled)
-  {
-    return NULL;
+  if (flag_thread_instrumentation && !pfs_thread->m_enabled) {
+    return nullptr;
   }
 
   PFS_events_stages *pfs = &pfs_thread->m_stage_current;
@@ -5243,44 +5701,36 @@ pfs_start_stage_v1(PSI_stage_key key, const char *src_file, int src_line)
   PFS_events_statements *parent_statement = &pfs_thread->m_statement_stack[0];
 
   PFS_instr_class *old_class = pfs->m_class;
-  if (old_class != NULL)
-  {
+  if (old_class != nullptr) {
     PFS_stage_stat *event_name_array;
     event_name_array = pfs_thread->write_instr_class_stages_stats();
     uint index = old_class->m_event_name_index;
 
     /* Finish old event */
-    if (old_class->m_timed)
-    {
-      timer_value = get_timer_raw_value(stage_timer);
-      ;
+    if (old_class->m_timed) {
+      timer_value = get_stage_timer();
       pfs->m_timer_end = timer_value;
 
       /* Aggregate to EVENTS_STAGES_SUMMARY_BY_THREAD_BY_EVENT_NAME (timed) */
       ulonglong stage_time = timer_value - pfs->m_timer_start;
       event_name_array[index].aggregate_value(stage_time);
-    }
-    else
-    {
+    } else {
       /* Aggregate to EVENTS_STAGES_SUMMARY_BY_THREAD_BY_EVENT_NAME (counted) */
       event_name_array[index].aggregate_counted();
     }
 
-    if (flag_events_stages_current)
-    {
+    if (flag_events_stages_current) {
       pfs->m_end_event_id = pfs_thread->m_event_id;
-      if (pfs_thread->m_flag_events_stages_history)
-      {
+      if (pfs_thread->m_flag_events_stages_history) {
         insert_events_stages_history(pfs_thread, pfs);
       }
-      if (pfs_thread->m_flag_events_stages_history_long)
-      {
+      if (pfs_thread->m_flag_events_stages_history_long) {
         insert_events_stages_history_long(pfs);
       }
     }
 
     /* This stage event is now complete. */
-    pfs->m_class = NULL;
+    pfs->m_class = nullptr;
 
     /* New waits will now be attached directly to the parent statement. */
     child_wait->m_event_id = parent_statement->m_event_id;
@@ -5291,37 +5741,30 @@ pfs_start_stage_v1(PSI_stage_key key, const char *src_file, int src_line)
   /* Start new event */
 
   PFS_stage_class *new_klass = find_stage_class(key);
-  if (unlikely(new_klass == NULL))
-  {
-    return NULL;
+  if (unlikely(new_klass == nullptr)) {
+    return nullptr;
   }
 
-  if (!new_klass->m_enabled)
-  {
-    return NULL;
+  if (!new_klass->m_enabled) {
+    return nullptr;
   }
 
   pfs->m_class = new_klass;
-  if (new_klass->m_timed)
-  {
+  if (new_klass->m_timed) {
     /*
       Do not call the timer again if we have a
       TIMER_END for the previous stage already.
     */
-    if (timer_value == 0)
-    {
-      timer_value = get_timer_raw_value(stage_timer);
+    if (timer_value == 0) {
+      timer_value = get_stage_timer();
     }
     pfs->m_timer_start = timer_value;
-  }
-  else
-  {
+  } else {
     pfs->m_timer_start = 0;
   }
   pfs->m_timer_end = 0;
 
-  if (flag_events_stages_current)
-  {
+  if (flag_events_stages_current) {
     pfs->m_thread_internal_id = pfs_thread->m_thread_internal_id;
     pfs->m_event_id = pfs_thread->m_event_id++;
     pfs->m_end_event_id = 0;
@@ -5333,8 +5776,7 @@ pfs_start_stage_v1(PSI_stage_key key, const char *src_file, int src_line)
     child_wait->m_event_type = EVENT_TYPE_STAGE;
   }
 
-  if (new_klass->is_progress())
-  {
+  if (new_klass->is_progress()) {
     pfs_thread->m_stage_progress = &pfs->m_progress;
     pfs->m_progress.m_work_completed = 0;
     pfs->m_progress.m_work_estimated = 0;
@@ -5343,77 +5785,61 @@ pfs_start_stage_v1(PSI_stage_key key, const char *src_file, int src_line)
   return pfs_thread->m_stage_progress;
 }
 
-PSI_stage_progress *
-pfs_get_current_stage_progress_v1()
-{
+PSI_stage_progress *pfs_get_current_stage_progress_v1() {
   PFS_thread *pfs_thread = my_thread_get_THR_PFS();
-  if (unlikely(pfs_thread == NULL))
-  {
-    return NULL;
+  if (unlikely(pfs_thread == nullptr)) {
+    return nullptr;
   }
 
   return pfs_thread->m_stage_progress;
 }
 
-void
-pfs_end_stage_v1()
-{
+void pfs_end_stage_v1() {
   ulonglong timer_value = 0;
 
   PFS_thread *pfs_thread = my_thread_get_THR_PFS();
-  if (unlikely(pfs_thread == NULL))
-  {
+  if (unlikely(pfs_thread == nullptr)) {
     return;
   }
 
   pfs_thread->m_stage = 0;
-  pfs_thread->m_stage_progress = NULL;
+  pfs_thread->m_stage_progress = nullptr;
 
-  if (!flag_global_instrumentation)
-  {
+  if (!flag_global_instrumentation) {
     return;
   }
 
-  if (flag_thread_instrumentation && !pfs_thread->m_enabled)
-  {
+  if (flag_thread_instrumentation && !pfs_thread->m_enabled) {
     return;
   }
 
   PFS_events_stages *pfs = &pfs_thread->m_stage_current;
 
   PFS_instr_class *old_class = pfs->m_class;
-  if (old_class != NULL)
-  {
+  if (old_class != nullptr) {
     PFS_stage_stat *event_name_array;
     event_name_array = pfs_thread->write_instr_class_stages_stats();
     uint index = old_class->m_event_name_index;
 
     /* Finish old event */
-    if (old_class->m_timed)
-    {
-      timer_value = get_timer_raw_value(stage_timer);
-      ;
+    if (old_class->m_timed) {
+      timer_value = get_stage_timer();
       pfs->m_timer_end = timer_value;
 
       /* Aggregate to EVENTS_STAGES_SUMMARY_BY_THREAD_BY_EVENT_NAME (timed) */
       ulonglong stage_time = timer_value - pfs->m_timer_start;
       event_name_array[index].aggregate_value(stage_time);
-    }
-    else
-    {
+    } else {
       /* Aggregate to EVENTS_STAGES_SUMMARY_BY_THREAD_BY_EVENT_NAME (counted) */
       event_name_array[index].aggregate_counted();
     }
 
-    if (flag_events_stages_current)
-    {
+    if (flag_events_stages_current) {
       pfs->m_end_event_id = pfs_thread->m_event_id;
-      if (pfs_thread->m_flag_events_stages_history)
-      {
+      if (pfs_thread->m_flag_events_stages_history) {
         insert_events_stages_history(pfs_thread, pfs);
       }
-      if (pfs_thread->m_flag_events_stages_history_long)
-      {
+      if (pfs_thread->m_flag_events_stages_history_long) {
         insert_events_stages_history_long(pfs);
       }
     }
@@ -5425,68 +5851,57 @@ pfs_end_stage_v1()
     child_wait->m_event_type = parent_statement->m_event_type;
 
     /* This stage is completed */
-    pfs->m_class = NULL;
+    pfs->m_class = nullptr;
   }
 }
 
-PSI_statement_locker *
-pfs_get_thread_statement_locker_v1(PSI_statement_locker_state *state,
-                                   PSI_statement_key key,
-                                   const void *charset,
-                                   PSI_sp_share *sp_share)
-{
-  DBUG_ASSERT(state != NULL);
-  DBUG_ASSERT(charset != NULL);
-  if (!flag_global_instrumentation)
-  {
-    return NULL;
+PSI_statement_locker *pfs_get_thread_statement_locker_v2(
+    PSI_statement_locker_state *state, PSI_statement_key key,
+    const void *charset, PSI_sp_share *sp_share) {
+  DBUG_ASSERT(state != nullptr);
+  DBUG_ASSERT(charset != nullptr);
+  if (!flag_global_instrumentation) {
+    return nullptr;
   }
   PFS_statement_class *klass = find_statement_class(key);
-  if (unlikely(klass == NULL))
-  {
-    return NULL;
+  if (unlikely(klass == nullptr)) {
+    return nullptr;
   }
-  if (!klass->m_enabled)
-  {
-    return NULL;
+  if (!klass->m_enabled) {
+    return nullptr;
   }
 
   uint flags;
 
-  if (flag_thread_instrumentation)
-  {
+  if (flag_thread_instrumentation) {
     PFS_thread *pfs_thread = my_thread_get_THR_PFS();
-    if (unlikely(pfs_thread == NULL))
-    {
-      return NULL;
+    if (unlikely(pfs_thread == nullptr)) {
+      return nullptr;
     }
-    if (!pfs_thread->m_enabled)
-    {
-      return NULL;
+    if (!pfs_thread->m_enabled) {
+      return nullptr;
     }
     state->m_thread = reinterpret_cast<PSI_thread *>(pfs_thread);
     flags = STATE_FLAG_THREAD;
 
-    if (klass->m_timed)
-    {
+    if (klass->m_timed) {
       flags |= STATE_FLAG_TIMED;
     }
 
-    if (flag_events_statements_current)
-    {
+    if (flag_events_statements_current) {
       ulonglong event_id = pfs_thread->m_event_id++;
 
-      if (pfs_thread->m_events_statements_count >= statement_stack_max)
-      {
+      if (pfs_thread->m_events_statements_count >= statement_stack_max) {
         nested_statement_lost++;
-        return NULL;
+        return nullptr;
       }
 
       pfs_dirty_state dirty_state;
       pfs_thread->m_stmt_lock.allocated_to_dirty(&dirty_state);
       PFS_events_statements *pfs =
-        &pfs_thread->m_statement_stack[pfs_thread->m_events_statements_count];
+          &pfs_thread->m_statement_stack[pfs_thread->m_events_statements_count];
       pfs->m_thread_internal_id = pfs_thread->m_thread_internal_id;
+      pfs->m_statement_id = 0;
       pfs->m_event_id = event_id;
       pfs->m_event_type = EVENT_TYPE_STATEMENT;
       pfs->m_end_event_id = 0;
@@ -5534,15 +5949,14 @@ pfs_get_thread_statement_locker_v1(PSI_statement_locker_state *state,
       child_wait->m_event_id = event_id;
       child_wait->m_event_type = EVENT_TYPE_STATEMENT;
 
-      PFS_events_statements *parent_statement = NULL;
+      PFS_events_statements *parent_statement = nullptr;
       PFS_events_transactions *parent_transaction =
-        &pfs_thread->m_transaction_current;
+          &pfs_thread->m_transaction_current;
       ulonglong parent_event = 0;
       enum_event_type parent_type = EVENT_TYPE_STATEMENT;
       uint parent_level = 0;
 
-      if (pfs_thread->m_events_statements_count > 0)
-      {
+      if (pfs_thread->m_events_statements_count > 0) {
         parent_statement = pfs - 1;
         parent_event = parent_statement->m_event_id;
         parent_type = parent_statement->m_event_type;
@@ -5550,8 +5964,7 @@ pfs_get_thread_statement_locker_v1(PSI_statement_locker_state *state,
       }
 
       if (parent_transaction->m_state == TRANS_STATE_ACTIVE &&
-          parent_transaction->m_event_id > parent_event)
-      {
+          parent_transaction->m_event_id > parent_event) {
         parent_event = parent_transaction->m_event_id;
         parent_type = parent_transaction->m_event_type;
       }
@@ -5561,21 +5974,16 @@ pfs_get_thread_statement_locker_v1(PSI_statement_locker_state *state,
       pfs->m_nesting_event_level = parent_level;
 
       /* Set parent Stored Procedure information for this statement. */
-      if (sp_share)
-      {
+      if (sp_share) {
         PFS_program *parent_sp = reinterpret_cast<PFS_program *>(sp_share);
         pfs->m_sp_type = parent_sp->m_type;
-        memcpy(pfs->m_schema_name,
-               parent_sp->m_schema_name,
+        memcpy(pfs->m_schema_name, parent_sp->m_schema_name,
                parent_sp->m_schema_name_length);
         pfs->m_schema_name_length = parent_sp->m_schema_name_length;
-        memcpy(pfs->m_object_name,
-               parent_sp->m_object_name,
+        memcpy(pfs->m_object_name, parent_sp->m_object_name,
                parent_sp->m_object_name_length);
         pfs->m_object_name_length = parent_sp->m_object_name_length;
-      }
-      else
-      {
+      } else {
         pfs->m_sp_type = NO_OBJECT_TYPE;
         pfs->m_schema_name_length = 0;
         pfs->m_object_name_length = 0;
@@ -5586,28 +5994,20 @@ pfs_get_thread_statement_locker_v1(PSI_statement_locker_state *state,
 
       pfs_thread->m_events_statements_count++;
       pfs_thread->m_stmt_lock.dirty_to_allocated(&dirty_state);
+    } else {
+      state->m_statement = nullptr;
     }
-    else
-    {
-      state->m_statement = NULL;
-    }
-  }
-  else
-  {
-    state->m_statement = NULL;
+  } else {
+    state->m_statement = nullptr;
 
-    if (klass->m_timed)
-    {
+    if (klass->m_timed) {
       flags = STATE_FLAG_TIMED;
-    }
-    else
-    {
+    } else {
       flags = 0;
     }
   }
 
-  if (flag_statements_digest)
-  {
+  if (flag_statements_digest) {
     flags |= STATE_FLAG_DIGEST;
   }
 
@@ -5632,26 +6032,28 @@ pfs_get_thread_statement_locker_v1(PSI_statement_locker_state *state,
   state->m_no_index_used = 0;
   state->m_no_good_index_used = 0;
 
-  state->m_digest = NULL;
-  state->m_cs_number = ((CHARSET_INFO *)charset)->number;
+  state->m_digest = nullptr;
+  state->m_cs_number = static_cast<const CHARSET_INFO *>(charset)->number;
 
   state->m_schema_name_length = 0;
   state->m_parent_sp_share = sp_share;
-  state->m_parent_prepared_stmt = NULL;
+  state->m_parent_prepared_stmt = nullptr;
+
+  state->m_query_sample = nullptr;
+  state->m_query_sample_length = 0;
+  state->m_query_sample_truncated = false;
 
   return reinterpret_cast<PSI_statement_locker *>(state);
 }
 
-PSI_statement_locker *
-pfs_refine_statement_v1(PSI_statement_locker *locker, PSI_statement_key key)
-{
+PSI_statement_locker *pfs_refine_statement_v2(PSI_statement_locker *locker,
+                                              PSI_statement_key key) {
   PSI_statement_locker_state *state =
-    reinterpret_cast<PSI_statement_locker_state *>(locker);
-  if (state == NULL)
-  {
-    return NULL;
+      reinterpret_cast<PSI_statement_locker_state *>(locker);
+  if (state == nullptr) {
+    return nullptr;
   }
-  DBUG_ASSERT(state->m_class != NULL);
+  DBUG_ASSERT(state->m_class != nullptr);
   PFS_statement_class *klass;
   /* Only refine statements for mutable instrumentation */
   klass = reinterpret_cast<PFS_statement_class *>(state->m_class);
@@ -5660,33 +6062,28 @@ pfs_refine_statement_v1(PSI_statement_locker *locker, PSI_statement_key key)
 
   uint flags = state->m_flags;
 
-  if (unlikely(klass == NULL) || !klass->m_enabled)
-  {
+  if (unlikely(klass == nullptr) || !klass->m_enabled) {
     /* pop statement stack */
-    if (flags & STATE_FLAG_THREAD)
-    {
+    if (flags & STATE_FLAG_THREAD) {
       PFS_thread *pfs_thread = reinterpret_cast<PFS_thread *>(state->m_thread);
-      DBUG_ASSERT(pfs_thread != NULL);
-      if (pfs_thread->m_events_statements_count > 0)
-      {
+      DBUG_ASSERT(pfs_thread != nullptr);
+      if (pfs_thread->m_events_statements_count > 0) {
         pfs_thread->m_events_statements_count--;
       }
     }
 
     state->m_discarded = true;
-    return NULL;
+    return nullptr;
   }
 
-  if ((flags & STATE_FLAG_TIMED) && !klass->m_timed)
-  {
+  if ((flags & STATE_FLAG_TIMED) && !klass->m_timed) {
     flags = flags & ~STATE_FLAG_TIMED;
   }
 
-  if (flags & STATE_FLAG_EVENT)
-  {
+  if (flags & STATE_FLAG_EVENT) {
     PFS_events_statements *pfs =
-      reinterpret_cast<PFS_events_statements *>(state->m_statement);
-    DBUG_ASSERT(pfs != NULL);
+        reinterpret_cast<PFS_events_statements *>(state->m_statement);
+    DBUG_ASSERT(pfs != nullptr);
 
     /* mutate EVENTS_STATEMENTS_CURRENT.EVENT_NAME */
     pfs->m_class = klass;
@@ -5697,85 +6094,78 @@ pfs_refine_statement_v1(PSI_statement_locker *locker, PSI_statement_key key)
   return reinterpret_cast<PSI_statement_locker *>(state);
 }
 
-void
-pfs_start_statement_v1(PSI_statement_locker *locker,
-                       const char *db,
-                       uint db_len,
-                       const char *src_file,
-                       uint src_line)
-{
+void pfs_start_statement_v2(PSI_statement_locker *locker, const char *db,
+                            uint db_len, const char *src_file, uint src_line) {
   PSI_statement_locker_state *state =
-    reinterpret_cast<PSI_statement_locker_state *>(locker);
-  DBUG_ASSERT(state != NULL);
+      reinterpret_cast<PSI_statement_locker_state *>(locker);
+  DBUG_ASSERT(state != nullptr);
 
   uint flags = state->m_flags;
   ulonglong timer_start = 0;
 
-  if (flags & STATE_FLAG_TIMED)
-  {
-    timer_start =
-      get_timer_raw_value_and_function(statement_timer, &state->m_timer);
+  if (flags & STATE_FLAG_TIMED) {
+    timer_start = get_statement_timer();
     state->m_timer_start = timer_start;
   }
 
   static_assert(PSI_SCHEMA_NAME_LEN == NAME_LEN, "");
   DBUG_ASSERT(db_len <= sizeof(state->m_schema_name));
 
-  if (db_len > 0)
-  {
+  if (db_len > 0) {
     memcpy(state->m_schema_name, db, db_len);
   }
   state->m_schema_name_length = db_len;
 
-  if (flags & STATE_FLAG_EVENT)
-  {
+  if (flags & STATE_FLAG_EVENT) {
     PFS_events_statements *pfs =
-      reinterpret_cast<PFS_events_statements *>(state->m_statement);
-    DBUG_ASSERT(pfs != NULL);
+        reinterpret_cast<PFS_events_statements *>(state->m_statement);
+    DBUG_ASSERT(pfs != nullptr);
 
     pfs->m_timer_start = timer_start;
     pfs->m_source_file = src_file;
     pfs->m_source_line = src_line;
 
     DBUG_ASSERT(db_len <= sizeof(pfs->m_current_schema_name));
-    if (db_len > 0)
-    {
+    if (db_len > 0) {
       memcpy(pfs->m_current_schema_name, db, db_len);
     }
     pfs->m_current_schema_name_length = db_len;
   }
+
+  state->m_query_sample = nullptr;
+  state->m_query_sample_length = 0;
+  state->m_query_sample_truncated = false;
 }
 
-void
-pfs_set_statement_text_v1(PSI_statement_locker *locker,
-                          const char *text,
-                          uint text_len)
-{
+void pfs_set_statement_text_v2(PSI_statement_locker *locker, const char *text,
+                               uint text_len) {
   PSI_statement_locker_state *state =
-    reinterpret_cast<PSI_statement_locker_state *>(locker);
-  DBUG_ASSERT(state != NULL);
+      reinterpret_cast<PSI_statement_locker_state *>(locker);
+  DBUG_ASSERT(state != nullptr);
 
-  if (state->m_discarded)
-  {
+  if (state->m_discarded) {
     return;
   }
 
-  if (state->m_flags & STATE_FLAG_EVENT)
-  {
+  if (text_len > pfs_max_sqltext) {
+    text_len = (uint)pfs_max_sqltext;
+    state->m_query_sample_truncated = true;
+  }
+  state->m_query_sample = text;
+  state->m_query_sample_length = text_len;
+
+  if (state->m_flags & STATE_FLAG_EVENT) {
     PFS_events_statements *pfs =
-      reinterpret_cast<PFS_events_statements *>(state->m_statement);
-    DBUG_ASSERT(pfs != NULL);
-    if (text_len > pfs_max_sqltext)
-    {
-      text_len = (uint)pfs_max_sqltext;
-      pfs->m_sqltext_truncated = true;
-    }
-    if (text_len)
-    {
+        reinterpret_cast<PFS_events_statements *>(state->m_statement);
+    DBUG_ASSERT(pfs != nullptr);
+
+    pfs->m_sqltext_length = text_len;
+    pfs->m_sqltext_truncated = state->m_query_sample_truncated;
+    pfs->m_sqltext_cs_number = state->m_cs_number;
+    if (text_len) {
+      DBUG_ASSERT(pfs->m_sqltext != nullptr);
       memcpy(pfs->m_sqltext, text, text_len);
     }
-    pfs->m_sqltext_length = text_len;
-    pfs->m_sqltext_cs_number = state->m_cs_number;
   }
 
   return;
@@ -5784,20 +6174,17 @@ pfs_set_statement_text_v1(PSI_statement_locker *locker,
 #define SET_STATEMENT_ATTR_BODY(LOCKER, ATTR, VALUE)                     \
   PSI_statement_locker_state *state;                                     \
   state = reinterpret_cast<PSI_statement_locker_state *>(LOCKER);        \
-  if (unlikely(state == NULL))                                           \
-  {                                                                      \
+  if (unlikely(state == nullptr)) {                                      \
     return;                                                              \
   }                                                                      \
-  if (state->m_discarded)                                                \
-  {                                                                      \
+  if (state->m_discarded) {                                              \
     return;                                                              \
   }                                                                      \
   state->ATTR = VALUE;                                                   \
-  if (state->m_flags & STATE_FLAG_EVENT)                                 \
-  {                                                                      \
+  if (state->m_flags & STATE_FLAG_EVENT) {                               \
     PFS_events_statements *pfs;                                          \
     pfs = reinterpret_cast<PFS_events_statements *>(state->m_statement); \
-    DBUG_ASSERT(pfs != NULL);                                            \
+    DBUG_ASSERT(pfs != nullptr);                                         \
     pfs->ATTR = VALUE;                                                   \
   }                                                                      \
   return;
@@ -5805,151 +6192,137 @@ pfs_set_statement_text_v1(PSI_statement_locker *locker,
 #define INC_STATEMENT_ATTR_BODY(LOCKER, ATTR, VALUE)                     \
   PSI_statement_locker_state *state;                                     \
   state = reinterpret_cast<PSI_statement_locker_state *>(LOCKER);        \
-  if (unlikely(state == NULL))                                           \
-  {                                                                      \
+  if (unlikely(state == nullptr)) {                                      \
     return;                                                              \
   }                                                                      \
-  if (state->m_discarded)                                                \
-  {                                                                      \
+  if (state->m_discarded) {                                              \
     return;                                                              \
   }                                                                      \
   state->ATTR += VALUE;                                                  \
-  if (state->m_flags & STATE_FLAG_EVENT)                                 \
-  {                                                                      \
+  if (state->m_flags & STATE_FLAG_EVENT) {                               \
     PFS_events_statements *pfs;                                          \
     pfs = reinterpret_cast<PFS_events_statements *>(state->m_statement); \
-    DBUG_ASSERT(pfs != NULL);                                            \
+    DBUG_ASSERT(pfs != nullptr);                                         \
     pfs->ATTR += VALUE;                                                  \
   }                                                                      \
   return;
 
-void
-pfs_set_statement_lock_time_v1(PSI_statement_locker *locker, ulonglong count)
-{
+void pfs_set_statement_query_id_v2(PSI_statement_locker *locker,
+                                   ulonglong query_id) {
+  PSI_statement_locker_state *state;
+  state = reinterpret_cast<PSI_statement_locker_state *>(locker);
+  if (unlikely(state == nullptr)) {
+    return;
+  }
+  if (state->m_discarded) {
+    return;
+  }
+  if (state->m_flags & STATE_FLAG_EVENT) {
+    PFS_events_statements *pfs;
+    pfs = reinterpret_cast<PFS_events_statements *>(state->m_statement);
+    DBUG_ASSERT(pfs != nullptr);
+    pfs->m_statement_id = query_id;
+  }
+  return;
+}
+
+void pfs_set_statement_lock_time_v2(PSI_statement_locker *locker,
+                                    ulonglong count) {
   SET_STATEMENT_ATTR_BODY(locker, m_lock_time, count);
 }
 
-void
-pfs_set_statement_rows_sent_v1(PSI_statement_locker *locker, ulonglong count)
-{
+void pfs_set_statement_rows_sent_v2(PSI_statement_locker *locker,
+                                    ulonglong count) {
   SET_STATEMENT_ATTR_BODY(locker, m_rows_sent, count);
 }
 
-void
-pfs_set_statement_rows_examined_v1(PSI_statement_locker *locker,
-                                   ulonglong count)
-{
+void pfs_set_statement_rows_examined_v2(PSI_statement_locker *locker,
+                                        ulonglong count) {
   SET_STATEMENT_ATTR_BODY(locker, m_rows_examined, count);
 }
 
-void
-pfs_inc_statement_created_tmp_disk_tables_v1(PSI_statement_locker *locker,
-                                             ulong count)
-{
+void pfs_inc_statement_created_tmp_disk_tables_v2(PSI_statement_locker *locker,
+                                                  ulong count) {
   INC_STATEMENT_ATTR_BODY(locker, m_created_tmp_disk_tables, count);
 }
 
-void
-pfs_inc_statement_created_tmp_tables_v1(PSI_statement_locker *locker,
-                                        ulong count)
-{
+void pfs_inc_statement_created_tmp_tables_v2(PSI_statement_locker *locker,
+                                             ulong count) {
   INC_STATEMENT_ATTR_BODY(locker, m_created_tmp_tables, count);
 }
 
-void
-pfs_inc_statement_select_full_join_v1(PSI_statement_locker *locker, ulong count)
-{
+void pfs_inc_statement_select_full_join_v2(PSI_statement_locker *locker,
+                                           ulong count) {
   INC_STATEMENT_ATTR_BODY(locker, m_select_full_join, count);
 }
 
-void
-pfs_inc_statement_select_full_range_join_v1(PSI_statement_locker *locker,
-                                            ulong count)
-{
+void pfs_inc_statement_select_full_range_join_v2(PSI_statement_locker *locker,
+                                                 ulong count) {
   INC_STATEMENT_ATTR_BODY(locker, m_select_full_range_join, count);
 }
 
-void
-pfs_inc_statement_select_range_v1(PSI_statement_locker *locker, ulong count)
-{
+void pfs_inc_statement_select_range_v2(PSI_statement_locker *locker,
+                                       ulong count) {
   INC_STATEMENT_ATTR_BODY(locker, m_select_range, count);
 }
 
-void
-pfs_inc_statement_select_range_check_v1(PSI_statement_locker *locker,
-                                        ulong count)
-{
+void pfs_inc_statement_select_range_check_v2(PSI_statement_locker *locker,
+                                             ulong count) {
   INC_STATEMENT_ATTR_BODY(locker, m_select_range_check, count);
 }
 
-void
-pfs_inc_statement_select_scan_v1(PSI_statement_locker *locker, ulong count)
-{
+void pfs_inc_statement_select_scan_v2(PSI_statement_locker *locker,
+                                      ulong count) {
   INC_STATEMENT_ATTR_BODY(locker, m_select_scan, count);
 }
 
-void
-pfs_inc_statement_sort_merge_passes_v1(PSI_statement_locker *locker,
-                                       ulong count)
-{
+void pfs_inc_statement_sort_merge_passes_v2(PSI_statement_locker *locker,
+                                            ulong count) {
   INC_STATEMENT_ATTR_BODY(locker, m_sort_merge_passes, count);
 }
 
-void
-pfs_inc_statement_sort_range_v1(PSI_statement_locker *locker, ulong count)
-{
+void pfs_inc_statement_sort_range_v2(PSI_statement_locker *locker,
+                                     ulong count) {
   INC_STATEMENT_ATTR_BODY(locker, m_sort_range, count);
 }
 
-void
-pfs_inc_statement_sort_rows_v1(PSI_statement_locker *locker, ulong count)
-{
+void pfs_inc_statement_sort_rows_v2(PSI_statement_locker *locker, ulong count) {
   INC_STATEMENT_ATTR_BODY(locker, m_sort_rows, count);
 }
 
-void
-pfs_inc_statement_sort_scan_v1(PSI_statement_locker *locker, ulong count)
-{
+void pfs_inc_statement_sort_scan_v2(PSI_statement_locker *locker, ulong count) {
   INC_STATEMENT_ATTR_BODY(locker, m_sort_scan, count);
 }
 
-void
-pfs_set_statement_no_index_used_v1(PSI_statement_locker *locker)
-{
+void pfs_set_statement_no_index_used_v2(PSI_statement_locker *locker) {
   SET_STATEMENT_ATTR_BODY(locker, m_no_index_used, 1);
 }
 
-void
-pfs_set_statement_no_good_index_used_v1(PSI_statement_locker *locker)
-{
+void pfs_set_statement_no_good_index_used_v2(PSI_statement_locker *locker) {
   SET_STATEMENT_ATTR_BODY(locker, m_no_good_index_used, 1);
 }
 
-void
-pfs_end_statement_v1(PSI_statement_locker *locker, void *stmt_da)
-{
+void pfs_end_statement_v2(PSI_statement_locker *locker, void *stmt_da) {
   PSI_statement_locker_state *state =
-    reinterpret_cast<PSI_statement_locker_state *>(locker);
+      reinterpret_cast<PSI_statement_locker_state *>(locker);
   Diagnostics_area *da = reinterpret_cast<Diagnostics_area *>(stmt_da);
-  DBUG_ASSERT(state != NULL);
-  DBUG_ASSERT(da != NULL);
+  DBUG_ASSERT(state != nullptr);
+  DBUG_ASSERT(da != nullptr);
 
-  if (state->m_discarded)
-  {
+  if (state->m_discarded) {
     return;
   }
 
   PFS_statement_class *klass =
-    reinterpret_cast<PFS_statement_class *>(state->m_class);
-  DBUG_ASSERT(klass != NULL);
+      reinterpret_cast<PFS_statement_class *>(state->m_class);
+  DBUG_ASSERT(klass != nullptr);
 
   ulonglong timer_end = 0;
   ulonglong wait_time = 0;
   uint flags = state->m_flags;
 
-  if (flags & STATE_FLAG_TIMED)
-  {
-    timer_end = state->m_timer();
+  if (flags & STATE_FLAG_TIMED) {
+    timer_end = get_statement_timer();
     wait_time = timer_end - state->m_timer_start;
   }
 
@@ -5960,66 +6333,60 @@ pfs_end_statement_v1(PSI_statement_locker *locker, void *stmt_da)
   /*
    Capture statement stats by digest.
   */
-  const sql_digest_storage *digest_storage = NULL;
-  PFS_statements_digest_stat *digest_stat = NULL;
-  PFS_program *pfs_program = NULL;
-  PFS_prepared_stmt *pfs_prepared_stmt = NULL;
+  const sql_digest_storage *digest_storage = nullptr;
+  PFS_statements_digest_stat *digest_stat = nullptr;
+  PFS_program *pfs_program = nullptr;
+  PFS_prepared_stmt *pfs_prepared_stmt = nullptr;
 
-  if (flags & STATE_FLAG_THREAD)
-  {
+  if (flags & STATE_FLAG_THREAD) {
     PFS_thread *thread = reinterpret_cast<PFS_thread *>(state->m_thread);
-    DBUG_ASSERT(thread != NULL);
+    DBUG_ASSERT(thread != nullptr);
     event_name_array = thread->write_instr_class_statements_stats();
     /* Aggregate to EVENTS_STATEMENTS_SUMMARY_BY_THREAD_BY_EVENT_NAME */
     stat = &event_name_array[index];
 
-    if (flags & STATE_FLAG_DIGEST)
-    {
+    if (flags & STATE_FLAG_DIGEST) {
       digest_storage = state->m_digest;
 
-      if (digest_storage != NULL)
-      {
+      if (digest_storage != nullptr) {
         /* Populate PFS_statements_digest_stat with computed digest
          * information.*/
-        digest_stat = find_or_create_digest(thread,
-                                            digest_storage,
-                                            state->m_schema_name,
-                                            state->m_schema_name_length);
+        digest_stat =
+            find_or_create_digest(thread, digest_storage, state->m_schema_name,
+                                  state->m_schema_name_length);
       }
     }
 
-    if (flags & STATE_FLAG_EVENT)
-    {
+    if (flags & STATE_FLAG_EVENT) {
       PFS_events_statements *pfs =
-        reinterpret_cast<PFS_events_statements *>(state->m_statement);
-      DBUG_ASSERT(pfs != NULL);
+          reinterpret_cast<PFS_events_statements *>(state->m_statement);
+      DBUG_ASSERT(pfs != nullptr);
 
       pfs_dirty_state dirty_state;
       thread->m_stmt_lock.allocated_to_dirty(&dirty_state);
 
-      switch (da->status())
-      {
-      case Diagnostics_area::DA_EMPTY:
-        break;
-      case Diagnostics_area::DA_OK:
-        memcpy(pfs->m_message_text, da->message_text(), MYSQL_ERRMSG_SIZE);
-        pfs->m_message_text[MYSQL_ERRMSG_SIZE] = 0;
-        pfs->m_rows_affected = da->affected_rows();
-        pfs->m_warning_count = da->last_statement_cond_count();
-        memcpy(pfs->m_sqlstate, "00000", SQLSTATE_LENGTH);
-        break;
-      case Diagnostics_area::DA_EOF:
-        pfs->m_warning_count = da->last_statement_cond_count();
-        break;
-      case Diagnostics_area::DA_ERROR:
-        memcpy(pfs->m_message_text, da->message_text(), MYSQL_ERRMSG_SIZE);
-        pfs->m_message_text[MYSQL_ERRMSG_SIZE] = 0;
-        pfs->m_sql_errno = da->mysql_errno();
-        memcpy(pfs->m_sqlstate, da->returned_sqlstate(), SQLSTATE_LENGTH);
-        pfs->m_error_count++;
-        break;
-      case Diagnostics_area::DA_DISABLED:
-        break;
+      switch (da->status()) {
+        case Diagnostics_area::DA_EMPTY:
+          break;
+        case Diagnostics_area::DA_OK:
+          memcpy(pfs->m_message_text, da->message_text(), MYSQL_ERRMSG_SIZE);
+          pfs->m_message_text[MYSQL_ERRMSG_SIZE] = 0;
+          pfs->m_rows_affected = da->affected_rows();
+          pfs->m_warning_count = da->last_statement_cond_count();
+          memcpy(pfs->m_sqlstate, "00000", SQLSTATE_LENGTH);
+          break;
+        case Diagnostics_area::DA_EOF:
+          pfs->m_warning_count = da->last_statement_cond_count();
+          break;
+        case Diagnostics_area::DA_ERROR:
+          memcpy(pfs->m_message_text, da->message_text(), MYSQL_ERRMSG_SIZE);
+          pfs->m_message_text[MYSQL_ERRMSG_SIZE] = 0;
+          pfs->m_sql_errno = da->mysql_errno();
+          memcpy(pfs->m_sqlstate, da->returned_sqlstate(), SQLSTATE_LENGTH);
+          pfs->m_error_count++;
+          break;
+        case Diagnostics_area::DA_DISABLED:
+          break;
       }
 
       pfs->m_timer_end = timer_end;
@@ -6027,14 +6394,12 @@ pfs_end_statement_v1(PSI_statement_locker *locker, void *stmt_da)
 
       pfs_program = reinterpret_cast<PFS_program *>(state->m_parent_sp_share);
       pfs_prepared_stmt =
-        reinterpret_cast<PFS_prepared_stmt *>(state->m_parent_prepared_stmt);
+          reinterpret_cast<PFS_prepared_stmt *>(state->m_parent_prepared_stmt);
 
-      if (thread->m_flag_events_statements_history)
-      {
+      if (thread->m_flag_events_statements_history) {
         insert_events_statements_history(thread, pfs);
       }
-      if (thread->m_flag_events_statements_history_long)
-      {
+      if (thread->m_flag_events_statements_history_long) {
         insert_events_statements_history_long(pfs);
       }
 
@@ -6042,25 +6407,19 @@ pfs_end_statement_v1(PSI_statement_locker *locker, void *stmt_da)
       thread->m_events_statements_count--;
       thread->m_stmt_lock.dirty_to_allocated(&dirty_state);
     }
-  }
-  else
-  {
-    if (flags & STATE_FLAG_DIGEST)
-    {
+  } else {
+    if (flags & STATE_FLAG_DIGEST) {
       PFS_thread *thread = my_thread_get_THR_PFS();
 
       /* An instrumented thread is required, for LF_PINS. */
-      if (thread != NULL)
-      {
+      if (thread != nullptr) {
         /* Set digest stat. */
         digest_storage = state->m_digest;
 
-        if (digest_storage != NULL)
-        {
+        if (digest_storage != nullptr) {
           /* Populate statements_digest_stat with computed digest information.
            */
-          digest_stat = find_or_create_digest(thread,
-                                              digest_storage,
+          digest_stat = find_or_create_digest(thread, digest_storage,
                                               state->m_schema_name,
                                               state->m_schema_name_length);
         }
@@ -6072,15 +6431,10 @@ pfs_end_statement_v1(PSI_statement_locker *locker, void *stmt_da)
     stat = &event_name_array[index];
   }
 
-  stat->mark_used();
-
-  if (flags & STATE_FLAG_TIMED)
-  {
+  if (flags & STATE_FLAG_TIMED) {
     /* Aggregate to EVENTS_STATEMENTS_SUMMARY_..._BY_EVENT_NAME (timed) */
     stat->aggregate_value(wait_time);
-  }
-  else
-  {
+  } else {
     /* Aggregate to EVENTS_STATEMENTS_SUMMARY_..._BY_EVENT_NAME (counted) */
     stat->aggregate_counted();
   }
@@ -6102,15 +6456,17 @@ pfs_end_statement_v1(PSI_statement_locker *locker, void *stmt_da)
   stat->m_no_index_used += state->m_no_index_used;
   stat->m_no_good_index_used += state->m_no_good_index_used;
 
-  if (digest_stat != NULL)
-  {
-    digest_stat->m_stat.mark_used();
+  if (digest_stat != nullptr) {
+    bool new_max_wait = false;
 
-    if (flags & STATE_FLAG_TIMED)
-    {
+    if (flags & STATE_FLAG_TIMED) {
       digest_stat->m_stat.aggregate_value(wait_time);
 
-      time_normalizer *normalizer = time_normalizer::get(wait_timer);
+      /* Update the digest sample if it's a new maximum. */
+      if (wait_time > digest_stat->get_sample_timer_wait()) {
+        new_max_wait = true;
+      }
+      time_normalizer *normalizer = time_normalizer::get_statement();
       ulong bucket_index = normalizer->bucket_index(wait_time);
 
       /* Update digest histogram. */
@@ -6118,21 +6474,58 @@ pfs_end_statement_v1(PSI_statement_locker *locker, void *stmt_da)
 
       /* Update global histogram. */
       global_statements_histogram.increment_bucket(bucket_index);
-    }
-    else
-    {
+    } else {
       digest_stat->m_stat.aggregate_counted();
+    }
+
+    if (state->m_query_sample_length != 0) {
+      /* Get a new query sample if:
+         - This is the first query sample, or
+         - The wait time is a new maximum, or
+         - The last query sample age exceeds the maximum age.
+      */
+      bool get_sample_query = (digest_stat->m_query_sample_length == 0);
+
+      if (!get_sample_query) {
+        get_sample_query = new_max_wait;
+
+        if (!get_sample_query) {
+          /* Check the query sample age. */
+          if (pfs_param.m_max_digest_sample_age > 0) {
+            /* Comparison in micro seconds. */
+            get_sample_query = (digest_stat->get_sample_age() >
+                                pfs_param.m_max_digest_sample_age * 1000000);
+          }
+        }
+      }
+
+      /* Update the query sample. */
+      if (get_sample_query) {
+        /* Get exclusive access otherwise abort. */
+        if (digest_stat->inc_sample_ref() == 0) {
+          digest_stat->set_sample_timer_wait(wait_time);
+          DBUG_ASSERT(digest_stat->m_query_sample != nullptr);
+          memcpy(digest_stat->m_query_sample, state->m_query_sample,
+                 state->m_query_sample_length);
+          digest_stat->m_query_sample_length = state->m_query_sample_length;
+          digest_stat->m_query_sample_cs_number = state->m_cs_number;
+          digest_stat->m_query_sample_truncated =
+              state->m_query_sample_truncated;
+          digest_stat->m_query_sample_seen = digest_stat->m_last_seen;
+        }
+        digest_stat->dec_sample_ref();
+      }
     }
 
     digest_stat->m_stat.m_lock_time += state->m_lock_time;
     digest_stat->m_stat.m_rows_sent += state->m_rows_sent;
     digest_stat->m_stat.m_rows_examined += state->m_rows_examined;
     digest_stat->m_stat.m_created_tmp_disk_tables +=
-      state->m_created_tmp_disk_tables;
+        state->m_created_tmp_disk_tables;
     digest_stat->m_stat.m_created_tmp_tables += state->m_created_tmp_tables;
     digest_stat->m_stat.m_select_full_join += state->m_select_full_join;
     digest_stat->m_stat.m_select_full_range_join +=
-      state->m_select_full_range_join;
+        state->m_select_full_range_join;
     digest_stat->m_stat.m_select_range += state->m_select_range;
     digest_stat->m_stat.m_select_range_check += state->m_select_range_check;
     digest_stat->m_stat.m_select_scan += state->m_select_scan;
@@ -6142,12 +6535,9 @@ pfs_end_statement_v1(PSI_statement_locker *locker, void *stmt_da)
     digest_stat->m_stat.m_sort_scan += state->m_sort_scan;
     digest_stat->m_stat.m_no_index_used += state->m_no_index_used;
     digest_stat->m_stat.m_no_good_index_used += state->m_no_good_index_used;
-  }
-  else
-  {
-    if (flags & STATE_FLAG_TIMED)
-    {
-      time_normalizer *normalizer = time_normalizer::get(wait_timer);
+  } else {
+    if (flags & STATE_FLAG_TIMED) {
+      time_normalizer *normalizer = time_normalizer::get_statement();
       ulong bucket_index = normalizer->bucket_index(wait_time);
 
       /* Update global histogram. */
@@ -6155,20 +6545,13 @@ pfs_end_statement_v1(PSI_statement_locker *locker, void *stmt_da)
     }
   }
 
-  if (pfs_program != NULL)
-  {
-    PFS_statement_stat *sub_stmt_stat = NULL;
+  if (pfs_program != nullptr) {
+    PFS_statement_stat *sub_stmt_stat = nullptr;
     sub_stmt_stat = &pfs_program->m_stmt_stat;
-    if (sub_stmt_stat != NULL)
-    {
-      sub_stmt_stat->mark_used();
-
-      if (flags & STATE_FLAG_TIMED)
-      {
+    if (sub_stmt_stat != nullptr) {
+      if (flags & STATE_FLAG_TIMED) {
         sub_stmt_stat->aggregate_value(wait_time);
-      }
-      else
-      {
+      } else {
         sub_stmt_stat->aggregate_counted();
       }
 
@@ -6176,11 +6559,11 @@ pfs_end_statement_v1(PSI_statement_locker *locker, void *stmt_da)
       sub_stmt_stat->m_rows_sent += state->m_rows_sent;
       sub_stmt_stat->m_rows_examined += state->m_rows_examined;
       sub_stmt_stat->m_created_tmp_disk_tables +=
-        state->m_created_tmp_disk_tables;
+          state->m_created_tmp_disk_tables;
       sub_stmt_stat->m_created_tmp_tables += state->m_created_tmp_tables;
       sub_stmt_stat->m_select_full_join += state->m_select_full_join;
       sub_stmt_stat->m_select_full_range_join +=
-        state->m_select_full_range_join;
+          state->m_select_full_range_join;
       sub_stmt_stat->m_select_range += state->m_select_range;
       sub_stmt_stat->m_select_range_check += state->m_select_range_check;
       sub_stmt_stat->m_select_scan += state->m_select_scan;
@@ -6193,36 +6576,24 @@ pfs_end_statement_v1(PSI_statement_locker *locker, void *stmt_da)
     }
   }
 
-  if (pfs_prepared_stmt != NULL)
-  {
-    if (state->m_in_prepare)
-    {
-      PFS_single_stat *prepared_stmt_stat = NULL;
+  if (pfs_prepared_stmt != nullptr) {
+    if (state->m_in_prepare) {
+      PFS_single_stat *prepared_stmt_stat = nullptr;
       prepared_stmt_stat = &pfs_prepared_stmt->m_prepare_stat;
-      if (prepared_stmt_stat != NULL)
-      {
-        if (flags & STATE_FLAG_TIMED)
-        {
+      if (prepared_stmt_stat != nullptr) {
+        if (flags & STATE_FLAG_TIMED) {
           prepared_stmt_stat->aggregate_value(wait_time);
-        }
-        else
-        {
+        } else {
           prepared_stmt_stat->aggregate_counted();
         }
       }
-    }
-    else
-    {
-      PFS_statement_stat *prepared_stmt_stat = NULL;
+    } else {
+      PFS_statement_stat *prepared_stmt_stat = nullptr;
       prepared_stmt_stat = &pfs_prepared_stmt->m_execute_stat;
-      if (prepared_stmt_stat != NULL)
-      {
-        if (flags & STATE_FLAG_TIMED)
-        {
+      if (prepared_stmt_stat != nullptr) {
+        if (flags & STATE_FLAG_TIMED) {
           prepared_stmt_stat->aggregate_value(wait_time);
-        }
-        else
-        {
+        } else {
           prepared_stmt_stat->aggregate_counted();
         }
 
@@ -6230,11 +6601,11 @@ pfs_end_statement_v1(PSI_statement_locker *locker, void *stmt_da)
         prepared_stmt_stat->m_rows_sent += state->m_rows_sent;
         prepared_stmt_stat->m_rows_examined += state->m_rows_examined;
         prepared_stmt_stat->m_created_tmp_disk_tables +=
-          state->m_created_tmp_disk_tables;
+            state->m_created_tmp_disk_tables;
         prepared_stmt_stat->m_created_tmp_tables += state->m_created_tmp_tables;
         prepared_stmt_stat->m_select_full_join += state->m_select_full_join;
         prepared_stmt_stat->m_select_full_range_join +=
-          state->m_select_full_range_join;
+            state->m_select_full_range_join;
         prepared_stmt_stat->m_select_range += state->m_select_range;
         prepared_stmt_stat->m_select_range_check += state->m_select_range_check;
         prepared_stmt_stat->m_select_scan += state->m_select_scan;
@@ -6248,95 +6619,83 @@ pfs_end_statement_v1(PSI_statement_locker *locker, void *stmt_da)
     }
   }
 
-  PFS_statement_stat *sub_stmt_stat = NULL;
-  if (pfs_program != NULL)
-  {
+  state->m_query_sample_length = 0;
+  state->m_query_sample = nullptr;
+
+  PFS_statement_stat *sub_stmt_stat = nullptr;
+  if (pfs_program != nullptr) {
     sub_stmt_stat = &pfs_program->m_stmt_stat;
   }
 
-  PFS_statement_stat *prepared_stmt_stat = NULL;
-  if (pfs_prepared_stmt != NULL && !state->m_in_prepare)
-  {
+  PFS_statement_stat *prepared_stmt_stat = nullptr;
+  if (pfs_prepared_stmt != nullptr && !state->m_in_prepare) {
     prepared_stmt_stat = &pfs_prepared_stmt->m_execute_stat;
   }
 
-  switch (da->status())
-  {
-  case Diagnostics_area::DA_EMPTY:
-    break;
-  case Diagnostics_area::DA_OK:
-    stat->m_rows_affected += da->affected_rows();
-    stat->m_warning_count += da->last_statement_cond_count();
-    if (digest_stat != NULL)
-    {
-      digest_stat->m_stat.m_rows_affected += da->affected_rows();
-      digest_stat->m_stat.m_warning_count += da->last_statement_cond_count();
-    }
-    if (sub_stmt_stat != NULL)
-    {
-      sub_stmt_stat->m_rows_affected += da->affected_rows();
-      sub_stmt_stat->m_warning_count += da->last_statement_cond_count();
-    }
-    if (prepared_stmt_stat != NULL)
-    {
-      prepared_stmt_stat->m_rows_affected += da->affected_rows();
-      prepared_stmt_stat->m_warning_count += da->last_statement_cond_count();
-    }
-    break;
-  case Diagnostics_area::DA_EOF:
-    stat->m_warning_count += da->last_statement_cond_count();
-    if (digest_stat != NULL)
-    {
-      digest_stat->m_stat.m_warning_count += da->last_statement_cond_count();
-    }
-    if (sub_stmt_stat != NULL)
-    {
-      sub_stmt_stat->m_warning_count += da->last_statement_cond_count();
-    }
-    if (prepared_stmt_stat != NULL)
-    {
-      prepared_stmt_stat->m_warning_count += da->last_statement_cond_count();
-    }
-    break;
-  case Diagnostics_area::DA_ERROR:
-    stat->m_error_count++;
-    if (digest_stat != NULL)
-    {
-      digest_stat->m_stat.m_error_count++;
-    }
-    if (sub_stmt_stat != NULL)
-    {
-      sub_stmt_stat->m_error_count++;
-    }
-    if (prepared_stmt_stat != NULL)
-    {
-      prepared_stmt_stat->m_error_count++;
-    }
-    break;
-  case Diagnostics_area::DA_DISABLED:
-    break;
+  switch (da->status()) {
+    case Diagnostics_area::DA_EMPTY:
+      break;
+    case Diagnostics_area::DA_OK:
+      stat->m_rows_affected += da->affected_rows();
+      stat->m_warning_count += da->last_statement_cond_count();
+      if (digest_stat != nullptr) {
+        digest_stat->m_stat.m_rows_affected += da->affected_rows();
+        digest_stat->m_stat.m_warning_count += da->last_statement_cond_count();
+      }
+      if (sub_stmt_stat != nullptr) {
+        sub_stmt_stat->m_rows_affected += da->affected_rows();
+        sub_stmt_stat->m_warning_count += da->last_statement_cond_count();
+      }
+      if (prepared_stmt_stat != nullptr) {
+        prepared_stmt_stat->m_rows_affected += da->affected_rows();
+        prepared_stmt_stat->m_warning_count += da->last_statement_cond_count();
+      }
+      break;
+    case Diagnostics_area::DA_EOF:
+      stat->m_warning_count += da->last_statement_cond_count();
+      if (digest_stat != nullptr) {
+        digest_stat->m_stat.m_warning_count += da->last_statement_cond_count();
+      }
+      if (sub_stmt_stat != nullptr) {
+        sub_stmt_stat->m_warning_count += da->last_statement_cond_count();
+      }
+      if (prepared_stmt_stat != nullptr) {
+        prepared_stmt_stat->m_warning_count += da->last_statement_cond_count();
+      }
+      break;
+    case Diagnostics_area::DA_ERROR:
+      stat->m_error_count++;
+      if (digest_stat != nullptr) {
+        digest_stat->m_stat.m_error_count++;
+      }
+      if (sub_stmt_stat != nullptr) {
+        sub_stmt_stat->m_error_count++;
+      }
+      if (prepared_stmt_stat != nullptr) {
+        prepared_stmt_stat->m_error_count++;
+      }
+      break;
+    case Diagnostics_area::DA_DISABLED:
+      break;
   }
 }
 
-static inline enum_object_type
-sp_type_to_object_type(uint sp_type)
-{
+static inline enum_object_type sp_type_to_object_type(uint sp_type) {
   enum_sp_type value = to_sp_type(sp_type);
 
-  switch (value)
-  {
-  case enum_sp_type::FUNCTION:
-    return OBJECT_TYPE_FUNCTION;
-  case enum_sp_type::PROCEDURE:
-    return OBJECT_TYPE_PROCEDURE;
-  case enum_sp_type::TRIGGER:
-    return OBJECT_TYPE_TRIGGER;
-  case enum_sp_type::EVENT:
-    return OBJECT_TYPE_EVENT;
-  default:
-    DBUG_ASSERT(false);
-    /* Dead code */
-    return NO_OBJECT_TYPE;
+  switch (value) {
+    case enum_sp_type::FUNCTION:
+      return OBJECT_TYPE_FUNCTION;
+    case enum_sp_type::PROCEDURE:
+      return OBJECT_TYPE_PROCEDURE;
+    case enum_sp_type::TRIGGER:
+      return OBJECT_TYPE_TRIGGER;
+    case enum_sp_type::EVENT:
+      return OBJECT_TYPE_EVENT;
+    default:
+      DBUG_ASSERT(false);
+      /* Dead code */
+      return NO_OBJECT_TYPE;
   }
 }
 
@@ -6344,65 +6703,49 @@ sp_type_to_object_type(uint sp_type)
   Implementation of the stored program instrumentation interface.
   @sa PSI_v1::get_sp_share.
 */
-static PSI_sp_share *
-pfs_get_sp_share_v1(uint sp_type,
-                    const char *schema_name,
-                    uint schema_name_length,
-                    const char *object_name,
-                    uint object_name_length)
-{
+static PSI_sp_share *pfs_get_sp_share_v2(uint sp_type, const char *schema_name,
+                                         uint schema_name_length,
+                                         const char *object_name,
+                                         uint object_name_length) {
   PFS_thread *pfs_thread = my_thread_get_THR_PFS();
-  if (unlikely(pfs_thread == NULL))
-  {
-    return NULL;
+  if (unlikely(pfs_thread == nullptr)) {
+    return nullptr;
   }
 
-  if (object_name_length > COL_OBJECT_NAME_SIZE)
-  {
+  if (object_name_length > COL_OBJECT_NAME_SIZE) {
     object_name_length = COL_OBJECT_NAME_SIZE;
   }
-  if (schema_name_length > COL_OBJECT_SCHEMA_SIZE)
-  {
+  if (schema_name_length > COL_OBJECT_SCHEMA_SIZE) {
     schema_name_length = COL_OBJECT_SCHEMA_SIZE;
   }
 
   PFS_program *pfs_program;
-  pfs_program = find_or_create_program(pfs_thread,
-                                       sp_type_to_object_type(sp_type),
-                                       object_name,
-                                       object_name_length,
-                                       schema_name,
-                                       schema_name_length);
+  pfs_program = find_or_create_program(
+      pfs_thread, sp_type_to_object_type(sp_type), object_name,
+      object_name_length, schema_name, schema_name_length);
 
   return reinterpret_cast<PSI_sp_share *>(pfs_program);
 }
 
-static void
-pfs_release_sp_share_v1(PSI_sp_share *)
-{
+static void pfs_release_sp_share_v2(PSI_sp_share *) {
   /* Unused */
   return;
 }
 
-static PSI_sp_locker *
-pfs_start_sp_v1(PSI_sp_locker_state *state, PSI_sp_share *sp_share)
-{
-  DBUG_ASSERT(state != NULL);
-  if (!flag_global_instrumentation)
-  {
-    return NULL;
+static PSI_sp_locker *pfs_start_sp_v2(PSI_sp_locker_state *state,
+                                      PSI_sp_share *sp_share) {
+  DBUG_ASSERT(state != nullptr);
+  if (!flag_global_instrumentation) {
+    return nullptr;
   }
 
-  if (flag_thread_instrumentation)
-  {
+  if (flag_thread_instrumentation) {
     PFS_thread *pfs_thread = my_thread_get_THR_PFS();
-    if (unlikely(pfs_thread == NULL))
-    {
-      return NULL;
+    if (unlikely(pfs_thread == nullptr)) {
+      return nullptr;
     }
-    if (!pfs_thread->m_enabled)
-    {
-      return NULL;
+    if (!pfs_thread->m_enabled) {
+      return nullptr;
     }
   }
 
@@ -6411,18 +6754,15 @@ pfs_start_sp_v1(PSI_sp_locker_state *state, PSI_sp_share *sp_share)
     stored program stats are being inserted into it.
   */
   PFS_program *pfs_program = reinterpret_cast<PFS_program *>(sp_share);
-  if (pfs_program == NULL || !pfs_program->m_enabled)
-  {
-    return NULL;
+  if (pfs_program == nullptr || !pfs_program->m_enabled) {
+    return nullptr;
   }
 
   state->m_flags = 0;
 
-  if (pfs_program->m_timed)
-  {
+  if (pfs_program->m_timed) {
+    state->m_timer_start = get_statement_timer();
     state->m_flags |= STATE_FLAG_TIMED;
-    state->m_timer_start =
-      get_timer_raw_value_and_function(statement_timer, &state->m_timer);
   }
 
   state->m_sp_share = sp_share;
@@ -6430,11 +6770,9 @@ pfs_start_sp_v1(PSI_sp_locker_state *state, PSI_sp_share *sp_share)
   return reinterpret_cast<PSI_sp_locker *>(state);
 }
 
-static void
-pfs_end_sp_v1(PSI_sp_locker *locker)
-{
+static void pfs_end_sp_v2(PSI_sp_locker *locker) {
   PSI_sp_locker_state *state = reinterpret_cast<PSI_sp_locker_state *>(locker);
-  DBUG_ASSERT(state != NULL);
+  DBUG_ASSERT(state != nullptr);
 
   ulonglong timer_end;
   ulonglong wait_time;
@@ -6442,93 +6780,70 @@ pfs_end_sp_v1(PSI_sp_locker *locker)
   PFS_program *pfs_program = reinterpret_cast<PFS_program *>(state->m_sp_share);
   PFS_sp_stat *stat = &pfs_program->m_sp_stat;
 
-  if (state->m_flags & STATE_FLAG_TIMED)
-  {
-    timer_end = state->m_timer();
+  if (state->m_flags & STATE_FLAG_TIMED) {
+    timer_end = get_statement_timer();
     wait_time = timer_end - state->m_timer_start;
 
     /* Now use this timer_end and wait_time for timing information. */
     stat->aggregate_value(wait_time);
-  }
-  else
-  {
+  } else {
     stat->aggregate_counted();
   }
 }
 
-static void
-pfs_drop_sp_v1(uint sp_type,
-               const char *schema_name,
-               uint schema_name_length,
-               const char *object_name,
-               uint object_name_length)
-{
+static void pfs_drop_sp_v2(uint sp_type, const char *schema_name,
+                           uint schema_name_length, const char *object_name,
+                           uint object_name_length) {
   PFS_thread *pfs_thread = my_thread_get_THR_PFS();
-  if (unlikely(pfs_thread == NULL))
-  {
+  if (unlikely(pfs_thread == nullptr)) {
     return;
   }
 
-  if (object_name_length > COL_OBJECT_NAME_SIZE)
-  {
+  if (object_name_length > COL_OBJECT_NAME_SIZE) {
     object_name_length = COL_OBJECT_NAME_SIZE;
   }
-  if (schema_name_length > COL_OBJECT_SCHEMA_SIZE)
-  {
+  if (schema_name_length > COL_OBJECT_SCHEMA_SIZE) {
     schema_name_length = COL_OBJECT_SCHEMA_SIZE;
   }
 
-  drop_program(pfs_thread,
-               sp_type_to_object_type(sp_type),
-               object_name,
-               object_name_length,
-               schema_name,
-               schema_name_length);
+  drop_program(pfs_thread, sp_type_to_object_type(sp_type), object_name,
+               object_name_length, schema_name, schema_name_length);
 }
 
-PSI_transaction_locker *
-pfs_get_thread_transaction_locker_v1(PSI_transaction_locker_state *state,
-                                     const void *xid,
-                                     const ulonglong *trxid,
-                                     int isolation_level,
-                                     bool read_only,
-                                     bool autocommit)
-{
-  DBUG_ASSERT(state != NULL);
+PSI_transaction_locker *pfs_get_thread_transaction_locker_v1(
+    PSI_transaction_locker_state *state, const void *xid,
+    const ulonglong *trxid, int isolation_level, bool read_only,
+    bool autocommit) {
+  DBUG_ASSERT(state != nullptr);
 
-  if (!flag_global_instrumentation)
-  {
-    return NULL;
+  if (!flag_global_instrumentation) {
+    return nullptr;
   }
 
-  if (!global_transaction_class.m_enabled)
-  {
-    return NULL;
+  if (!global_transaction_class.m_enabled) {
+    return nullptr;
+  }
+
+  /* Check if instrumentation of a thread is explicitly disabled. */
+  PFS_thread *pfs_thread = my_thread_get_THR_PFS();
+  if (pfs_thread != nullptr && !pfs_thread->m_enabled) {
+    return nullptr;
   }
 
   uint flags;
 
-  if (flag_thread_instrumentation)
-  {
-    PFS_thread *pfs_thread = my_thread_get_THR_PFS();
-    if (unlikely(pfs_thread == NULL))
-    {
-      return NULL;
-    }
-    if (!pfs_thread->m_enabled)
-    {
-      return NULL;
+  if (flag_thread_instrumentation) {
+    if (unlikely(pfs_thread == nullptr)) {
+      return nullptr;
     }
     state->m_thread = reinterpret_cast<PSI_thread *>(pfs_thread);
     flags = STATE_FLAG_THREAD;
 
-    if (global_transaction_class.m_timed)
-    {
+    if (global_transaction_class.m_timed) {
       flags |= STATE_FLAG_TIMED;
     }
 
-    if (flag_events_transactions_current)
-    {
+    if (flag_events_transactions_current) {
       ulonglong event_id = pfs_thread->m_event_id++;
 
       PFS_events_transactions *pfs = &pfs_thread->m_transaction_current;
@@ -6539,13 +6854,12 @@ pfs_get_thread_transaction_locker_v1(PSI_transaction_locker_state *state,
       pfs->m_class = &global_transaction_class;
       pfs->m_timer_start = 0;
       pfs->m_timer_end = 0;
-      if (xid != NULL)
-      {
-        pfs->m_xid = *(PSI_xid *)xid;
+      if (xid != nullptr) {
+        pfs->m_xid = *static_cast<const PSI_xid *>(xid);
       }
       pfs->m_xa = false;
       pfs->m_xa_state = TRANS_STATE_XA_NOTR;
-      pfs->m_trxid = (trxid == NULL) ? 0 : *trxid;
+      pfs->m_trxid = (trxid == nullptr) ? 0 : *trxid;
       pfs->m_isolation_level = (enum_isolation_level)isolation_level;
       pfs->m_read_only = read_only;
       pfs->m_autocommit = autocommit;
@@ -6554,15 +6868,12 @@ pfs_get_thread_transaction_locker_v1(PSI_transaction_locker_state *state,
       pfs->m_release_savepoint_count = 0;
 
       uint statements_count = pfs_thread->m_events_statements_count;
-      if (statements_count > 0)
-      {
+      if (statements_count > 0) {
         PFS_events_statements *pfs_statement =
-          &pfs_thread->m_statement_stack[statements_count - 1];
+            &pfs_thread->m_statement_stack[statements_count - 1];
         pfs->m_nesting_event_id = pfs_statement->m_event_id;
         pfs->m_nesting_event_type = pfs_statement->m_event_type;
-      }
-      else
-      {
+      } else {
         pfs->m_nesting_event_id = 0;
         /* pfs->m_nesting_event_type not used when m_nesting_event_id is 0 */
       }
@@ -6570,15 +6881,10 @@ pfs_get_thread_transaction_locker_v1(PSI_transaction_locker_state *state,
       state->m_transaction = pfs;
       flags |= STATE_FLAG_EVENT;
     }
-  }
-  else
-  {
-    if (global_transaction_class.m_timed)
-    {
+  } else {
+    if (global_transaction_class.m_timed) {
       flags = STATE_FLAG_TIMED;
-    }
-    else
-    {
+    } else {
       flags = 0;
     }
   }
@@ -6594,30 +6900,24 @@ pfs_get_thread_transaction_locker_v1(PSI_transaction_locker_state *state,
   return reinterpret_cast<PSI_transaction_locker *>(state);
 }
 
-void
-pfs_start_transaction_v1(PSI_transaction_locker *locker,
-                         const char *src_file,
-                         uint src_line)
-{
+void pfs_start_transaction_v1(PSI_transaction_locker *locker,
+                              const char *src_file, uint src_line) {
   PSI_transaction_locker_state *state =
-    reinterpret_cast<PSI_transaction_locker_state *>(locker);
-  DBUG_ASSERT(state != NULL);
+      reinterpret_cast<PSI_transaction_locker_state *>(locker);
+  DBUG_ASSERT(state != nullptr);
 
   uint flags = state->m_flags;
   ulonglong timer_start = 0;
 
-  if (flags & STATE_FLAG_TIMED)
-  {
-    timer_start =
-      get_timer_raw_value_and_function(transaction_timer, &state->m_timer);
+  if (flags & STATE_FLAG_TIMED) {
+    timer_start = get_transaction_timer();
     state->m_timer_start = timer_start;
   }
 
-  if (flags & STATE_FLAG_EVENT)
-  {
+  if (flags & STATE_FLAG_EVENT) {
     PFS_events_transactions *pfs =
-      reinterpret_cast<PFS_events_transactions *>(state->m_transaction);
-    DBUG_ASSERT(pfs != NULL);
+        reinterpret_cast<PFS_events_transactions *>(state->m_transaction);
+    DBUG_ASSERT(pfs != nullptr);
 
     pfs->m_timer_start = timer_start;
     pfs->m_source_file = src_file;
@@ -6628,62 +6928,52 @@ pfs_start_transaction_v1(PSI_transaction_locker *locker,
   }
 }
 
-void
-pfs_set_transaction_gtid_v1(PSI_transaction_locker *locker,
-                            const void *sid,
-                            const void *gtid_spec)
-{
+void pfs_set_transaction_gtid_v1(PSI_transaction_locker *locker,
+                                 const void *sid, const void *gtid_spec) {
   PSI_transaction_locker_state *state =
-    reinterpret_cast<PSI_transaction_locker_state *>(locker);
-  DBUG_ASSERT(state != NULL);
-  DBUG_ASSERT(sid != NULL);
-  DBUG_ASSERT(gtid_spec != NULL);
+      reinterpret_cast<PSI_transaction_locker_state *>(locker);
+  DBUG_ASSERT(state != nullptr);
+  DBUG_ASSERT(sid != nullptr);
+  DBUG_ASSERT(gtid_spec != nullptr);
 
-  if (state->m_flags & STATE_FLAG_EVENT)
-  {
+  if (state->m_flags & STATE_FLAG_EVENT) {
     PFS_events_transactions *pfs =
-      reinterpret_cast<PFS_events_transactions *>(state->m_transaction);
-    DBUG_ASSERT(pfs != NULL);
-    pfs->m_sid = *(rpl_sid *)sid;
-    pfs->m_gtid_spec = *(Gtid_specification *)gtid_spec;
+        reinterpret_cast<PFS_events_transactions *>(state->m_transaction);
+    DBUG_ASSERT(pfs != nullptr);
+    pfs->m_sid = *static_cast<const rpl_sid *>(sid);
+    pfs->m_gtid_spec = *static_cast<const Gtid_specification *>(gtid_spec);
   }
 }
 
-void
-pfs_set_transaction_xid_v1(PSI_transaction_locker *locker,
-                           const void *xid,
-                           int xa_state)
-{
+void pfs_set_transaction_xid_v1(PSI_transaction_locker *locker, const void *xid,
+                                int xa_state) {
   PSI_transaction_locker_state *state =
-    reinterpret_cast<PSI_transaction_locker_state *>(locker);
-  DBUG_ASSERT(state != NULL);
+      reinterpret_cast<PSI_transaction_locker_state *>(locker);
+  DBUG_ASSERT(state != nullptr);
 
-  if (state->m_flags & STATE_FLAG_EVENT)
-  {
+  if (state->m_flags & STATE_FLAG_EVENT) {
     PFS_events_transactions *pfs =
-      reinterpret_cast<PFS_events_transactions *>(state->m_transaction);
-    DBUG_ASSERT(pfs != NULL);
-    DBUG_ASSERT(xid != NULL);
+        reinterpret_cast<PFS_events_transactions *>(state->m_transaction);
+    DBUG_ASSERT(pfs != nullptr);
+    DBUG_ASSERT(xid != nullptr);
 
-    pfs->m_xid = *(PSI_xid *)xid;
+    pfs->m_xid = *static_cast<const PSI_xid *>(xid);
     pfs->m_xa_state = (enum_xa_transaction_state)xa_state;
     pfs->m_xa = true;
   }
   return;
 }
 
-void
-pfs_set_transaction_xa_state_v1(PSI_transaction_locker *locker, int xa_state)
-{
+void pfs_set_transaction_xa_state_v1(PSI_transaction_locker *locker,
+                                     int xa_state) {
   PSI_transaction_locker_state *state =
-    reinterpret_cast<PSI_transaction_locker_state *>(locker);
-  DBUG_ASSERT(state != NULL);
+      reinterpret_cast<PSI_transaction_locker_state *>(locker);
+  DBUG_ASSERT(state != nullptr);
 
-  if (state->m_flags & STATE_FLAG_EVENT)
-  {
+  if (state->m_flags & STATE_FLAG_EVENT) {
     PFS_events_transactions *pfs =
-      reinterpret_cast<PFS_events_transactions *>(state->m_transaction);
-    DBUG_ASSERT(pfs != NULL);
+        reinterpret_cast<PFS_events_transactions *>(state->m_transaction);
+    DBUG_ASSERT(pfs != nullptr);
 
     pfs->m_xa_state = (enum_xa_transaction_state)xa_state;
     pfs->m_xa = true;
@@ -6691,24 +6981,20 @@ pfs_set_transaction_xa_state_v1(PSI_transaction_locker *locker, int xa_state)
   return;
 }
 
-void
-pfs_set_transaction_trxid_v1(PSI_transaction_locker *locker,
-                             const ulonglong *trxid)
-{
-  DBUG_ASSERT(trxid != NULL);
+void pfs_set_transaction_trxid_v1(PSI_transaction_locker *locker,
+                                  const ulonglong *trxid) {
+  DBUG_ASSERT(trxid != nullptr);
 
   PSI_transaction_locker_state *state =
-    reinterpret_cast<PSI_transaction_locker_state *>(locker);
-  DBUG_ASSERT(state != NULL);
+      reinterpret_cast<PSI_transaction_locker_state *>(locker);
+  DBUG_ASSERT(state != nullptr);
 
-  if (state->m_flags & STATE_FLAG_EVENT)
-  {
+  if (state->m_flags & STATE_FLAG_EVENT) {
     PFS_events_transactions *pfs =
-      reinterpret_cast<PFS_events_transactions *>(state->m_transaction);
-    DBUG_ASSERT(pfs != NULL);
+        reinterpret_cast<PFS_events_transactions *>(state->m_transaction);
+    DBUG_ASSERT(pfs != nullptr);
 
-    if (pfs->m_trxid == 0)
-    {
+    if (pfs->m_trxid == 0) {
       pfs->m_trxid = *trxid;
     }
   }
@@ -6717,79 +7003,66 @@ pfs_set_transaction_trxid_v1(PSI_transaction_locker *locker,
 #define INC_TRANSACTION_ATTR_BODY(LOCKER, ATTR, VALUE)                       \
   PSI_transaction_locker_state *state;                                       \
   state = reinterpret_cast<PSI_transaction_locker_state *>(LOCKER);          \
-  if (unlikely(state == NULL))                                               \
-  {                                                                          \
+  if (unlikely(state == nullptr)) {                                          \
     return;                                                                  \
   }                                                                          \
   state->ATTR += VALUE;                                                      \
-  if (state->m_flags & STATE_FLAG_EVENT)                                     \
-  {                                                                          \
+  if (state->m_flags & STATE_FLAG_EVENT) {                                   \
     PFS_events_transactions *pfs;                                            \
     pfs = reinterpret_cast<PFS_events_transactions *>(state->m_transaction); \
-    DBUG_ASSERT(pfs != NULL);                                                \
+    DBUG_ASSERT(pfs != nullptr);                                             \
     pfs->ATTR += VALUE;                                                      \
   }                                                                          \
   return;
 
-void
-pfs_inc_transaction_savepoints_v1(PSI_transaction_locker *locker, ulong count)
-{
+void pfs_inc_transaction_savepoints_v1(PSI_transaction_locker *locker,
+                                       ulong count) {
   INC_TRANSACTION_ATTR_BODY(locker, m_savepoint_count, count);
 }
 
-void
-pfs_inc_transaction_rollback_to_savepoint_v1(PSI_transaction_locker *locker,
-                                             ulong count)
-{
+void pfs_inc_transaction_rollback_to_savepoint_v1(
+    PSI_transaction_locker *locker, ulong count) {
   INC_TRANSACTION_ATTR_BODY(locker, m_rollback_to_savepoint_count, count);
 }
 
-void
-pfs_inc_transaction_release_savepoint_v1(PSI_transaction_locker *locker,
-                                         ulong count)
-{
+void pfs_inc_transaction_release_savepoint_v1(PSI_transaction_locker *locker,
+                                              ulong count) {
   INC_TRANSACTION_ATTR_BODY(locker, m_release_savepoint_count, count);
 }
 
-void
-pfs_end_transaction_v1(PSI_transaction_locker *locker, bool commit)
-{
+void pfs_end_transaction_v1(PSI_transaction_locker *locker, bool commit) {
   PSI_transaction_locker_state *state =
-    reinterpret_cast<PSI_transaction_locker_state *>(locker);
-  DBUG_ASSERT(state != NULL);
+      reinterpret_cast<PSI_transaction_locker_state *>(locker);
+  DBUG_ASSERT(state != nullptr);
 
   ulonglong timer_end = 0;
   ulonglong wait_time = 0;
   uint flags = state->m_flags;
 
-  if (flags & STATE_FLAG_TIMED)
-  {
-    timer_end = state->m_timer();
+  if (flags & STATE_FLAG_TIMED) {
+    timer_end = get_transaction_timer();
     wait_time = timer_end - state->m_timer_start;
   }
 
   PFS_transaction_stat *stat;
 
-  if (flags & STATE_FLAG_THREAD)
-  {
+  if (flags & STATE_FLAG_THREAD) {
     PFS_thread *pfs_thread = reinterpret_cast<PFS_thread *>(state->m_thread);
-    DBUG_ASSERT(pfs_thread != NULL);
+    DBUG_ASSERT(pfs_thread != nullptr);
 
     /* Aggregate to EVENTS_TRANSACTIONS_SUMMARY_BY_THREAD_BY_EVENT_NAME */
     stat =
-      &pfs_thread
-         ->write_instr_class_transactions_stats()[GLOBAL_TRANSACTION_INDEX];
+        &pfs_thread
+             ->write_instr_class_transactions_stats()[GLOBAL_TRANSACTION_INDEX];
 
-    if (flags & STATE_FLAG_EVENT)
-    {
+    if (flags & STATE_FLAG_EVENT) {
       PFS_events_transactions *pfs =
-        reinterpret_cast<PFS_events_transactions *>(state->m_transaction);
-      DBUG_ASSERT(pfs != NULL);
+          reinterpret_cast<PFS_events_transactions *>(state->m_transaction);
+      DBUG_ASSERT(pfs != nullptr);
 
       /* events_transactions_current may have been cleared while the transaction
        * was active */
-      if (unlikely(pfs->m_class == NULL))
-      {
+      if (unlikely(pfs->m_class == nullptr)) {
         return;
       }
 
@@ -6798,49 +7071,35 @@ pfs_end_transaction_v1(PSI_transaction_locker *locker, bool commit)
 
       pfs->m_state = (commit ? TRANS_STATE_COMMITTED : TRANS_STATE_ROLLED_BACK);
 
-      if (pfs->m_xa)
-      {
+      if (pfs->m_xa) {
         pfs->m_xa_state =
-          (commit ? TRANS_STATE_XA_COMMITTED : TRANS_STATE_XA_ROLLBACK_ONLY);
+            (commit ? TRANS_STATE_XA_COMMITTED : TRANS_STATE_XA_ROLLBACK_ONLY);
       }
 
-      if (pfs_thread->m_flag_events_transactions_history)
-      {
+      if (pfs_thread->m_flag_events_transactions_history) {
         insert_events_transactions_history(pfs_thread, pfs);
       }
-      if (pfs_thread->m_flag_events_transactions_history_long)
-      {
+      if (pfs_thread->m_flag_events_transactions_history_long) {
         insert_events_transactions_history_long(pfs);
       }
     }
-  }
-  else
-  {
+  } else {
     /* Aggregate to EVENTS_TRANSACTIONS_SUMMARY_GLOBAL_BY_EVENT_NAME */
     stat = &global_transaction_stat;
   }
 
-  if (flags & STATE_FLAG_TIMED)
-  {
+  if (flags & STATE_FLAG_TIMED) {
     /* Aggregate to EVENTS_TRANSACTIONS_SUMMARY_..._BY_EVENT_NAME (timed) */
-    if (state->m_read_only)
-    {
+    if (state->m_read_only) {
       stat->m_read_only_stat.aggregate_value(wait_time);
-    }
-    else
-    {
+    } else {
       stat->m_read_write_stat.aggregate_value(wait_time);
     }
-  }
-  else
-  {
+  } else {
     /* Aggregate to EVENTS_TRANSACTIONS_SUMMARY_..._BY_EVENT_NAME (counted) */
-    if (state->m_read_only)
-    {
+    if (state->m_read_only) {
       stat->m_read_only_stat.aggregate_counted();
-    }
-    else
-    {
+    } else {
       stat->m_read_write_stat.aggregate_counted();
     }
   }
@@ -6854,15 +7113,13 @@ pfs_end_transaction_v1(PSI_transaction_locker *locker, bool commit)
   Implementation of the socket instrumentation interface.
   @sa PSI_v1::end_socket_wait.
 */
-void
-pfs_end_socket_wait_v1(PSI_socket_locker *locker, size_t byte_count)
-{
+void pfs_end_socket_wait_v1(PSI_socket_locker *locker, size_t byte_count) {
   PSI_socket_locker_state *state =
-    reinterpret_cast<PSI_socket_locker_state *>(locker);
-  DBUG_ASSERT(state != NULL);
+      reinterpret_cast<PSI_socket_locker_state *>(locker);
+  DBUG_ASSERT(state != nullptr);
 
   PFS_socket *socket = reinterpret_cast<PFS_socket *>(state->m_socket);
-  DBUG_ASSERT(socket != NULL);
+  DBUG_ASSERT(socket != nullptr);
 
   ulonglong timer_end = 0;
   ulonglong wait_time = 0;
@@ -6870,72 +7127,65 @@ pfs_end_socket_wait_v1(PSI_socket_locker *locker, size_t byte_count)
   uint flags = state->m_flags;
   size_t bytes = ((int)byte_count > -1 ? byte_count : 0);
 
-  switch (state->m_operation)
-  {
-  /* Group read operations */
-  case PSI_SOCKET_RECV:
-  case PSI_SOCKET_RECVFROM:
-  case PSI_SOCKET_RECVMSG:
-    byte_stat = &socket->m_socket_stat.m_io_stat.m_read;
-    break;
-  /* Group write operations */
-  case PSI_SOCKET_SEND:
-  case PSI_SOCKET_SENDTO:
-  case PSI_SOCKET_SENDMSG:
-    byte_stat = &socket->m_socket_stat.m_io_stat.m_write;
-    break;
-  /* Group remaining operations as miscellaneous */
-  case PSI_SOCKET_CONNECT:
-  case PSI_SOCKET_CREATE:
-  case PSI_SOCKET_BIND:
-  case PSI_SOCKET_SEEK:
-  case PSI_SOCKET_OPT:
-  case PSI_SOCKET_STAT:
-  case PSI_SOCKET_SHUTDOWN:
-  case PSI_SOCKET_SELECT:
-  case PSI_SOCKET_CLOSE:
-    byte_stat = &socket->m_socket_stat.m_io_stat.m_misc;
-    break;
-  default:
-    DBUG_ASSERT(false);
-    byte_stat = NULL;
-    break;
+  switch (state->m_operation) {
+    /* Group read operations */
+    case PSI_SOCKET_RECV:
+    case PSI_SOCKET_RECVFROM:
+    case PSI_SOCKET_RECVMSG:
+      byte_stat = &socket->m_socket_stat.m_io_stat.m_read;
+      break;
+    /* Group write operations */
+    case PSI_SOCKET_SEND:
+    case PSI_SOCKET_SENDTO:
+    case PSI_SOCKET_SENDMSG:
+      byte_stat = &socket->m_socket_stat.m_io_stat.m_write;
+      break;
+    /* Group remaining operations as miscellaneous */
+    case PSI_SOCKET_CONNECT:
+    case PSI_SOCKET_CREATE:
+    case PSI_SOCKET_BIND:
+    case PSI_SOCKET_SEEK:
+    case PSI_SOCKET_OPT:
+    case PSI_SOCKET_STAT:
+    case PSI_SOCKET_SHUTDOWN:
+    case PSI_SOCKET_SELECT:
+    case PSI_SOCKET_CLOSE:
+      byte_stat = &socket->m_socket_stat.m_io_stat.m_misc;
+      break;
+    default:
+      DBUG_ASSERT(false);
+      byte_stat = nullptr;
+      break;
   }
 
   /* Aggregation for EVENTS_WAITS_SUMMARY_BY_INSTANCE */
-  if (flags & STATE_FLAG_TIMED)
-  {
-    timer_end = state->m_timer();
+  if (flags & STATE_FLAG_TIMED) {
+    timer_end = get_wait_timer();
     wait_time = timer_end - state->m_timer_start;
 
     /* Aggregate to the socket instrument for now (timed) */
     byte_stat->aggregate(wait_time, bytes);
-  }
-  else
-  {
+  } else {
     /* Aggregate to the socket instrument (event count and byte count) */
     byte_stat->aggregate_counted(bytes);
   }
 
   /* Aggregate to EVENTS_WAITS_HISTORY and EVENTS_WAITS_HISTORY_LONG */
-  if (flags & STATE_FLAG_EVENT)
-  {
+  if (flags & STATE_FLAG_EVENT) {
     PFS_thread *thread = reinterpret_cast<PFS_thread *>(state->m_thread);
-    DBUG_ASSERT(thread != NULL);
+    DBUG_ASSERT(thread != nullptr);
     PFS_events_waits *wait =
-      reinterpret_cast<PFS_events_waits *>(state->m_wait);
-    DBUG_ASSERT(wait != NULL);
+        reinterpret_cast<PFS_events_waits *>(state->m_wait);
+    DBUG_ASSERT(wait != nullptr);
 
     wait->m_timer_end = timer_end;
     wait->m_end_event_id = thread->m_event_id;
     wait->m_number_of_bytes = bytes;
 
-    if (thread->m_flag_events_waits_history)
-    {
+    if (thread->m_flag_events_waits_history) {
       insert_events_waits_history(thread, wait);
     }
-    if (thread->m_flag_events_waits_history_long)
-    {
+    if (thread->m_flag_events_waits_history_long) {
       insert_events_waits_history_long(wait);
     }
     thread->m_events_waits_current--;
@@ -6944,13 +7194,11 @@ pfs_end_socket_wait_v1(PSI_socket_locker *locker, size_t byte_count)
   }
 }
 
-void
-pfs_set_socket_state_v1(PSI_socket *socket, PSI_socket_state state)
-{
+void pfs_set_socket_state_v1(PSI_socket *socket, PSI_socket_state state) {
   DBUG_ASSERT((state == PSI_SOCKET_STATE_IDLE) ||
               (state == PSI_SOCKET_STATE_ACTIVE));
   PFS_socket *pfs = reinterpret_cast<PFS_socket *>(socket);
-  DBUG_ASSERT(pfs != NULL);
+  DBUG_ASSERT(pfs != nullptr);
   DBUG_ASSERT(pfs->m_idle || (state == PSI_SOCKET_STATE_IDLE));
   DBUG_ASSERT(!pfs->m_idle || (state == PSI_SOCKET_STATE_ACTIVE));
   pfs->m_idle = (state == PSI_SOCKET_STATE_IDLE);
@@ -6959,32 +7207,20 @@ pfs_set_socket_state_v1(PSI_socket *socket, PSI_socket_state state)
 /**
   Set socket descriptor and address info.
 */
-void
-pfs_set_socket_info_v1(PSI_socket *socket,
-                       const my_socket *fd,
-                       const struct sockaddr *addr,
-                       socklen_t addr_len)
-{
+void pfs_set_socket_info_v1(PSI_socket *socket, const my_socket *fd,
+                            const struct sockaddr *addr, socklen_t addr_len) {
   PFS_socket *pfs = reinterpret_cast<PFS_socket *>(socket);
-  DBUG_ASSERT(pfs != NULL);
+  DBUG_ASSERT(pfs != nullptr);
 
-  /** Set socket descriptor */
-  if (fd != NULL)
-  {
-    pfs->m_fd = (uint)*fd;
+  if (fd != nullptr) {
+    pfs->m_fd = (my_socket)*fd;
   }
-
-  /** Set raw socket address and length */
-  if (likely(addr != NULL && addr_len > 0))
-  {
+  if (likely(addr != nullptr && addr_len > 0)) {
     pfs->m_addr_len = addr_len;
 
-    /** Restrict address length to size of struct */
-    if (unlikely(pfs->m_addr_len > sizeof(sockaddr_storage)))
-    {
+    if (unlikely(pfs->m_addr_len > sizeof(sockaddr_storage))) {
       pfs->m_addr_len = sizeof(struct sockaddr_storage);
     }
-
     memcpy(&pfs->m_sock_addr, addr, pfs->m_addr_len);
   }
 }
@@ -6993,67 +7229,66 @@ pfs_set_socket_info_v1(PSI_socket *socket,
   Implementation of the socket instrumentation interface.
   @sa PSI_v1::set_socket_info.
 */
-void
-pfs_set_socket_thread_owner_v1(PSI_socket *socket)
-{
+void pfs_set_socket_thread_owner_v1(PSI_socket *socket) {
   PFS_socket *pfs_socket = reinterpret_cast<PFS_socket *>(socket);
-  DBUG_ASSERT(pfs_socket != NULL);
-  pfs_socket->m_thread_owner = my_thread_get_THR_PFS();
+  DBUG_ASSERT(pfs_socket != nullptr);
+  PFS_thread *pfs_thread = my_thread_get_THR_PFS();
+  pfs_socket->m_thread_owner = pfs_thread;
+
+  if (pfs_thread) {
+    pfs_thread->m_sock_addr_len = pfs_socket->m_addr_len;
+    if (pfs_thread->m_sock_addr_len > 0) {
+      memcpy(&pfs_thread->m_sock_addr, &pfs_socket->m_sock_addr,
+             pfs_socket->m_addr_len);
+    }
+  }
 }
 
-struct PSI_digest_locker *
-pfs_digest_start_v1(PSI_statement_locker *locker)
-{
+struct PSI_digest_locker *pfs_digest_start_v2(PSI_statement_locker *locker) {
   PSI_statement_locker_state *statement_state;
   statement_state = reinterpret_cast<PSI_statement_locker_state *>(locker);
-  DBUG_ASSERT(statement_state != NULL);
+  DBUG_ASSERT(statement_state != nullptr);
 
-  if (statement_state->m_discarded)
-  {
-    return NULL;
+  if (statement_state->m_discarded) {
+    return nullptr;
   }
 
-  if (statement_state->m_flags & STATE_FLAG_DIGEST)
-  {
+  if (statement_state->m_flags & STATE_FLAG_DIGEST) {
     return reinterpret_cast<PSI_digest_locker *>(locker);
   }
 
-  return NULL;
+  return nullptr;
 }
 
-void
-pfs_digest_end_v1(PSI_digest_locker *locker, const sql_digest_storage *digest)
-{
+void pfs_digest_end_v2(PSI_digest_locker *locker,
+                       const sql_digest_storage *digest) {
   PSI_statement_locker_state *state;
   state = reinterpret_cast<PSI_statement_locker_state *>(locker);
-  DBUG_ASSERT(state != NULL);
-  DBUG_ASSERT(digest != NULL);
+  DBUG_ASSERT(state != nullptr);
+  DBUG_ASSERT(digest != nullptr);
 
-  if (state->m_discarded)
-  {
+  if (state->m_discarded) {
     return;
   }
 
-  if (state->m_flags & STATE_FLAG_DIGEST)
-  {
+  if (state->m_flags & STATE_FLAG_DIGEST) {
     /* TODO: pfs_digest_end_v1() has side effects here, to document better */
     sql_digest_storage *update_digest =
-      const_cast<sql_digest_storage *>(digest);
+        const_cast<sql_digest_storage *>(digest);
 
-    /* Compute MD5 Hash of the tokens received. */
-    compute_digest_md5(digest, update_digest->m_md5);
+    /* Compute digest hash of the tokens received. */
+    compute_digest_hash(digest, update_digest->m_hash);
 
     state->m_digest = digest;
 
     uint req_flags = STATE_FLAG_THREAD | STATE_FLAG_EVENT;
 
-    if ((state->m_flags & req_flags) == req_flags)
-    {
+    if ((state->m_flags & req_flags) == req_flags) {
       PFS_thread *thread = reinterpret_cast<PFS_thread *>(state->m_thread);
-      DBUG_ASSERT(thread != NULL);
+      DBUG_ASSERT(thread != nullptr);
       PFS_events_statements *pfs =
-        reinterpret_cast<PFS_events_statements *>(state->m_statement);
-      DBUG_ASSERT(pfs != NULL);
+          reinterpret_cast<PFS_events_statements *>(state->m_statement);
+      DBUG_ASSERT(pfs != nullptr);
 
       pfs_dirty_state dirty_state;
       thread->m_stmt_lock.allocated_to_dirty(&dirty_state);
@@ -7071,42 +7306,31 @@ pfs_digest_end_v1(PSI_digest_locker *locker, const sql_digest_storage *digest)
   }
 }
 
-static PSI_prepared_stmt *
-pfs_create_prepared_stmt_v1(void *identity,
-                            uint stmt_id,
-                            PSI_statement_locker *locker,
-                            const char *stmt_name,
-                            size_t stmt_name_length,
-                            const char *sql_text,
-                            size_t sql_text_length)
-{
+PSI_prepared_stmt *pfs_create_prepared_stmt_v2(void *identity, uint stmt_id,
+                                               PSI_statement_locker *locker,
+                                               const char *stmt_name,
+                                               size_t stmt_name_length,
+                                               const char *sql_text,
+                                               size_t sql_text_length) {
   PSI_statement_locker_state *state =
-    reinterpret_cast<PSI_statement_locker_state *>(locker);
+      reinterpret_cast<PSI_statement_locker_state *>(locker);
   PFS_events_statements *pfs_stmt =
-    reinterpret_cast<PFS_events_statements *>(state->m_statement);
+      reinterpret_cast<PFS_events_statements *>(state->m_statement);
   PFS_program *pfs_program =
-    reinterpret_cast<PFS_program *>(state->m_parent_sp_share);
+      reinterpret_cast<PFS_program *>(state->m_parent_sp_share);
 
   PFS_thread *pfs_thread = my_thread_get_THR_PFS();
-  if (unlikely(pfs_thread == NULL))
-  {
-    return NULL;
+  if (unlikely(pfs_thread == nullptr)) {
+    return nullptr;
   }
 
-  if (sql_text_length > COL_INFO_SIZE)
-  {
+  if (sql_text_length > COL_INFO_SIZE) {
     sql_text_length = COL_INFO_SIZE;
   }
 
-  PFS_prepared_stmt *pfs = create_prepared_stmt(identity,
-                                                pfs_thread,
-                                                pfs_program,
-                                                pfs_stmt,
-                                                stmt_id,
-                                                stmt_name,
-                                                stmt_name_length,
-                                                sql_text,
-                                                sql_text_length);
+  PFS_prepared_stmt *pfs = create_prepared_stmt(
+      identity, pfs_thread, pfs_program, pfs_stmt, stmt_id, stmt_name,
+      stmt_name_length, sql_text, sql_text_length);
 
   state->m_parent_prepared_stmt = reinterpret_cast<PSI_prepared_stmt *>(pfs);
   state->m_in_prepare = true;
@@ -7114,56 +7338,62 @@ pfs_create_prepared_stmt_v1(void *identity,
   return reinterpret_cast<PSI_prepared_stmt *>(pfs);
 }
 
-static void
-pfs_execute_prepared_stmt_v1(PSI_statement_locker *locker,
-                             PSI_prepared_stmt *ps)
-{
+void pfs_execute_prepared_stmt_v2(PSI_statement_locker *locker,
+                                  PSI_prepared_stmt *ps) {
   PSI_statement_locker_state *state =
-    reinterpret_cast<PSI_statement_locker_state *>(locker);
-  DBUG_ASSERT(state != NULL);
+      reinterpret_cast<PSI_statement_locker_state *>(locker);
+  DBUG_ASSERT(state != nullptr);
 
   state->m_parent_prepared_stmt = ps;
   state->m_in_prepare = false;
 }
 
-static void
-pfs_destroy_prepared_stmt_v1(PSI_prepared_stmt *prepared_stmt)
-{
+void pfs_destroy_prepared_stmt_v2(PSI_prepared_stmt *prepared_stmt) {
   PFS_prepared_stmt *pfs_prepared_stmt =
-    reinterpret_cast<PFS_prepared_stmt *>(prepared_stmt);
+      reinterpret_cast<PFS_prepared_stmt *>(prepared_stmt);
   delete_prepared_stmt(pfs_prepared_stmt);
   return;
 }
 
-static void
-pfs_reprepare_prepared_stmt_v1(PSI_prepared_stmt *prepared_stmt)
-{
+void pfs_reprepare_prepared_stmt_v2(PSI_prepared_stmt *prepared_stmt) {
   PFS_prepared_stmt *pfs_prepared_stmt =
-    reinterpret_cast<PFS_prepared_stmt *>(prepared_stmt);
+      reinterpret_cast<PFS_prepared_stmt *>(prepared_stmt);
   PFS_single_stat *prepared_stmt_stat = &pfs_prepared_stmt->m_reprepare_stat;
 
-  if (prepared_stmt_stat != NULL)
-  {
+  if (prepared_stmt_stat != nullptr) {
     prepared_stmt_stat->aggregate_counted();
   }
   return;
 }
 
+void pfs_set_prepared_stmt_text_v2(PSI_prepared_stmt *prepared_stmt,
+                                   const char *text, uint text_len) {
+  PFS_prepared_stmt *pfs_prepared_stmt =
+      reinterpret_cast<PFS_prepared_stmt *>(prepared_stmt);
+  DBUG_ASSERT(pfs_prepared_stmt != nullptr);
+
+  uint max_len = COL_INFO_SIZE;
+  if (text_len > max_len) {
+    text_len = max_len;
+  }
+
+  memcpy(pfs_prepared_stmt->m_sqltext, text, text_len);
+  pfs_prepared_stmt->m_sqltext_length = text_len;
+
+  return;
+}
+
 /**
   Implementation of the thread attribute connection interface
-  @sa PSI_v1::set_thread_connect_attr.
+  @sa PSI_v2::set_thread_connect_attr.
 */
-int
-pfs_set_thread_connect_attrs_v1(const char *buffer,
-                                uint length,
-                                const void *from_cs)
-{
+int pfs_set_thread_connect_attrs_vc(const char *buffer, uint length,
+                                    const void *from_cs) {
   PFS_thread *thd = my_thread_get_THR_PFS();
 
-  DBUG_ASSERT(buffer != NULL);
+  DBUG_ASSERT(buffer != nullptr);
 
-  if (likely(thd != NULL) && session_connect_attrs_size_per_thread > 0)
-  {
+  if (likely(thd != nullptr) && session_connect_attrs_size_per_thread > 0) {
     pfs_dirty_state dirty_state;
     const CHARSET_INFO *cs = static_cast<const CHARSET_INFO *>(from_cs);
 
@@ -7172,20 +7402,16 @@ pfs_set_thread_connect_attrs_v1(const char *buffer,
     /* copy from the input buffer as much as we can fit */
     uint copy_size, lost;
 
-    if (length > session_connect_attrs_longest_seen)
-    {
+    if (length > session_connect_attrs_longest_seen) {
       session_connect_attrs_longest_seen = length;
     }
 
-    if (length <= session_connect_attrs_size_per_thread)
-    {
+    if (length <= session_connect_attrs_size_per_thread) {
       copy_size = length;
       lost = 0;
 
       memcpy(thd->m_session_connect_attrs, buffer, copy_size);
-    }
-    else
-    {
+    } else {
       copy_size = session_connect_attrs_size_per_thread;
       lost = length - copy_size;
 
@@ -7198,17 +7424,15 @@ pfs_set_thread_connect_attrs_v1(const char *buffer,
       lost += key_len + 1 + sizeof(val);
 
       /* we want UTF-8, so my_convert() is not necessary here. */
-      val_len = my_snprintf(val, sizeof(val) - 1, "%d", lost);
+      val_len = snprintf(val, sizeof(val) - 1, "%d", lost);
 
-      warning_size = my_snprintf(
-        warn_buf, sizeof(warn_buf), "%c%s%c%s", key_len, key, val_len, val);
+      warning_size = snprintf(warn_buf, sizeof(warn_buf), "%c%s%c%s",
+                              int(key_len), key, int(val_len), val);
 
-      if (warning_size <= copy_size)
-      {
+      if (warning_size <= copy_size) {
         size_t left = copy_size - warning_size;
         memcpy(thd->m_session_connect_attrs, warn_buf, warning_size);
-        if (left > 0)
-        {
+        if (left > 0) {
           memcpy(thd->m_session_connect_attrs + warning_size, buffer, left);
         }
       }
@@ -7218,8 +7442,7 @@ pfs_set_thread_connect_attrs_v1(const char *buffer,
     thd->m_session_connect_attrs_cs_number = cs->number;
     thd->m_session_lock.dirty_to_allocated(&dirty_state);
 
-    if (copy_size == length)
-    {
+    if (copy_size == length) {
       return 0;
     }
 
@@ -7231,261 +7454,316 @@ pfs_set_thread_connect_attrs_v1(const char *buffer,
 
 /**
   Implementation of the get event id interface
-  @sa PSI_v1::get_thread_event_id.
+  @sa PSI_v2::get_thread_event_id.
 */
-void
-pfs_get_thread_event_id_v1(ulonglong *internal_thread_id, ulonglong *event_id)
-{
+void pfs_get_current_thread_event_id_vc(ulonglong *internal_thread_id,
+                                        ulonglong *event_id) {
   PFS_thread *pfs = my_thread_get_THR_PFS();
 
-  if (pfs != NULL)
-  {
+  if (pfs != nullptr) {
     *internal_thread_id = pfs->m_thread_internal_id;
     *event_id = pfs->m_event_id;
-  }
-  else
-  {
+  } else {
     *internal_thread_id = 0;
     *event_id = 0;
   }
 }
 
-void
-pfs_register_memory_v1(const char *category,
-                       PSI_memory_info_v1 *info,
-                       int count)
-{
-  REGISTER_BODY_V1(
-    PSI_memory_key, memory_instrument_prefix, register_memory_class);
+/**
+  Implementation of the get event id interface
+  @sa PSI_v1::get_thread_event_id.
+*/
+void pfs_get_thread_event_id_v1(ulonglong *internal_thread_id,
+                                ulonglong *event_id) {
+  /* Renamed in V2. */
+  return pfs_get_current_thread_event_id_vc(internal_thread_id, event_id);
 }
 
-PSI_memory_key
-pfs_memory_alloc_v1(PSI_memory_key key, size_t size, PSI_thread **owner)
-{
-  PFS_thread **owner_thread = reinterpret_cast<PFS_thread **>(owner);
-  DBUG_ASSERT(owner_thread != NULL);
+/**
+  Implementation of the get event id interface
+  @sa PSI_v1::get_thread_event_id.
+*/
+void pfs_get_thread_event_id_vc(PSI_thread *psi, ulonglong *internal_thread_id,
+                                ulonglong *event_id) {
+  PFS_thread *pfs = reinterpret_cast<PFS_thread *>(psi);
 
-  if (!flag_global_instrumentation)
-  {
-    *owner_thread = NULL;
+  if (pfs != nullptr) {
+    *internal_thread_id = pfs->m_thread_internal_id;
+    *event_id = pfs->m_event_id;
+  } else {
+    *internal_thread_id = 0;
+    *event_id = 0;
+  }
+}
+
+void pfs_register_memory_vc(const char *category, PSI_memory_info_v1 *info,
+                            int count) {
+  REGISTER_BODY_V1(PSI_memory_key, memory_instrument_prefix,
+                   register_memory_class);
+}
+
+PSI_memory_key pfs_memory_alloc_vc(PSI_memory_key key, size_t size,
+                                   PSI_thread **owner) {
+  PFS_thread **owner_thread = reinterpret_cast<PFS_thread **>(owner);
+  DBUG_ASSERT(owner_thread != nullptr);
+
+  if (!flag_global_instrumentation) {
+    *owner_thread = nullptr;
     return PSI_NOT_INSTRUMENTED;
   }
 
   PFS_memory_class *klass = find_memory_class(key);
-  if (klass == NULL)
-  {
-    *owner_thread = NULL;
+  if (klass == nullptr) {
+    *owner_thread = nullptr;
     return PSI_NOT_INSTRUMENTED;
   }
 
-  if (!klass->m_enabled)
-  {
-    *owner_thread = NULL;
+  if (!klass->m_enabled) {
+    *owner_thread = nullptr;
     return PSI_NOT_INSTRUMENTED;
   }
 
-  PFS_memory_stat *event_name_array;
-  PFS_memory_stat *stat;
   uint index = klass->m_event_name_index;
-  PFS_memory_stat_delta delta_buffer;
-  PFS_memory_stat_delta *delta;
 
-  if (flag_thread_instrumentation && !klass->is_global())
-  {
+  if (flag_thread_instrumentation && !klass->is_global()) {
     PFS_thread *pfs_thread = my_thread_get_THR_PFS();
-    if (unlikely(pfs_thread == NULL))
-    {
-      *owner_thread = NULL;
+    if (unlikely(pfs_thread == nullptr)) {
+      *owner_thread = nullptr;
       return PSI_NOT_INSTRUMENTED;
     }
-    if (!pfs_thread->m_enabled)
-    {
-      *owner_thread = NULL;
+    if (!pfs_thread->m_enabled) {
+      *owner_thread = nullptr;
       return PSI_NOT_INSTRUMENTED;
     }
+
+    PFS_memory_safe_stat *event_name_array;
+    PFS_memory_safe_stat *stat;
+    PFS_memory_stat_alloc_delta delta_buffer;
+    PFS_memory_stat_alloc_delta *delta;
 
     /* Aggregate to MEMORY_SUMMARY_BY_THREAD_BY_EVENT_NAME */
     event_name_array = pfs_thread->write_instr_class_memory_stats();
     stat = &event_name_array[index];
     delta = stat->count_alloc(size, &delta_buffer);
 
-    if (delta != NULL)
-    {
-      pfs_thread->carry_memory_stat_delta(delta, index);
+    if (delta != nullptr) {
+      pfs_thread->carry_memory_stat_alloc_delta(delta, index);
     }
 
     /* Flag this memory as owned by the current thread. */
     *owner_thread = pfs_thread;
-  }
-  else
-  {
+  } else {
+    PFS_memory_shared_stat *event_name_array;
+    PFS_memory_shared_stat *stat;
+
     /* Aggregate to MEMORY_SUMMARY_GLOBAL_BY_EVENT_NAME */
     event_name_array = global_instr_class_memory_array;
     stat = &event_name_array[index];
-    (void)stat->count_alloc(size, &delta_buffer);
+    stat->count_global_alloc(size);
 
-    *owner_thread = NULL;
+    *owner_thread = nullptr;
   }
 
   return key;
 }
 
-PSI_memory_key
-pfs_memory_realloc_v1(PSI_memory_key key,
-                      size_t old_size,
-                      size_t new_size,
-                      PSI_thread **owner)
-{
+PSI_memory_key pfs_memory_realloc_vc(PSI_memory_key key, size_t old_size,
+                                     size_t new_size, PSI_thread **owner) {
   PFS_thread **owner_thread_hdl = reinterpret_cast<PFS_thread **>(owner);
-  DBUG_ASSERT(owner != NULL);
+  DBUG_ASSERT(owner != nullptr);
 
   PFS_memory_class *klass = find_memory_class(key);
-  if (klass == NULL)
-  {
-    *owner_thread_hdl = NULL;
+  if (klass == nullptr) {
+    *owner_thread_hdl = nullptr;
     return PSI_NOT_INSTRUMENTED;
   }
 
-  PFS_memory_stat *event_name_array;
-  PFS_memory_stat *stat;
   uint index = klass->m_event_name_index;
-  PFS_memory_stat_delta delta_buffer;
-  PFS_memory_stat_delta *delta;
 
-  if (flag_thread_instrumentation && !klass->is_global())
-  {
+  if (flag_thread_instrumentation && !klass->is_global()) {
     PFS_thread *pfs_thread = my_thread_get_THR_PFS();
-    if (likely(pfs_thread != NULL))
-    {
+    if (likely(pfs_thread != nullptr)) {
 #ifdef PFS_PARANOID
       PFS_thread *owner_thread = *owner_thread_hdl;
-      if (owner_thread != pfs_thread)
-      {
+      if (owner_thread != pfs_thread) {
         owner_thread = sanitize_thread(owner_thread);
-        if (owner_thread != NULL)
-        {
-          report_memory_accounting_error(
-            "pfs_memory_realloc_v1", pfs_thread, old_size, klass, owner_thread);
+        if (owner_thread != nullptr) {
+          report_memory_accounting_error("pfs_memory_realloc_vc", pfs_thread,
+                                         old_size, klass, owner_thread);
         }
       }
 #endif /* PFS_PARANOID */
+
+      PFS_memory_safe_stat *event_name_array;
+      PFS_memory_safe_stat *stat;
 
       /* Aggregate to MEMORY_SUMMARY_BY_THREAD_BY_EVENT_NAME */
       event_name_array = pfs_thread->write_instr_class_memory_stats();
       stat = &event_name_array[index];
 
-      if (flag_global_instrumentation && klass->m_enabled)
-      {
-        delta = stat->count_realloc(old_size, new_size, &delta_buffer);
+      PFS_memory_stat_free_delta free_delta_buffer;
+      PFS_memory_stat_free_delta *free_delta;
+
+      if (flag_global_instrumentation && klass->m_enabled) {
+        PFS_memory_stat_alloc_delta alloc_delta_buffer;
+        PFS_memory_stat_alloc_delta *alloc_delta;
+        alloc_delta = stat->count_alloc(new_size, &alloc_delta_buffer);
+        if (alloc_delta != nullptr) {
+          pfs_thread->carry_memory_stat_alloc_delta(alloc_delta, index);
+        }
         *owner_thread_hdl = pfs_thread;
-      }
-      else
-      {
-        delta = stat->count_free(old_size, &delta_buffer);
-        *owner_thread_hdl = NULL;
+      } else {
+        *owner_thread_hdl = nullptr;
         key = PSI_NOT_INSTRUMENTED;
       }
 
-      if (delta != NULL)
-      {
-        pfs_thread->carry_memory_stat_delta(delta, index);
+      free_delta = stat->count_free(old_size, &free_delta_buffer);
+      if (free_delta != nullptr) {
+        pfs_thread->carry_memory_stat_free_delta(free_delta, index);
       }
       return key;
     }
   }
 
+  PFS_memory_shared_stat *event_name_array;
+  PFS_memory_shared_stat *stat;
+
   /* Aggregate to MEMORY_SUMMARY_GLOBAL_BY_EVENT_NAME */
   event_name_array = global_instr_class_memory_array;
   stat = &event_name_array[index];
 
-  if (flag_global_instrumentation && klass->m_enabled)
-  {
-    (void)stat->count_realloc(old_size, new_size, &delta_buffer);
-  }
-  else
-  {
-    (void)stat->count_free(old_size, &delta_buffer);
+  if (flag_global_instrumentation && klass->m_enabled) {
+    stat->count_global_alloc(new_size);
+    stat->count_global_free(old_size);
+  } else {
+    stat->count_global_free(old_size);
     key = PSI_NOT_INSTRUMENTED;
   }
 
-  *owner_thread_hdl = NULL;
+  *owner_thread_hdl = nullptr;
   return key;
 }
 
-static PSI_memory_key
-pfs_memory_claim_v1(PSI_memory_key key, size_t size, PSI_thread **owner)
-{
+PSI_memory_key pfs_memory_claim_vc(PSI_memory_key key, size_t size,
+                                   PSI_thread **owner, bool claim) {
   PFS_thread **owner_thread = reinterpret_cast<PFS_thread **>(owner);
-  DBUG_ASSERT(owner_thread != NULL);
+  DBUG_ASSERT(owner_thread != nullptr);
 
   PFS_memory_class *klass = find_memory_class(key);
-  if (klass == NULL)
-  {
-    *owner_thread = NULL;
+  if (klass == nullptr) {
+    *owner_thread = nullptr;
     return PSI_NOT_INSTRUMENTED;
+  }
+
+  if (klass->is_global()) {
+    *owner_thread = nullptr;
+    return key;
   }
 
   /*
     Do not check klass->m_enabled.
     Do not check flag_global_instrumentation.
     If a memory alloc was instrumented,
-    the corresponding free must be instrumented.
+    the corresponding free (or un claim) must be instrumented.
   */
 
-  PFS_memory_stat *event_name_array;
-  PFS_memory_stat *stat;
   uint index = klass->m_event_name_index;
-  PFS_memory_stat_delta delta_buffer;
-  PFS_memory_stat_delta *delta;
 
-  if (flag_thread_instrumentation)
-  {
-    PFS_thread *old_thread = sanitize_thread(*owner_thread);
-    PFS_thread *new_thread = my_thread_get_THR_PFS();
-    if (old_thread != new_thread)
-    {
-      if (old_thread != NULL)
-      {
-        event_name_array = old_thread->write_instr_class_memory_stats();
-        stat = &event_name_array[index];
-        delta = stat->count_free(size, &delta_buffer);
+  PFS_thread *old_thread = sanitize_thread(*owner_thread);
+  PFS_thread *new_thread = my_thread_get_THR_PFS();
+  PFS_memory_safe_stat *event_name_local_array;
+  PFS_memory_safe_stat *local_stat;
+  PFS_memory_shared_stat *event_name_global_array;
+  PFS_memory_shared_stat *global_stat;
 
-        if (delta != NULL)
-        {
-          old_thread->carry_memory_stat_delta(delta, index);
-        }
+  /*
+    When thread X transfers some memory to thread Y:
+
+    - Thread X (the donor) calls un claim
+      - a FREE is counted against X
+      - a MALLOC is counted globally
+      - owner was X, set to null
+
+    - Thread Y (the recipient) calls claim
+      - a FREE is counted globally
+      - a MALLOC is counted against Y
+      - owner was null, set to Y
+  */
+
+  if (!claim) {
+    /*
+      Implementation of UN CLAIM for thread X.
+      Do not check for flags,
+      memory already counted for X is always un claimed.
+    */
+
+    if (old_thread != nullptr) {
+      /* 1: A FREE is counted against X. */
+      PFS_memory_stat_free_delta free_delta_buffer;
+      PFS_memory_stat_free_delta *free_delta;
+
+      event_name_local_array = old_thread->write_instr_class_memory_stats();
+      local_stat = &event_name_local_array[index];
+      free_delta = local_stat->count_free(size, &free_delta_buffer);
+
+      if (free_delta != NULL) {
+        old_thread->carry_memory_stat_free_delta(free_delta, index);
       }
 
-      if (new_thread != NULL)
-      {
-        event_name_array = new_thread->write_instr_class_memory_stats();
-        stat = &event_name_array[index];
-        delta = stat->count_alloc(size, &delta_buffer);
-
-        if (delta != NULL)
-        {
-          new_thread->carry_memory_stat_delta(delta, index);
-        }
+      /* 2: A MALLOC is counted globally. */
+      event_name_global_array = global_instr_class_memory_array;
+      if (event_name_global_array) {
+        global_stat = &event_name_global_array[index];
+        global_stat->count_global_alloc(size);
       }
 
-      *owner_thread = new_thread;
+      /* 3: verify owner was X. */
+      DBUG_ASSERT(old_thread == new_thread);
     }
 
-    return key;
+    *owner_thread = nullptr;
+  } else {
+    /*
+      Implementation of CLAIM for thread Y.
+      Here we check flags,
+      to assign memory to Y only if instrumentation is enabled.
+    */
+
+    /* verify owner was null. */
+    DBUG_ASSERT(old_thread == nullptr);
+
+    if (flag_global_instrumentation && klass->m_enabled &&
+        flag_thread_instrumentation && (new_thread != nullptr)) {
+      /* 1: A FREE is counted globally. */
+      event_name_global_array = global_instr_class_memory_array;
+      if (event_name_global_array) {
+        global_stat = &event_name_global_array[index];
+        global_stat->count_global_free(size);
+      }
+
+      /* 2: A MALLOC is counted against Y. */
+      PFS_memory_stat_alloc_delta alloc_delta_buffer;
+      PFS_memory_stat_alloc_delta *alloc_delta;
+      event_name_local_array = new_thread->write_instr_class_memory_stats();
+      local_stat = &event_name_local_array[index];
+      alloc_delta = local_stat->count_alloc(size, &alloc_delta_buffer);
+
+      if (alloc_delta != nullptr) {
+        new_thread->carry_memory_stat_alloc_delta(alloc_delta, index);
+      }
+
+      /* 3: set owner to Y. */
+      *owner_thread = new_thread;
+    }
   }
 
-  *owner_thread = NULL;
   return key;
 }
 
-void
-pfs_memory_free_v1(PSI_memory_key key,
-                   size_t size,
-                   PSI_thread *owner MY_ATTRIBUTE((unused)))
-{
+void pfs_memory_free_vc(PSI_memory_key key, size_t size,
+                        PSI_thread *owner MY_ATTRIBUTE((unused))) {
   PFS_memory_class *klass = find_memory_class(key);
-  if (klass == NULL)
-  {
+  if (klass == nullptr) {
     return;
   }
 
@@ -7496,101 +7774,82 @@ pfs_memory_free_v1(PSI_memory_key key,
     the corresponding free must be instrumented.
   */
 
-  PFS_memory_stat *event_name_array;
-  PFS_memory_stat *stat;
   uint index = klass->m_event_name_index;
-  PFS_memory_stat_delta delta_buffer;
-  PFS_memory_stat_delta *delta;
+  PFS_memory_stat_free_delta delta_buffer;
+  PFS_memory_stat_free_delta *delta;
 
-  if (flag_thread_instrumentation && !klass->is_global())
-  {
+  if (flag_thread_instrumentation && !klass->is_global()) {
     PFS_thread *pfs_thread = my_thread_get_THR_PFS();
-    if (likely(pfs_thread != NULL))
-    {
-#ifdef PFS_PARANOID
-      PFS_thread *owner_thread = reinterpret_cast<PFS_thread *>(owner);
+    PFS_thread *owner_thread = reinterpret_cast<PFS_thread *>(owner);
+    if (likely(pfs_thread != nullptr)) {
+      if (pfs_thread == owner_thread) {
+        /*
+          Do not check pfs_thread->m_enabled.
+          If a memory alloc was instrumented,
+          the corresponding free must be instrumented.
+        */
+        /* Aggregate to MEMORY_SUMMARY_BY_THREAD_BY_EVENT_NAME */
+        PFS_memory_safe_stat *event_name_array;
+        PFS_memory_safe_stat *stat;
+        event_name_array = pfs_thread->write_instr_class_memory_stats();
+        stat = &event_name_array[index];
+        delta = stat->count_free(size, &delta_buffer);
 
-      if (owner_thread != pfs_thread)
-      {
-        owner_thread = sanitize_thread(owner_thread);
-        if (owner_thread != NULL)
-        {
-          report_memory_accounting_error(
-            "pfs_memory_free_v1", pfs_thread, size, klass, owner_thread);
+        if (delta != nullptr) {
+          pfs_thread->carry_memory_stat_free_delta(delta, index);
         }
+        return;
       }
-#endif /* PFS_PARANOID */
-
-      /*
-        Do not check pfs_thread->m_enabled.
-        If a memory alloc was instrumented,
-        the corresponding free must be instrumented.
-      */
-      /* Aggregate to MEMORY_SUMMARY_BY_THREAD_BY_EVENT_NAME */
-      event_name_array = pfs_thread->write_instr_class_memory_stats();
-      stat = &event_name_array[index];
-      delta = stat->count_free(size, &delta_buffer);
-
-      if (delta != NULL)
-      {
-        pfs_thread->carry_memory_stat_delta(delta, index);
-      }
-      return;
+#ifdef PFS_PARANOID
+      report_memory_accounting_error("pfs_memory_free_vc", pfs_thread, size,
+                                     klass, owner_thread);
+#endif
+      /* Fall back to global aggregate below. */
     }
   }
 
+  PFS_memory_shared_stat *event_name_array;
+  PFS_memory_shared_stat *stat;
   /* Aggregate to MEMORY_SUMMARY_GLOBAL_BY_EVENT_NAME */
   event_name_array = global_instr_class_memory_array;
-  if (event_name_array)
-  {
+  if (event_name_array) {
     stat = &event_name_array[index];
     (void)stat->count_free(size, &delta_buffer);
   }
   return;
 }
 
-void
-pfs_unlock_table_v1(PSI_table *table)
-{
+void pfs_unlock_table_v1(PSI_table *table) {
   PFS_table *pfs_table = reinterpret_cast<PFS_table *>(table);
 
-  DBUG_ASSERT(pfs_table != NULL);
+  DBUG_ASSERT(pfs_table != nullptr);
 
   pfs_table->m_internal_lock = PFS_TL_NONE;
   return;
 }
 
-PSI_metadata_lock *
-pfs_create_metadata_lock_v1(void *identity,
-                            const MDL_key *mdl_key,
-                            opaque_mdl_type mdl_type,
-                            opaque_mdl_duration mdl_duration,
-                            opaque_mdl_status mdl_status,
-                            const char *src_file,
-                            uint src_line)
-{
-  if (!flag_global_instrumentation)
-  {
-    return NULL;
+PSI_metadata_lock *pfs_create_metadata_lock_v1(
+    void *identity, const MDL_key *mdl_key, opaque_mdl_type mdl_type,
+    opaque_mdl_duration mdl_duration, opaque_mdl_status mdl_status,
+    const char *src_file, uint src_line) {
+  if (!flag_global_instrumentation) {
+    return nullptr;
   }
 
-  if (!global_metadata_class.m_enabled)
-  {
-    return NULL;
+  if (!global_metadata_class.m_enabled) {
+    return nullptr;
   }
 
   PFS_thread *pfs_thread = my_thread_get_THR_PFS();
-  if (pfs_thread == NULL)
-  {
-    return NULL;
+  if (pfs_thread == nullptr) {
+    return nullptr;
   }
 
   PFS_metadata_lock *pfs;
-  pfs = create_metadata_lock(
-    identity, mdl_key, mdl_type, mdl_duration, mdl_status, src_file, src_line);
+  pfs = create_metadata_lock(identity, mdl_key, mdl_type, mdl_duration,
+                             mdl_status, src_file, src_line);
 
-  if (pfs != NULL)
-  {
+  if (pfs != nullptr) {
     pfs->m_owner_thread_id = pfs_thread->m_thread_internal_id;
     pfs->m_owner_event_id = pfs_thread->m_event_id;
   }
@@ -7598,70 +7857,55 @@ pfs_create_metadata_lock_v1(void *identity,
   return reinterpret_cast<PSI_metadata_lock *>(pfs);
 }
 
-void
-pfs_set_metadata_lock_status_v1(PSI_metadata_lock *lock,
-                                opaque_mdl_status mdl_status)
-{
+void pfs_set_metadata_lock_status_v1(PSI_metadata_lock *lock,
+                                     opaque_mdl_status mdl_status) {
   PFS_metadata_lock *pfs = reinterpret_cast<PFS_metadata_lock *>(lock);
-  DBUG_ASSERT(pfs != NULL);
+  DBUG_ASSERT(pfs != nullptr);
   pfs->m_mdl_status = mdl_status;
 }
 
-void
-pfs_destroy_metadata_lock_v1(PSI_metadata_lock *lock)
-{
+void pfs_destroy_metadata_lock_v1(PSI_metadata_lock *lock) {
   PFS_metadata_lock *pfs = reinterpret_cast<PFS_metadata_lock *>(lock);
-  DBUG_ASSERT(pfs != NULL);
+  DBUG_ASSERT(pfs != nullptr);
   destroy_metadata_lock(pfs);
 }
 
-PSI_metadata_locker *
-pfs_start_metadata_wait_v1(PSI_metadata_locker_state *state,
-                           PSI_metadata_lock *lock,
-                           const char *src_file,
-                           uint src_line)
-{
+PSI_metadata_locker *pfs_start_metadata_wait_v1(
+    PSI_metadata_locker_state *state, PSI_metadata_lock *lock,
+    const char *src_file, uint src_line) {
   PFS_metadata_lock *pfs_lock = reinterpret_cast<PFS_metadata_lock *>(lock);
-  DBUG_ASSERT(state != NULL);
-  DBUG_ASSERT(pfs_lock != NULL);
+  DBUG_ASSERT(state != nullptr);
+  DBUG_ASSERT(pfs_lock != nullptr);
 
-  if (!pfs_lock->m_enabled)
-  {
-    return NULL;
+  if (!pfs_lock->m_enabled) {
+    return nullptr;
   }
 
   uint flags;
   ulonglong timer_start = 0;
 
-  if (flag_thread_instrumentation)
-  {
+  if (flag_thread_instrumentation) {
     PFS_thread *pfs_thread = my_thread_get_THR_PFS();
-    if (unlikely(pfs_thread == NULL))
-    {
-      return NULL;
+    if (unlikely(pfs_thread == nullptr)) {
+      return nullptr;
     }
-    if (!pfs_thread->m_enabled)
-    {
-      return NULL;
+    if (!pfs_thread->m_enabled) {
+      return nullptr;
     }
     state->m_thread = reinterpret_cast<PSI_thread *>(pfs_thread);
     flags = STATE_FLAG_THREAD;
 
-    if (pfs_lock->m_timed)
-    {
-      timer_start =
-        get_timer_raw_value_and_function(wait_timer, &state->m_timer);
+    if (pfs_lock->m_timed) {
+      timer_start = get_wait_timer();
       state->m_timer_start = timer_start;
       flags |= STATE_FLAG_TIMED;
     }
 
-    if (flag_events_waits_current)
-    {
+    if (flag_events_waits_current) {
       if (unlikely(pfs_thread->m_events_waits_current >=
-                   &pfs_thread->m_events_waits_stack[WAIT_STACK_SIZE]))
-      {
+                   &pfs_thread->m_events_waits_stack[WAIT_STACK_SIZE])) {
         locker_lost++;
-        return NULL;
+        return nullptr;
       }
       PFS_events_waits *wait = pfs_thread->m_events_waits_current;
       state->m_wait = wait;
@@ -7688,25 +7932,19 @@ pfs_start_metadata_wait_v1(PSI_metadata_locker_state *state,
 
       pfs_thread->m_events_waits_current++;
     }
-  }
-  else
-  {
-    if (pfs_lock->m_timed)
-    {
-      timer_start =
-        get_timer_raw_value_and_function(wait_timer, &state->m_timer);
+  } else {
+    if (pfs_lock->m_timed) {
+      timer_start = get_wait_timer();
       state->m_timer_start = timer_start;
       flags = STATE_FLAG_TIMED;
-      state->m_thread = NULL;
-    }
-    else
-    {
+      state->m_thread = nullptr;
+    } else {
       /*
         Complete shortcut.
       */
       /* Aggregate to EVENTS_WAITS_SUMMARY_GLOBAL_BY_EVENT_NAME (counted) */
       global_metadata_stat.aggregate_counted();
-      return NULL;
+      return nullptr;
     }
   }
 
@@ -7715,12 +7953,10 @@ pfs_start_metadata_wait_v1(PSI_metadata_locker_state *state,
   return reinterpret_cast<PSI_metadata_locker *>(state);
 }
 
-void
-pfs_end_metadata_wait_v1(PSI_metadata_locker *locker, int)
-{
+void pfs_end_metadata_wait_v1(PSI_metadata_locker *locker, int) {
   PSI_metadata_locker_state *state =
-    reinterpret_cast<PSI_metadata_locker_state *>(locker);
-  DBUG_ASSERT(state != NULL);
+      reinterpret_cast<PSI_metadata_locker_state *>(locker);
+  DBUG_ASSERT(state != nullptr);
 
   ulonglong timer_end = 0;
   ulonglong wait_time = 0;
@@ -7729,137 +7965,111 @@ pfs_end_metadata_wait_v1(PSI_metadata_locker *locker, int)
 
   uint flags = state->m_flags;
 
-  if (flags & STATE_FLAG_TIMED)
-  {
-    timer_end = state->m_timer();
+  if (flags & STATE_FLAG_TIMED) {
+    timer_end = get_wait_timer();
     wait_time = timer_end - state->m_timer_start;
   }
 
-  if (flags & STATE_FLAG_THREAD)
-  {
+  if (flags & STATE_FLAG_THREAD) {
     PFS_single_stat *event_name_array;
     event_name_array = thread->write_instr_class_waits_stats();
 
-    if (flags & STATE_FLAG_TIMED)
-    {
+    if (flags & STATE_FLAG_TIMED) {
       /* Aggregate to EVENTS_WAITS_SUMMARY_BY_THREAD_BY_EVENT_NAME (timed) */
       event_name_array[GLOBAL_METADATA_EVENT_INDEX].aggregate_value(wait_time);
-    }
-    else
-    {
+    } else {
       /* Aggregate to EVENTS_WAITS_SUMMARY_BY_THREAD_BY_EVENT_NAME (counted) */
       event_name_array[GLOBAL_METADATA_EVENT_INDEX].aggregate_counted();
     }
 
-    if (flags & STATE_FLAG_EVENT)
-    {
+    if (flags & STATE_FLAG_EVENT) {
       PFS_events_waits *wait =
-        reinterpret_cast<PFS_events_waits *>(state->m_wait);
-      DBUG_ASSERT(wait != NULL);
+          reinterpret_cast<PFS_events_waits *>(state->m_wait);
+      DBUG_ASSERT(wait != nullptr);
 
       wait->m_timer_end = timer_end;
       wait->m_end_event_id = thread->m_event_id;
-      if (thread->m_flag_events_waits_history)
-      {
+      if (thread->m_flag_events_waits_history) {
         insert_events_waits_history(thread, wait);
       }
-      if (thread->m_flag_events_waits_history_long)
-      {
+      if (thread->m_flag_events_waits_history_long) {
         insert_events_waits_history_long(wait);
       }
       thread->m_events_waits_current--;
 
       DBUG_ASSERT(wait == thread->m_events_waits_current);
     }
-  }
-  else
-  {
-    if (flags & STATE_FLAG_TIMED)
-    {
+  } else {
+    if (flags & STATE_FLAG_TIMED) {
       /* Aggregate to EVENTS_WAITS_SUMMARY_GLOBAL_BY_EVENT_NAME (timed) */
       global_metadata_stat.aggregate_value(wait_time);
-    }
-    else
-    {
+    } else {
       /* Aggregate to EVENTS_WAITS_SUMMARY_GLOBAL_BY_EVENT_NAME (counted) */
       global_metadata_stat.aggregate_counted();
     }
   }
 }
 
-void
-pfs_log_error_v1(uint error_num, PSI_error_operation error_operation)
-{
+void pfs_log_error_v1(uint error_num, PSI_error_operation error_operation) {
   PFS_error_stat *stat;
   uint error_stat_index;
 
   DBUG_ASSERT(error_num != 0);
 
-  if (!flag_global_instrumentation)
-  {
+  if (!flag_global_instrumentation) {
     return;
   }
 
-  if (!global_error_class.m_enabled)
-  {
+  if (!global_error_class.m_enabled) {
     return;
   }
 
-  if (!max_server_errors)
-  {
+  if (!max_global_server_errors) {
     return;
-  }
-
-  if (flag_thread_instrumentation)
-  {
-    PFS_thread *pfs_thread = my_thread_get_THR_PFS();
-    if (unlikely(pfs_thread == NULL))
-    {
-      return;
-    }
-    if (!pfs_thread->m_enabled)
-    {
-      return;
-    }
-
-    /* Aggregate to EVENTS_ERRORS_SUMMARY_BY_THREAD_BY_ERROR */
-    stat = &pfs_thread->write_instr_class_errors_stats()[GLOBAL_ERROR_INDEX];
-  }
-  else
-  {
-    /* Aggregate to EVENTS_ERRORS_SUMMARY_GLOBAL_BY_ERROR */
-    stat = &global_error_stat;
   }
 
   /* Find the index of this particular error in array of error stats. */
   error_stat_index = lookup_error_stat_index(error_num);
 
   /*
-     If this error goes beyond max_server_errors, OR
-     If it's (RE)SIGNALED error with custom error number
-     collect its stats at NULL row.
-   */
-  if (error_stat_index >= max_server_errors)
-  {
+    If this error goes beyond max_global_server_errors, OR
+    If it's (RE)SIGNALED error with custom error number
+    collect its stats at NULL row.
+  */
+  if (error_stat_index >= max_global_server_errors) {
     error_stat_index = 0;
+  }
+
+  if (flag_thread_instrumentation &&
+      (error_stat_index < max_session_server_errors)) {
+    PFS_thread *pfs_thread = my_thread_get_THR_PFS();
+    if (unlikely(pfs_thread == nullptr)) {
+      return;
+    }
+    if (!pfs_thread->m_enabled) {
+      return;
+    }
+
+    /* Aggregate to EVENTS_ERRORS_SUMMARY_BY_THREAD_BY_ERROR */
+    stat = &pfs_thread->write_instr_class_errors_stats()[GLOBAL_ERROR_INDEX];
+  } else {
+    /* Aggregate to EVENTS_ERRORS_SUMMARY_GLOBAL_BY_ERROR */
+    stat = &global_error_stat;
   }
 
   /* Aggregate to EVENTS_ERRORS_SUMMARY_..._BY_ERROR (counted) */
   stat->aggregate_count(error_stat_index, error_operation);
 }
 
-void
-pfs_register_data_lock_v1(PSI_engine_data_lock_inspector *inspector)
-{
+void pfs_register_data_lock_v1(PSI_engine_data_lock_inspector *inspector) {
   DBUG_ASSERT(g_data_lock_inspector_count < COUNT_DATA_LOCK_ENGINES);
 
   g_data_lock_inspector[g_data_lock_inspector_count] = inspector;
   g_data_lock_inspector_count++;
 }
 
-void
-pfs_unregister_data_lock_v1(PSI_engine_data_lock_inspector * /* inspector */)
-{
+void pfs_unregister_data_lock_v1(
+    PSI_engine_data_lock_inspector * /* inspector */) {
   /*
     This code is not used yet, because:
     - there is only one engine exposing data locks (innodb)
@@ -7868,391 +8078,775 @@ pfs_unregister_data_lock_v1(PSI_engine_data_lock_inspector * /* inspector */)
   DBUG_ASSERT(false);
 
 #ifdef LATER
-  for (unsigned int i = 0; i < COUNT_DATA_LOCK_ENGINES; i++)
-  {
-    if (g_data_lock_inspector[i] == inspector)
-    {
-      g_data_lock_inspector[i] = NULL;
+  for (unsigned int i = 0; i < COUNT_DATA_LOCK_ENGINES; i++) {
+    if (g_data_lock_inspector[i] == inspector) {
+      g_data_lock_inspector[i] = nullptr;
     }
   }
 #endif
 }
 
 /**
-  Implementation of the instrumentation interface.
-  @sa PSI_thread_service_v1
+  Implementation of the thread instrumentation interface.
+  @sa PSI_v1::unload_plugin.
 */
-PSI_thread_service_v1 pfs_thread_service_v1 = {pfs_register_thread_v1,
-                                               pfs_spawn_thread_v1,
-                                               pfs_new_thread_v1,
-                                               pfs_set_thread_id_v1,
-                                               pfs_set_thread_THD_v1,
-                                               pfs_set_thread_os_id_v1,
-                                               pfs_get_thread_v1,
-                                               pfs_set_thread_user_v1,
-                                               pfs_set_thread_account_v1,
-                                               pfs_set_thread_db_v1,
-                                               pfs_set_thread_command_v1,
-                                               pfs_set_connection_type_v1,
-                                               pfs_set_thread_start_time_v1,
-                                               pfs_set_thread_state_v1,
-                                               pfs_set_thread_info_v1,
-                                               pfs_set_thread_v1,
-                                               pfs_delete_current_thread_v1,
-                                               pfs_delete_thread_v1,
-                                               pfs_set_thread_connect_attrs_v1,
-                                               pfs_get_thread_event_id_v1};
+void pfs_unload_plugin_v1(const char *plugin_name MY_ATTRIBUTE((unused))) {
+  /*
+    A plugin or component is being unloaded. Events that originated from the
+    plugin contain string pointers set by the __FILE__ macro. These source file
+    strings are used in the SOURCE column in some tables, and will become
+    invalid when the plugin memory is freed.
+    For safety, all file string pointers in all events will be set to NULL.
+  */
 
-PSI_mutex_service_v1 pfs_mutex_service_v1 = {pfs_register_mutex_v1,
-                                             pfs_init_mutex_v1,
-                                             pfs_destroy_mutex_v1,
-                                             pfs_start_mutex_wait_v1,
-                                             pfs_end_mutex_wait_v1,
-                                             pfs_unlock_mutex_v1};
+  /* Temporarily disable the SOURCE column in all tables. */
+  pfs_unload_plugin_ref_count++;
 
-PSI_rwlock_service_v1 pfs_rwlock_service_v1 = {
-  pfs_register_rwlock_v1,
-  pfs_init_rwlock_v1,
-  pfs_destroy_rwlock_v1,
-  pfs_start_rwlock_rdwait_v1,
-  pfs_end_rwlock_rdwait_v1,
-  pfs_start_rwlock_wrwait_v1,
-  pfs_end_rwlock_wrwait_v1,
-  pfs_unlock_rwlock_v1,
-};
+  /* Find the relevant events, set source file strings to NULL. */
+  reset_source_file_pointers();
 
-PSI_cond_service_v1 pfs_cond_service_v1 = {pfs_register_cond_v1,
-                                           pfs_init_cond_v1,
-                                           pfs_destroy_cond_v1,
-                                           pfs_signal_cond_v1,
-                                           pfs_broadcast_cond_v1,
-                                           pfs_start_cond_wait_v1,
-                                           pfs_end_cond_wait_v1};
+  /* Re-enable the SOURCE column in all tables. */
+  pfs_unload_plugin_ref_count--;
+}
 
-PSI_file_service_v1 pfs_file_service_v1 = {
-  pfs_register_file_v1,
-  pfs_create_file_v1,
-  pfs_get_thread_file_name_locker_v1,
-  pfs_get_thread_file_stream_locker_v1,
-  pfs_get_thread_file_descriptor_locker_v1,
-  pfs_start_file_open_wait_v1,
-  pfs_end_file_open_wait_v1,
-  pfs_end_file_open_wait_and_bind_to_descriptor_v1,
-  pfs_end_temp_file_open_wait_and_bind_to_descriptor_v1,
-  pfs_start_file_wait_v1,
-  pfs_end_file_wait_v1,
-  pfs_start_file_close_wait_v1,
-  pfs_end_file_close_wait_v1};
+/**
+  Implementation of the instrumentation interface.
+  @sa PSI_system_service_v1
+*/
+PSI_system_service_v1 pfs_system_service_v1 = {
+    /* Old interface, for plugins. */
+    pfs_unload_plugin_v1};
 
-PSI_socket_service_v1 pfs_socket_service_v1 = {pfs_register_socket_v1,
-                                               pfs_init_socket_v1,
-                                               pfs_destroy_socket_v1,
-                                               pfs_start_socket_wait_v1,
-                                               pfs_end_socket_wait_v1,
-                                               pfs_set_socket_state_v1,
-                                               pfs_set_socket_info_v1,
-                                               pfs_set_socket_thread_owner_v1};
+SERVICE_TYPE(psi_system_v1)
+SERVICE_IMPLEMENTATION(performance_schema, psi_system_v1) = {
+    /* New interface, for components. */
+    pfs_unload_plugin_v1};
 
-PSI_table_service_v1 pfs_table_service_v1 = {pfs_get_table_share_v1,
-                                             pfs_release_table_share_v1,
-                                             pfs_drop_table_share_v1,
-                                             pfs_open_table_v1,
-                                             pfs_unbind_table_v1,
-                                             pfs_rebind_table_v1,
-                                             pfs_close_table_v1,
-                                             pfs_start_table_io_wait_v1,
-                                             pfs_end_table_io_wait_v1,
-                                             pfs_start_table_lock_wait_v1,
-                                             pfs_end_table_lock_wait_v1,
-                                             pfs_unlock_table_v1};
+/**
+  Implementation of the instrumentation interface.
+  @sa PSI_thread_service_v4
+*/
+PSI_thread_service_v4 pfs_thread_service_v4 = {
+    /* Old interface, for plugins. */
+    pfs_register_thread_vc,
+    pfs_spawn_thread_vc,
+    pfs_new_thread_vc,
+    pfs_set_thread_id_vc,
+    pfs_get_current_thread_internal_id_vc,
+    pfs_get_thread_internal_id_vc,
+    pfs_get_thread_by_id_vc,
+    pfs_set_thread_THD_vc,
+    pfs_set_thread_os_id_vc,
+    pfs_get_thread_vc,
+    pfs_set_thread_user_vc,
+    pfs_set_thread_account_vc,
+    pfs_set_thread_db_vc,
+    pfs_set_thread_command_vc,
+    pfs_set_connection_type_vc,
+    pfs_set_thread_start_time_vc,
+    pfs_set_thread_info_vc,
+    pfs_set_thread_resource_group_vc,
+    pfs_set_thread_resource_group_by_id_vc,
+    pfs_set_thread_vc,
+    pfs_set_thread_peer_port_vc,
+    pfs_aggregate_thread_status_vc,
+    pfs_delete_current_thread_vc,
+    pfs_delete_thread_vc,
+    pfs_set_thread_connect_attrs_vc,
+    pfs_get_current_thread_event_id_vc,
+    pfs_get_thread_event_id_vc,
+    pfs_get_thread_system_attrs_vc,
+    pfs_get_thread_system_attrs_by_id_vc,
+    pfs_register_notification_vc,
+    pfs_unregister_notification_vc,
+    pfs_notify_session_connect_vc,
+    pfs_notify_session_disconnect_vc,
+    pfs_notify_session_change_user_vc};
 
-PSI_mdl_service_v1 pfs_mdl_service_v1 = {pfs_create_metadata_lock_v1,
-                                         pfs_set_metadata_lock_status_v1,
-                                         pfs_destroy_metadata_lock_v1,
-                                         pfs_start_metadata_wait_v1,
-                                         pfs_end_metadata_wait_v1};
+SERVICE_TYPE(psi_thread_v4)
+SERVICE_IMPLEMENTATION(performance_schema, psi_thread_v4) = {
+    /* New interface, for components. */
+    pfs_register_thread_vc,
+    pfs_spawn_thread_vc,
+    pfs_new_thread_vc,
+    pfs_set_thread_id_vc,
+    pfs_get_current_thread_internal_id_vc,
+    pfs_get_thread_internal_id_vc,
+    pfs_get_thread_by_id_vc,
+    pfs_set_thread_THD_vc,
+    pfs_set_thread_os_id_vc,
+    pfs_get_thread_vc,
+    pfs_set_thread_user_vc,
+    pfs_set_thread_account_vc,
+    pfs_set_thread_db_vc,
+    pfs_set_thread_command_vc,
+    pfs_set_connection_type_vc,
+    pfs_set_thread_start_time_vc,
+    pfs_set_thread_info_vc,
+    pfs_set_thread_vc,
+    pfs_set_thread_peer_port_vc,
+    pfs_aggregate_thread_status_vc,
+    pfs_delete_current_thread_vc,
+    pfs_delete_thread_vc,
+    pfs_set_thread_connect_attrs_vc,
+    pfs_get_current_thread_event_id_vc,
+    pfs_get_thread_event_id_vc,
+    pfs_get_thread_system_attrs_vc,
+    pfs_get_thread_system_attrs_by_id_vc,
+    pfs_register_notification_vc,
+    pfs_unregister_notification_vc,
+    pfs_notify_session_connect_vc,
+    pfs_notify_session_disconnect_vc,
+    pfs_notify_session_change_user_vc};
 
-PSI_idle_service_v1 pfs_idle_service_v1 = {pfs_start_idle_wait_v1,
-                                           pfs_end_idle_wait_v1};
+PSI_mutex_service_v1 pfs_mutex_service_v1 = {
+    /* Old interface, for plugins. */
+    pfs_register_mutex_v1,   pfs_init_mutex_v1,     pfs_destroy_mutex_v1,
+    pfs_start_mutex_wait_v1, pfs_end_mutex_wait_v1, pfs_unlock_mutex_v1};
 
-PSI_stage_service_v1 pfs_stage_service_v1 = {pfs_register_stage_v1,
-                                             pfs_start_stage_v1,
-                                             pfs_get_current_stage_progress_v1,
-                                             pfs_end_stage_v1};
+SERVICE_TYPE(psi_mutex_v1)
+SERVICE_IMPLEMENTATION(performance_schema, psi_mutex_v1) = {
+    /* New interface, for components. */
+    pfs_register_mutex_v1,   pfs_init_mutex_v1,     pfs_destroy_mutex_v1,
+    pfs_start_mutex_wait_v1, pfs_end_mutex_wait_v1, pfs_unlock_mutex_v1};
 
-PSI_statement_service_v1 pfs_statement_service_v1 = {
-  pfs_register_statement_v1,
-  pfs_get_thread_statement_locker_v1,
-  pfs_refine_statement_v1,
-  pfs_start_statement_v1,
-  pfs_set_statement_text_v1,
-  pfs_set_statement_lock_time_v1,
-  pfs_set_statement_rows_sent_v1,
-  pfs_set_statement_rows_examined_v1,
-  pfs_inc_statement_created_tmp_disk_tables_v1,
-  pfs_inc_statement_created_tmp_tables_v1,
-  pfs_inc_statement_select_full_join_v1,
-  pfs_inc_statement_select_full_range_join_v1,
-  pfs_inc_statement_select_range_v1,
-  pfs_inc_statement_select_range_check_v1,
-  pfs_inc_statement_select_scan_v1,
-  pfs_inc_statement_sort_merge_passes_v1,
-  pfs_inc_statement_sort_range_v1,
-  pfs_inc_statement_sort_rows_v1,
-  pfs_inc_statement_sort_scan_v1,
-  pfs_set_statement_no_index_used_v1,
-  pfs_set_statement_no_good_index_used_v1,
-  pfs_end_statement_v1,
-  pfs_create_prepared_stmt_v1,
-  pfs_destroy_prepared_stmt_v1,
-  pfs_reprepare_prepared_stmt_v1,
-  pfs_execute_prepared_stmt_v1,
-  pfs_digest_start_v1,
-  pfs_digest_end_v1,
-  pfs_get_sp_share_v1,
-  pfs_release_sp_share_v1,
-  pfs_start_sp_v1,
-  pfs_end_sp_v1,
-  pfs_drop_sp_v1};
+PSI_rwlock_service_v2 pfs_rwlock_service_v2 = {
+    /* Old interface, for plugins. */
+    pfs_register_rwlock_v2,   pfs_init_rwlock_v2,
+    pfs_destroy_rwlock_v2,    pfs_start_rwlock_rdwait_v2,
+    pfs_end_rwlock_rdwait_v2, pfs_start_rwlock_wrwait_v2,
+    pfs_end_rwlock_wrwait_v2, pfs_unlock_rwlock_v2};
+
+SERVICE_TYPE(psi_rwlock_v2)
+SERVICE_IMPLEMENTATION(performance_schema, psi_rwlock_v2) = {
+    /* New interface, for components. */
+    pfs_register_rwlock_v2,   pfs_init_rwlock_v2,
+    pfs_destroy_rwlock_v2,    pfs_start_rwlock_rdwait_v2,
+    pfs_end_rwlock_rdwait_v2, pfs_start_rwlock_wrwait_v2,
+    pfs_end_rwlock_wrwait_v2, pfs_unlock_rwlock_v2};
+
+PSI_cond_service_v1 pfs_cond_service_v1 = {
+    /* Old interface, for plugins. */
+    pfs_register_cond_v1, pfs_init_cond_v1,      pfs_destroy_cond_v1,
+    pfs_signal_cond_v1,   pfs_broadcast_cond_v1, pfs_start_cond_wait_v1,
+    pfs_end_cond_wait_v1};
+
+SERVICE_TYPE(psi_cond_v1)
+SERVICE_IMPLEMENTATION(performance_schema, psi_cond_v1) = {
+    /* New interface, for components. */
+    pfs_register_cond_v1, pfs_init_cond_v1,      pfs_destroy_cond_v1,
+    pfs_signal_cond_v1,   pfs_broadcast_cond_v1, pfs_start_cond_wait_v1,
+    pfs_end_cond_wait_v1};
+
+PSI_file_service_v2 pfs_file_service_v2 = {
+    /* Old interface, for plugins. */
+    pfs_register_file_vc,
+    pfs_create_file_vc,
+    pfs_get_thread_file_name_locker_vc,
+    pfs_get_thread_file_stream_locker_vc,
+    pfs_get_thread_file_descriptor_locker_vc,
+    pfs_start_file_open_wait_vc,
+    pfs_end_file_open_wait_vc,
+    pfs_end_file_open_wait_and_bind_to_descriptor_vc,
+    pfs_end_temp_file_open_wait_and_bind_to_descriptor_vc,
+    pfs_start_file_wait_vc,
+    pfs_end_file_wait_vc,
+    pfs_start_file_close_wait_vc,
+    pfs_end_file_close_wait_vc,
+    pfs_start_file_rename_wait_vc,
+    pfs_end_file_rename_wait_vc};
+
+SERVICE_TYPE(psi_file_v2)
+SERVICE_IMPLEMENTATION(performance_schema, psi_file_v2) = {
+    /* New interface, for components. */
+    pfs_register_file_vc,
+    pfs_create_file_vc,
+    pfs_get_thread_file_name_locker_vc,
+    pfs_get_thread_file_stream_locker_vc,
+    pfs_get_thread_file_descriptor_locker_vc,
+    pfs_start_file_open_wait_vc,
+    pfs_end_file_open_wait_vc,
+    pfs_end_file_open_wait_and_bind_to_descriptor_vc,
+    pfs_end_temp_file_open_wait_and_bind_to_descriptor_vc,
+    pfs_start_file_wait_vc,
+    pfs_end_file_wait_vc,
+    pfs_start_file_close_wait_vc,
+    pfs_end_file_close_wait_vc,
+    pfs_start_file_rename_wait_vc,
+    pfs_end_file_rename_wait_vc};
+
+PSI_socket_service_v1 pfs_socket_service_v1 = {
+    /* Old interface, for plugins. */
+    pfs_register_socket_v1, pfs_init_socket_v1,
+    pfs_destroy_socket_v1,  pfs_start_socket_wait_v1,
+    pfs_end_socket_wait_v1, pfs_set_socket_state_v1,
+    pfs_set_socket_info_v1, pfs_set_socket_thread_owner_v1};
+
+SERVICE_TYPE(psi_socket_v1)
+SERVICE_IMPLEMENTATION(performance_schema, psi_socket_v1) = {
+    /* New interface, for components. */
+    pfs_register_socket_v1, pfs_init_socket_v1,
+    pfs_destroy_socket_v1,  pfs_start_socket_wait_v1,
+    pfs_end_socket_wait_v1, pfs_set_socket_state_v1,
+    pfs_set_socket_info_v1, pfs_set_socket_thread_owner_v1};
+
+PSI_table_service_v1 pfs_table_service_v1 = {
+    /* Old interface, for plugins. */
+    pfs_get_table_share_v1,     pfs_release_table_share_v1,
+    pfs_drop_table_share_v1,    pfs_open_table_v1,
+    pfs_unbind_table_v1,        pfs_rebind_table_v1,
+    pfs_close_table_v1,         pfs_start_table_io_wait_v1,
+    pfs_end_table_io_wait_v1,   pfs_start_table_lock_wait_v1,
+    pfs_end_table_lock_wait_v1, pfs_unlock_table_v1};
+
+SERVICE_TYPE(psi_table_v1)
+SERVICE_IMPLEMENTATION(performance_schema, psi_table_v1) = {
+    /* New interface, for components. */
+    pfs_get_table_share_v1,     pfs_release_table_share_v1,
+    pfs_drop_table_share_v1,    pfs_open_table_v1,
+    pfs_unbind_table_v1,        pfs_rebind_table_v1,
+    pfs_close_table_v1,         pfs_start_table_io_wait_v1,
+    pfs_end_table_io_wait_v1,   pfs_start_table_lock_wait_v1,
+    pfs_end_table_lock_wait_v1, pfs_unlock_table_v1};
+
+PSI_mdl_service_v1 pfs_mdl_service_v1 = {
+    /* Old interface, for plugins. */
+    pfs_create_metadata_lock_v1, pfs_set_metadata_lock_status_v1,
+    pfs_destroy_metadata_lock_v1, pfs_start_metadata_wait_v1,
+    pfs_end_metadata_wait_v1};
+
+SERVICE_TYPE(psi_mdl_v1)
+SERVICE_IMPLEMENTATION(performance_schema, psi_mdl_v1) = {
+    /* New interface, for components. */
+    pfs_create_metadata_lock_v1, pfs_set_metadata_lock_status_v1,
+    pfs_destroy_metadata_lock_v1, pfs_start_metadata_wait_v1,
+    pfs_end_metadata_wait_v1};
+
+PSI_idle_service_v1 pfs_idle_service_v1 = {
+    /* Old interface, for plugins. */
+    pfs_start_idle_wait_v1, pfs_end_idle_wait_v1};
+
+SERVICE_TYPE(psi_idle_v1)
+SERVICE_IMPLEMENTATION(performance_schema, psi_idle_v1) = {
+    /* New interface, for components. */
+    pfs_start_idle_wait_v1, pfs_end_idle_wait_v1};
+
+PSI_stage_service_v1 pfs_stage_service_v1 = {
+    /* Old interface, for plugins. */
+    pfs_register_stage_v1, pfs_start_stage_v1,
+    pfs_get_current_stage_progress_v1, pfs_end_stage_v1};
+
+SERVICE_TYPE(psi_stage_v1)
+SERVICE_IMPLEMENTATION(performance_schema, psi_stage_v1) = {
+    /* New interface, for components. */
+    pfs_register_stage_v1, pfs_start_stage_v1,
+    pfs_get_current_stage_progress_v1, pfs_end_stage_v1};
+
+PSI_statement_service_v2 pfs_statement_service_v2 = {
+    /* Old interface, for plugins. */
+    pfs_register_statement_v2,
+    pfs_get_thread_statement_locker_v2,
+    pfs_refine_statement_v2,
+    pfs_start_statement_v2,
+    pfs_set_statement_text_v2,
+    pfs_set_statement_query_id_v2,
+    pfs_set_statement_lock_time_v2,
+    pfs_set_statement_rows_sent_v2,
+    pfs_set_statement_rows_examined_v2,
+    pfs_inc_statement_created_tmp_disk_tables_v2,
+    pfs_inc_statement_created_tmp_tables_v2,
+    pfs_inc_statement_select_full_join_v2,
+    pfs_inc_statement_select_full_range_join_v2,
+    pfs_inc_statement_select_range_v2,
+    pfs_inc_statement_select_range_check_v2,
+    pfs_inc_statement_select_scan_v2,
+    pfs_inc_statement_sort_merge_passes_v2,
+    pfs_inc_statement_sort_range_v2,
+    pfs_inc_statement_sort_rows_v2,
+    pfs_inc_statement_sort_scan_v2,
+    pfs_set_statement_no_index_used_v2,
+    pfs_set_statement_no_good_index_used_v2,
+    pfs_end_statement_v2,
+    pfs_create_prepared_stmt_v2,
+    pfs_destroy_prepared_stmt_v2,
+    pfs_reprepare_prepared_stmt_v2,
+    pfs_execute_prepared_stmt_v2,
+    pfs_set_prepared_stmt_text_v2,
+    pfs_digest_start_v2,
+    pfs_digest_end_v2,
+    pfs_get_sp_share_v2,
+    pfs_release_sp_share_v2,
+    pfs_start_sp_v2,
+    pfs_end_sp_v2,
+    pfs_drop_sp_v2};
+
+SERVICE_TYPE(psi_statement_v1)
+SERVICE_IMPLEMENTATION(performance_schema, psi_statement_v1) = {
+    /* New interface, for components. */
+    pfs_register_statement_v2,
+    pfs_get_thread_statement_locker_v2,
+    pfs_refine_statement_v2,
+    pfs_start_statement_v2,
+    pfs_set_statement_text_v2,
+    pfs_set_statement_lock_time_v2,
+    pfs_set_statement_rows_sent_v2,
+    pfs_set_statement_rows_examined_v2,
+    pfs_inc_statement_created_tmp_disk_tables_v2,
+    pfs_inc_statement_created_tmp_tables_v2,
+    pfs_inc_statement_select_full_join_v2,
+    pfs_inc_statement_select_full_range_join_v2,
+    pfs_inc_statement_select_range_v2,
+    pfs_inc_statement_select_range_check_v2,
+    pfs_inc_statement_select_scan_v2,
+    pfs_inc_statement_sort_merge_passes_v2,
+    pfs_inc_statement_sort_range_v2,
+    pfs_inc_statement_sort_rows_v2,
+    pfs_inc_statement_sort_scan_v2,
+    pfs_set_statement_no_index_used_v2,
+    pfs_set_statement_no_good_index_used_v2,
+    pfs_end_statement_v2,
+    pfs_create_prepared_stmt_v2,
+    pfs_destroy_prepared_stmt_v2,
+    pfs_reprepare_prepared_stmt_v2,
+    pfs_execute_prepared_stmt_v2,
+    pfs_set_prepared_stmt_text_v2,
+    pfs_digest_start_v2,
+    pfs_digest_end_v2,
+    pfs_get_sp_share_v2,
+    pfs_release_sp_share_v2,
+    pfs_start_sp_v2,
+    pfs_end_sp_v2,
+    pfs_drop_sp_v2};
+
+SERVICE_TYPE(psi_statement_v2)
+SERVICE_IMPLEMENTATION(performance_schema, psi_statement_v2) = {
+    /* New interface, for components. */
+    pfs_register_statement_v2,
+    pfs_get_thread_statement_locker_v2,
+    pfs_refine_statement_v2,
+    pfs_start_statement_v2,
+    pfs_set_statement_text_v2,
+    pfs_set_statement_query_id_v2,
+    pfs_set_statement_lock_time_v2,
+    pfs_set_statement_rows_sent_v2,
+    pfs_set_statement_rows_examined_v2,
+    pfs_inc_statement_created_tmp_disk_tables_v2,
+    pfs_inc_statement_created_tmp_tables_v2,
+    pfs_inc_statement_select_full_join_v2,
+    pfs_inc_statement_select_full_range_join_v2,
+    pfs_inc_statement_select_range_v2,
+    pfs_inc_statement_select_range_check_v2,
+    pfs_inc_statement_select_scan_v2,
+    pfs_inc_statement_sort_merge_passes_v2,
+    pfs_inc_statement_sort_range_v2,
+    pfs_inc_statement_sort_rows_v2,
+    pfs_inc_statement_sort_scan_v2,
+    pfs_set_statement_no_index_used_v2,
+    pfs_set_statement_no_good_index_used_v2,
+    pfs_end_statement_v2,
+    pfs_create_prepared_stmt_v2,
+    pfs_destroy_prepared_stmt_v2,
+    pfs_reprepare_prepared_stmt_v2,
+    pfs_execute_prepared_stmt_v2,
+    pfs_set_prepared_stmt_text_v2,
+    pfs_digest_start_v2,
+    pfs_digest_end_v2,
+    pfs_get_sp_share_v2,
+    pfs_release_sp_share_v2,
+    pfs_start_sp_v2,
+    pfs_end_sp_v2,
+    pfs_drop_sp_v2};
 
 PSI_transaction_service_v1 pfs_transaction_service_v1 = {
-  pfs_get_thread_transaction_locker_v1,
-  pfs_start_transaction_v1,
-  pfs_set_transaction_xid_v1,
-  pfs_set_transaction_xa_state_v1,
-  pfs_set_transaction_gtid_v1,
-  pfs_set_transaction_trxid_v1,
-  pfs_inc_transaction_savepoints_v1,
-  pfs_inc_transaction_rollback_to_savepoint_v1,
-  pfs_inc_transaction_release_savepoint_v1,
-  pfs_end_transaction_v1};
+    /* Old interface, for plugins. */
+    pfs_get_thread_transaction_locker_v1,
+    pfs_start_transaction_v1,
+    pfs_set_transaction_xid_v1,
+    pfs_set_transaction_xa_state_v1,
+    pfs_set_transaction_gtid_v1,
+    pfs_set_transaction_trxid_v1,
+    pfs_inc_transaction_savepoints_v1,
+    pfs_inc_transaction_rollback_to_savepoint_v1,
+    pfs_inc_transaction_release_savepoint_v1,
+    pfs_end_transaction_v1};
 
-PSI_memory_service_v1 pfs_memory_service_v1 = {pfs_register_memory_v1,
-                                               pfs_memory_alloc_v1,
-                                               pfs_memory_realloc_v1,
-                                               pfs_memory_claim_v1,
-                                               pfs_memory_free_v1};
+SERVICE_TYPE(psi_transaction_v1)
+SERVICE_IMPLEMENTATION(performance_schema, psi_transaction_v1) = {
+    /* New interface, for components. */
+    pfs_get_thread_transaction_locker_v1,
+    pfs_start_transaction_v1,
+    pfs_set_transaction_xid_v1,
+    pfs_set_transaction_xa_state_v1,
+    pfs_set_transaction_gtid_v1,
+    pfs_set_transaction_trxid_v1,
+    pfs_inc_transaction_savepoints_v1,
+    pfs_inc_transaction_rollback_to_savepoint_v1,
+    pfs_inc_transaction_release_savepoint_v1,
+    pfs_end_transaction_v1};
 
-PSI_error_service_v1 pfs_error_service_v1 = {pfs_log_error_v1};
+PSI_memory_service_v2 pfs_memory_service_v2 = {
+    /* Old interface, for plugins. */
+    pfs_register_memory_vc, pfs_memory_alloc_vc, pfs_memory_realloc_vc,
+    pfs_memory_claim_vc, pfs_memory_free_vc};
+
+SERVICE_TYPE(psi_memory_v2)
+SERVICE_IMPLEMENTATION(performance_schema, psi_memory_v2) = {
+    /* New interface, for components. */
+    pfs_register_memory_vc, pfs_memory_alloc_vc, pfs_memory_realloc_vc,
+    pfs_memory_claim_vc, pfs_memory_free_vc};
+
+PSI_error_service_v1 pfs_error_service_v1 = {
+    /* Old interface, for plugins. */
+    pfs_log_error_v1};
+
+SERVICE_TYPE(psi_error_v1)
+SERVICE_IMPLEMENTATION(performance_schema, psi_error_v1) = {
+    /* New interface, for components. */
+    pfs_log_error_v1};
+
+SERVICE_TYPE(psi_tls_channel_v1)
+SERVICE_IMPLEMENTATION(performance_schema, psi_tls_channel_v1) = {
+    /* New interface, for components */
+    pfs_register_tls_channel_v1, pfs_unregister_tls_channel_v1};
 
 PSI_data_lock_service_v1 pfs_data_lock_service_v1 = {
-  pfs_register_data_lock_v1, pfs_unregister_data_lock_v1};
+    /* Old interface, for plugins. */
+    pfs_register_data_lock_v1, pfs_unregister_data_lock_v1};
 
-static void *
-get_thread_interface(int version)
-{
-  switch (version)
-  {
-  case PSI_THREAD_VERSION_1:
-    return &pfs_thread_service_v1;
-  default:
-    return NULL;
+PSI_tls_channel_service_v1 pfs_tls_channel_service_v1 = {
+    pfs_register_tls_channel_v1, pfs_unregister_tls_channel_v1};
+
+static void *get_system_interface(int version) {
+  switch (version) {
+    case PSI_SYSTEM_VERSION_1:
+      return &pfs_system_service_v1;
+    default:
+      return nullptr;
   }
 }
 
-static void *
-get_mutex_interface(int version)
-{
-  switch (version)
-  {
-  case PSI_MUTEX_VERSION_1:
-    return &pfs_mutex_service_v1;
-  default:
-    return NULL;
+static void *get_thread_interface(int version) {
+  switch (version) {
+    case PSI_THREAD_VERSION_1:
+      return nullptr;
+    case PSI_THREAD_VERSION_2:
+      return nullptr;
+    case PSI_THREAD_VERSION_3:
+      return nullptr;
+    case PSI_THREAD_VERSION_4:
+      return &pfs_thread_service_v4;
+    default:
+      return nullptr;
   }
 }
 
-static void *
-get_rwlock_interface(int version)
-{
-  switch (version)
-  {
-  case PSI_RWLOCK_VERSION_1:
-    return &pfs_rwlock_service_v1;
-  default:
-    return NULL;
+static void *get_mutex_interface(int version) {
+  switch (version) {
+    case PSI_MUTEX_VERSION_1:
+      return &pfs_mutex_service_v1;
+    default:
+      return nullptr;
   }
 }
 
-static void *
-get_cond_interface(int version)
-{
-  switch (version)
-  {
-  case PSI_COND_VERSION_1:
-    return &pfs_cond_service_v1;
-  default:
-    return NULL;
+static void *get_rwlock_interface(int version) {
+  switch (version) {
+    case PSI_RWLOCK_VERSION_1:
+      return nullptr;
+    case PSI_RWLOCK_VERSION_2:
+      return &pfs_rwlock_service_v2;
+    default:
+      return nullptr;
   }
 }
 
-static void *
-get_file_interface(int version)
-{
-  switch (version)
-  {
-  case PSI_FILE_VERSION_1:
-    return &pfs_file_service_v1;
-  default:
-    return NULL;
+static void *get_cond_interface(int version) {
+  switch (version) {
+    case PSI_COND_VERSION_1:
+      return &pfs_cond_service_v1;
+    default:
+      return nullptr;
   }
 }
 
-static void *
-get_socket_interface(int version)
-{
-  switch (version)
-  {
-  case PSI_SOCKET_VERSION_1:
-    return &pfs_socket_service_v1;
-  default:
-    return NULL;
+static void *get_file_interface(int version) {
+  switch (version) {
+    case PSI_FILE_VERSION_2:
+      return &pfs_file_service_v2;
+    default:
+      return nullptr;
   }
 }
 
-static void *
-get_table_interface(int version)
-{
-  switch (version)
-  {
-  case PSI_TABLE_VERSION_1:
-    return &pfs_table_service_v1;
-  default:
-    return NULL;
+static void *get_socket_interface(int version) {
+  switch (version) {
+    case PSI_SOCKET_VERSION_1:
+      return &pfs_socket_service_v1;
+    default:
+      return nullptr;
   }
 }
 
-static void *
-get_mdl_interface(int version)
-{
-  switch (version)
-  {
-  case PSI_MDL_VERSION_1:
-    return &pfs_mdl_service_v1;
-  default:
-    return NULL;
+static void *get_table_interface(int version) {
+  switch (version) {
+    case PSI_TABLE_VERSION_1:
+      return &pfs_table_service_v1;
+    default:
+      return nullptr;
   }
 }
 
-static void *
-get_idle_interface(int version)
-{
-  switch (version)
-  {
-  case PSI_IDLE_VERSION_1:
-    return &pfs_idle_service_v1;
-  default:
-    return NULL;
+static void *get_mdl_interface(int version) {
+  switch (version) {
+    case PSI_MDL_VERSION_1:
+      return &pfs_mdl_service_v1;
+    default:
+      return nullptr;
   }
 }
 
-static void *
-get_stage_interface(int version)
-{
-  switch (version)
-  {
-  case PSI_STAGE_VERSION_1:
-    return &pfs_stage_service_v1;
-  default:
-    return NULL;
+static void *get_idle_interface(int version) {
+  switch (version) {
+    case PSI_IDLE_VERSION_1:
+      return &pfs_idle_service_v1;
+    default:
+      return nullptr;
   }
 }
 
-static void *
-get_statement_interface(int version)
-{
-  switch (version)
-  {
-  case PSI_STATEMENT_VERSION_1:
-    return &pfs_statement_service_v1;
-  default:
-    return NULL;
+static void *get_stage_interface(int version) {
+  switch (version) {
+    case PSI_STAGE_VERSION_1:
+      return &pfs_stage_service_v1;
+    default:
+      return nullptr;
   }
 }
 
-static void *
-get_transaction_interface(int version)
-{
-  switch (version)
-  {
-  case PSI_TRANSACTION_VERSION_1:
-    return &pfs_transaction_service_v1;
-  default:
-    return NULL;
+static void *get_statement_interface(int version) {
+  switch (version) {
+    case PSI_STATEMENT_VERSION_1:
+      /*
+        Obsolete.
+
+        In theory, PLUGIN should use
+
+        extern MYSQL_PLUGIN_IMPORT PSI_statement_bootstrap *psi_statement_hook;
+
+        and then
+
+        psi_statement_hook->get_interface(PSI_STATEMENT_VERSION_CURRENT)
+
+        to obtain the proper instrumentation to use,
+        and define their own
+
+        #define PSI_STATEMENT_CALL(M)
+
+        to use the -- safe and of the proper version -- reference obtained,
+        stored in a -- per plugin -- global variable.
+
+        In practice, PLUGIN are using directly the default
+
+        PSI_STATEMENT_CALL(M) psi_statement_service->M
+
+        macro, the therefore depends on the -- server -- global variable,
+        which is by definition unsafe (it may not be the proper version).
+
+        This is because this mechanism was never deployed in full to plug-ins,
+        as binary compatibility with the server as a whole is not supported,
+        for PLUGIN.
+
+        There is no point in supporting PSI_STATEMENT_VERSION_1 here,
+        it will never be called.
+
+        For COMPONENTS, the service is properly versioned.
+      */
+      return nullptr;
+    case PSI_STATEMENT_VERSION_2:
+      return &pfs_statement_service_v2;
+    default:
+      return nullptr;
   }
 }
 
-static void *
-get_memory_interface(int version)
-{
-  switch (version)
-  {
-  case PSI_MEMORY_VERSION_1:
-    return &pfs_memory_service_v1;
-  default:
-    return NULL;
+static void *get_transaction_interface(int version) {
+  switch (version) {
+    case PSI_TRANSACTION_VERSION_1:
+      return &pfs_transaction_service_v1;
+    default:
+      return nullptr;
   }
 }
 
-static void *
-get_error_interface(int version)
-{
-  switch (version)
-  {
-  case PSI_ERROR_VERSION_1:
-    return &pfs_error_service_v1;
-  default:
-    return NULL;
+static void *get_memory_interface(int version) {
+  switch (version) {
+    case PSI_MEMORY_VERSION_2:
+      return &pfs_memory_service_v2;
+    default:
+      return nullptr;
   }
 }
 
-static void *
-get_data_lock_interface(int version)
-{
-  switch (version)
-  {
-  case PSI_DATA_LOCK_VERSION_1:
-    return &pfs_data_lock_service_v1;
-  default:
-    return NULL;
+static void *get_error_interface(int version) {
+  switch (version) {
+    case PSI_ERROR_VERSION_1:
+      return &pfs_error_service_v1;
+    default:
+      return nullptr;
   }
 }
 
-C_MODE_END
+static void *get_data_lock_interface(int version) {
+  switch (version) {
+    case PSI_DATA_LOCK_VERSION_1:
+      return &pfs_data_lock_service_v1;
+    default:
+      return nullptr;
+  }
+}
 
-struct PSI_thread_bootstrap pfs_thread_bootstrap = {get_thread_interface};
+static void *get_tls_channel_interface(int version) {
+  switch (version) {
+    case PSI_TLS_CHANNEL_VERSION_1:
+      return &pfs_tls_channel_service_v1;
+    default:
+      return nullptr;
+  }
+}
+
+struct PSI_cond_bootstrap pfs_cond_bootstrap = {get_cond_interface};
+
+struct PSI_data_lock_bootstrap pfs_data_lock_bootstrap = {
+    get_data_lock_interface};
+
+PSI_engine_data_lock_inspector *g_data_lock_inspector[COUNT_DATA_LOCK_ENGINES] =
+    {nullptr};
+
+unsigned int g_data_lock_inspector_count = 0;
+
+struct PSI_error_bootstrap pfs_error_bootstrap = {get_error_interface};
+
+struct PSI_file_bootstrap pfs_file_bootstrap = {get_file_interface};
+
+struct PSI_idle_bootstrap pfs_idle_bootstrap = {get_idle_interface};
+
+struct PSI_mdl_bootstrap pfs_mdl_bootstrap = {get_mdl_interface};
+
+struct PSI_memory_bootstrap pfs_memory_bootstrap = {get_memory_interface};
 
 struct PSI_mutex_bootstrap pfs_mutex_bootstrap = {get_mutex_interface};
 
 struct PSI_rwlock_bootstrap pfs_rwlock_bootstrap = {get_rwlock_interface};
 
-struct PSI_cond_bootstrap pfs_cond_bootstrap = {get_cond_interface};
-
-struct PSI_file_bootstrap pfs_file_bootstrap = {get_file_interface};
-
 struct PSI_socket_bootstrap pfs_socket_bootstrap = {get_socket_interface};
-
-struct PSI_table_bootstrap pfs_table_bootstrap = {get_table_interface};
-
-struct PSI_mdl_bootstrap pfs_mdl_bootstrap = {get_mdl_interface};
-
-struct PSI_idle_bootstrap pfs_idle_bootstrap = {get_idle_interface};
 
 struct PSI_stage_bootstrap pfs_stage_bootstrap = {get_stage_interface};
 
 struct PSI_statement_bootstrap pfs_statement_bootstrap = {
-  get_statement_interface};
+    get_statement_interface};
+
+struct PSI_system_bootstrap pfs_system_bootstrap = {get_system_interface};
+
+struct PSI_table_bootstrap pfs_table_bootstrap = {get_table_interface};
+
+struct PSI_thread_bootstrap pfs_thread_bootstrap = {get_thread_interface};
+
+struct PSI_tls_channel_bootstrap pfs_tls_channel_bootstrap = {
+    get_tls_channel_interface};
 
 struct PSI_transaction_bootstrap pfs_transaction_bootstrap = {
-  get_transaction_interface};
+    get_transaction_interface};
 
-struct PSI_memory_bootstrap pfs_memory_bootstrap = {get_memory_interface};
+BEGIN_COMPONENT_PROVIDES(performance_schema)
+PROVIDES_SERVICE(performance_schema, psi_cond_v1),
+    PROVIDES_SERVICE(performance_schema, psi_error_v1),
+    PROVIDES_SERVICE(performance_schema, psi_file_v2),
+    PROVIDES_SERVICE(performance_schema, psi_idle_v1),
+    PROVIDES_SERVICE(performance_schema, psi_mdl_v1),
+    /* Obsolete: PROVIDES_SERVICE(performance_schema, psi_memory_v1), */
+    PROVIDES_SERVICE(performance_schema, psi_memory_v2),
+    PROVIDES_SERVICE(performance_schema, psi_mutex_v1),
+    /* Obsolete: PROVIDES_SERVICE(performance_schema, psi_rwlock_v1), */
+    PROVIDES_SERVICE(performance_schema, psi_rwlock_v2),
+    PROVIDES_SERVICE(performance_schema, psi_socket_v1),
+    PROVIDES_SERVICE(performance_schema, psi_stage_v1),
+    /* Deprecated, use psi_statement_v2. */
+    PROVIDES_SERVICE(performance_schema, psi_statement_v1),
+    PROVIDES_SERVICE(performance_schema, psi_statement_v2),
+    PROVIDES_SERVICE(performance_schema, psi_system_v1),
+    PROVIDES_SERVICE(performance_schema, psi_table_v1),
+    /* Obsolete: PROVIDES_SERVICE(performance_schema, psi_thread_v1), */
+    /* Obsolete: PROVIDES_SERVICE(performance_schema, psi_thread_v2), */
+    PROVIDES_SERVICE(performance_schema, psi_thread_v4),
+    PROVIDES_SERVICE(performance_schema, psi_transaction_v1),
+    /* Deprecated, use pfs_plugin_table_v1. */
+    PROVIDES_SERVICE(performance_schema, pfs_plugin_table),
+    PROVIDES_SERVICE(performance_schema, pfs_plugin_table_v1),
+    PROVIDES_SERVICE(performance_schema, pfs_plugin_column_tiny_v1),
+    PROVIDES_SERVICE(performance_schema, pfs_plugin_column_small_v1),
+    PROVIDES_SERVICE(performance_schema, pfs_plugin_column_medium_v1),
+    PROVIDES_SERVICE(performance_schema, pfs_plugin_column_integer_v1),
+    PROVIDES_SERVICE(performance_schema, pfs_plugin_column_bigint_v1),
+    PROVIDES_SERVICE(performance_schema, pfs_plugin_column_decimal_v1),
+    PROVIDES_SERVICE(performance_schema, pfs_plugin_column_float_v1),
+    PROVIDES_SERVICE(performance_schema, pfs_plugin_column_double_v1),
+    PROVIDES_SERVICE(performance_schema, pfs_plugin_column_string_v1),
+    PROVIDES_SERVICE(performance_schema, pfs_plugin_column_blob_v1),
+    PROVIDES_SERVICE(performance_schema, pfs_plugin_column_enum_v1),
+    PROVIDES_SERVICE(performance_schema, pfs_plugin_column_date_v1),
+    PROVIDES_SERVICE(performance_schema, pfs_plugin_column_time_v1),
+    PROVIDES_SERVICE(performance_schema, pfs_plugin_column_datetime_v1),
+    /* Deprecated, use pfs_plugin_column_timestamp_v2. */
+    PROVIDES_SERVICE(performance_schema, pfs_plugin_column_timestamp_v1),
+    PROVIDES_SERVICE(performance_schema, pfs_plugin_column_timestamp_v2),
+    PROVIDES_SERVICE(performance_schema, pfs_plugin_column_year_v1),
+    PROVIDES_SERVICE(performance_schema, psi_tls_channel_v1),
+    END_COMPONENT_PROVIDES();
 
-struct PSI_error_bootstrap pfs_error_bootstrap = {get_error_interface};
+static BEGIN_COMPONENT_REQUIRES(performance_schema) END_COMPONENT_REQUIRES();
 
-struct PSI_data_lock_bootstrap pfs_data_lock_bootstrap = {
-  get_data_lock_interface};
+BEGIN_COMPONENT_METADATA(performance_schema)
+METADATA("mysql.author", "Oracle Corporation"),
+    METADATA("mysql.license", "GPL"), END_COMPONENT_METADATA();
 
-PSI_engine_data_lock_inspector *g_data_lock_inspector[COUNT_DATA_LOCK_ENGINES] =
-  {NULL};
-unsigned int g_data_lock_inspector_count = 0;
+DECLARE_COMPONENT(performance_schema, "mysql:pfs")
+/* There are no initialization/deinitialization functions, they will not be
+   called as this component is not a regular one. */
+nullptr, nullptr END_DECLARE_COMPONENT();
+
+bool pfs_init_services(SERVICE_TYPE(registry_registration) * reg) {
+  int inx = 0;
+
+  for (;;) {
+    my_h_service pfs_service;
+    pfs_service = reinterpret_cast<my_h_service>(
+        mysql_component_performance_schema.provides[inx].implementation);
+
+    if (pfs_service == nullptr) {
+      break;
+    }
+
+    if (reg->register_service(
+            mysql_component_performance_schema.provides[inx].name,
+            pfs_service)) {
+      return true;
+    }
+
+    inx++;
+  }
+
+  return false;
+}
+
+bool pfs_deinit_services(SERVICE_TYPE(registry_registration) * reg) {
+  for (int inx = 0;
+       mysql_component_performance_schema.provides[inx].name != nullptr;
+       inx++) {
+    if (reg->unregister(
+            mysql_component_performance_schema.provides[inx].name)) {
+      return true;
+    }
+  }
+
+  return false;
+}

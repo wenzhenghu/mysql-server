@@ -3,18 +3,6 @@
 #
 
 -- source include/no_valgrind_without_big.inc
-# include/restart_mysqld.inc does not work in embedded mode 
--- source include/not_embedded.inc 
-
-########################################
-##### WL#7554 Force schema `test` to character set latin1
-##### This test should be migrated to utf8mb4
---disable_query_log
-let $testdbcs71=`select default_character_set_name from information_schema.schemata where schema_name='test'`;
-alter schema default character set latin1;
-use test;
---enable_query_log
-########################################
 
 -- vertical_results
 
@@ -92,9 +80,4 @@ WHERE table_name='test_ps_auto_recalc';
 
 DROP TABLE test_ps_auto_recalc;
 
-########################################
-##### WL#7554 set schema `test` back to what it was
---disable_query_log
---eval alter schema test default character set $testdbcs71;
---enable_query_log
-########################################
+call mtr.add_suppression("ignoring ib_[0-9]+_[0-9]+.dblwr - page size doesn't match");

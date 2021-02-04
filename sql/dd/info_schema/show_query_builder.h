@@ -1,13 +1,20 @@
-/* Copyright (c) 2016, 2017, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2016, 2020, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -17,8 +24,7 @@
 #define SQL_DD_SHOW_QUERY_BUILDER_H
 
 #include "lex_string.h"
-#include "mem_root_array.h"
-#include "mysql/mysql_lex_string.h"    // LEX_STRING
+#include "sql/mem_root_array.h"
 
 class Item;
 class PT_derived_table;
@@ -29,8 +35,8 @@ class SELECT_LEX;
 class String;
 class THD;
 struct YYLTYPE;
+
 typedef YYLTYPE POS;
-typedef struct st_mysql_lex_string LEX_STRING;
 
 namespace dd {
 namespace info_schema {
@@ -70,9 +76,8 @@ namespace info_schema {
   The memory used while building the this Parse Tree is thd->mem_root.
 */
 
-class Select_lex_builder
-{
-public:
+class Select_lex_builder {
+ public:
   Select_lex_builder(const POS *pc, THD *thd);
 
   /**
@@ -84,10 +89,11 @@ public:
 
   bool add_star_select_item();
 
-
   /**
     Add item representing a column as,
-    "SELECT <field_name> AS <alias>, ...".
+    @code
+    SELECT <field_name> AS <alias>, ...
+    @endcode
 
     The item will be appended to existing list of select items
     for this query.
@@ -96,13 +102,25 @@ public:
             true  on failure.
   */
 
-  bool add_select_item(const LEX_STRING field_name,
-                       const LEX_STRING alias);
+  bool add_select_item(const LEX_CSTRING &field_name, const LEX_CSTRING &alias);
 
+  /**
+    Add expression as an item tree, with an alias to name the resulting column.
+
+    The item will be appended to existing list of select items
+    for this query block.
+
+    @return false on success.
+            true  on failure.
+  */
+
+  bool add_select_expr(Item *select_list_item, const LEX_CSTRING &alias);
 
   /**
     Add item representing a FROM clause table as,
-    "SELECT ... FROM <schema_name>.<table_name> ...".
+    @code
+    SELECT ... FROM <schema_name>.<table_name> ...
+    @endcode
 
     Only single table can be added. We cannot build a query with
     JOIN clause for now.
@@ -111,13 +129,14 @@ public:
             true  on failure.
   */
 
-  bool add_from_item(const LEX_STRING schema_name,
-                     const LEX_STRING table_name);
-
+  bool add_from_item(const LEX_CSTRING &schema_name,
+                     const LEX_CSTRING &table_name);
 
   /**
     Add item representing a FROM clause table as,
-    "SELECT ... FROM <sub query or derived table> ...".
+    @code
+    SELECT ... FROM <sub query or derived table> ...
+    @endcode
 
     Only single table can be added. We cannot build a query with
     JOIN clause for now.
@@ -128,11 +147,11 @@ public:
 
   bool add_from_item(PT_derived_table *dt);
 
-
   /**
     Prepare item representing a LIKE condition,
-
-    "SELECT ... WHERE <field_name> LIKE <value%> ... "
+    @code
+    SELECT ... WHERE <field_name> LIKE <value%> ...
+    @endcode
 
     This item should be intern added to Select_lex_builder using
     add_condition() method.
@@ -141,14 +160,13 @@ public:
             nullptr on failure.
   */
 
-  Item *prepare_like_item(const LEX_STRING field_name,
-                          const String *wild);
-
+  Item *prepare_like_item(const LEX_CSTRING &field_name, const String *wild);
 
   /**
     Prepare item representing a equal to comparision condition,
-
-    "SELECT ... WHERE <field_name> = <value> ... "
+    @code
+    SELECT ... WHERE <field_name> = <value> ...
+    @endcode
 
     This item should be intern added to Select_lex_builder using
     add_condition() method.
@@ -157,14 +175,14 @@ public:
             nullptr on failure.
   */
 
-  Item *prepare_equal_item(const LEX_STRING field_name,
-                           const LEX_STRING value);
-
+  Item *prepare_equal_item(const LEX_CSTRING &field_name,
+                           const LEX_CSTRING &value);
 
   /**
     Add a WHERE clause condition to Select_lex_builder.
-
-    "SELECT ... WHERE ... AND <condition> ... "
+    @code
+    SELECT ... WHERE ... AND <condition> ...
+    @endcode
 
     If there are existing conditions, then the new condition is
     append to the WHERE clause conditions with a 'AND' condition.
@@ -175,11 +193,11 @@ public:
 
   bool add_condition(Item *a);
 
-
   /**
     Add a ORDER BY clause field to Select_lex_builder.
-
-    "SELECT ... ORDER BY <field_name>, ... "
+    @code
+    SELECT ... ORDER BY <field_name>, ...
+    @endcode
 
     If there are existing ORDER BY field, then we append a new
     field to the ORDER BY clause. All the fields are added to be
@@ -189,23 +207,22 @@ public:
             true  on failure.
   */
 
-  bool add_order_by(const LEX_STRING field_name);
-
+  bool add_order_by(const LEX_CSTRING &field_name);
 
   /**
     This function build ParseTree node that represents this
     Select_lex_builder as sub-query. This enables us to build a
     SELECT_LEX containing a sub-query in its FROM clause. This
     sub-query is represented by ParseTree node PT_derived_table.
-
-    "SELECT ... FROM <PT_dervied_table>, ... "
+    @code
+    SELECT ... FROM <PT_dervied_table>, ...
+    @endcode
 
     @return pointer to PT_derived_table on success.
             nullptr on failure.
   */
 
-  PT_derived_table* prepare_derived_table(const LEX_STRING table_alias);
-
+  PT_derived_table *prepare_derived_table(const LEX_CSTRING &table_alias);
 
   /**
     Prepare a SELECT_LEX using all the information information
@@ -215,11 +232,9 @@ public:
             nullptr on failure.
   */
 
-  SELECT_LEX* prepare_select_lex();
+  SELECT_LEX *prepare_select_lex();
 
-
-private:
-
+ private:
   /**
     Prepare a list of expression used to build select items for
     the query being built.
@@ -230,7 +245,7 @@ private:
 
   bool add_to_select_item_list(Item *expr);
 
-private:
+ private:
   // Parser current position represented by YYLTYPE
   const POS *m_pos;
 
@@ -250,7 +265,7 @@ private:
   PT_order_list *m_order_by_list;
 };
 
-} // namespace info_schema
-} // namespace dd
+}  // namespace info_schema
+}  // namespace dd
 
-#endif  /* SQL_DD_SHOW_QUERY_BUILDER_H */
+#endif /* SQL_DD_SHOW_QUERY_BUILDER_H */

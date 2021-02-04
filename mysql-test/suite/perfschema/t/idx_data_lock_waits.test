@@ -1,3 +1,8 @@
+# Performance schema tests generally depend on specific query plans
+# and behavior, and much of the perfschema suite is therefore disabled
+# if the hypergraph optimizer is active.
+--source include/not_hypergraph.inc
+
 # Tests for PERFORMANCE_SCHEMA
 
 show create table performance_schema.data_lock_waits;
@@ -82,6 +87,13 @@ insert into explain_test_db.noise_table values (4, 400);
 let $wait_condition= SELECT COUNT(*)>=1 FROM performance_schema.data_locks
   where OBJECT_NAME='noise_table' and LOCK_STATUS='WAITING';
 --source include/wait_condition.inc
+if (!$success)
+{
+# wait_condition failed, dumping data for debug
+  select * from performance_schema.threads;
+  select * from performance_schema.data_locks;
+  select * from performance_schema.data_lock_waits;
+}
 
 IF ($debug_script == 1)
 {

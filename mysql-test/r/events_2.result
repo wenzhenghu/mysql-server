@@ -11,6 +11,8 @@ ERROR HY000: Incorrect AT value: 'NULL'
 create event e_26 on schedule at 'definitely not a datetime' disable do set @a = 5;
 ERROR HY000: Incorrect AT value: 'definitely not a datetime'
 set names utf8;
+Warnings:
+Warning	3719	'utf8' is currently an alias for the character set UTF8MB3, but will be an alias for UTF8MB4 in a future release. Please consider using UTF8MB4 in order to be unambiguous.
 create event задачка on schedule every 123 minute starts now() ends now() + interval 1 month do select 1;
 drop event задачка;
 "DISABLE the scheduler. Testing that it does not work when the variable is 0"
@@ -59,7 +61,6 @@ select release_lock("test_lock2");
 release_lock("test_lock2")
 1
 drop event закачка;
-set global event_scheduler=1;
 select get_lock("test_lock2_1", 20);
 get_lock("test_lock2_1", 20)
 1
@@ -84,6 +85,7 @@ select release_lock("test_lock2_1");
 release_lock("test_lock2_1")
 1
 drop event закачка21;
+set global event_scheduler = ON;
 create table t_16 (s1 int);
 create trigger t_16_bi before insert on t_16 for each row create event  e_16 on schedule every 1 second do set @a=5;
 ERROR HY000: Recursion of EVENT DDL statements is forbidden when body is present
@@ -128,7 +130,7 @@ create event e1 on schedule every 10 hour do select 1;
 lock table t1 read;
 show create event e1;
 Event	sql_mode	time_zone	Create Event	character_set_client	collation_connection	Database Collation
-e1	ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION	SYSTEM	CREATE DEFINER=`root`@`localhost` EVENT `e1` ON SCHEDULE EVERY 10 HOUR STARTS '#' ON COMPLETION NOT PRESERVE ENABLE DO select 1	utf8	utf8_general_ci	utf8mb4_0900_ai_ci
+e1	ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION	SYSTEM	CREATE DEFINER=`root`@`localhost` EVENT `e1` ON SCHEDULE EVERY 10 HOUR STARTS '#' ON COMPLETION NOT PRESERVE ENABLE DO select 1	utf8	utf8_general_ci	utf8mb4_0900_ai_ci
 select event_name from information_schema.events;
 EVENT_NAME
 e1
@@ -236,6 +238,8 @@ ERROR HY000: Explicit or implicit commit is not allowed in stored function or tr
 drop table t1|
 drop event e1|
 set names utf8;
+Warnings:
+Warning	3719	'utf8' is currently an alias for the character set UTF8MB3, but will be an alias for UTF8MB4 in a future release. Please consider using UTF8MB4 in order to be unambiguous.
 create event имя_события_в_кодировке_утф8_длиной_больше_чем_48 on schedule every 2 year do select 1;
 select EVENT_NAME from information_schema.events
 where event_schema='test';

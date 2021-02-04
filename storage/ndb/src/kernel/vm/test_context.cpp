@@ -1,14 +1,21 @@
 /*
-   Copyright (c) 2011, 2016, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2011, 2020, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -54,21 +61,18 @@ test_context(Uint32 pages)
   for (Uint32 resid = 1; resid < RG_COUNT; resid++)
   {
     rl.m_min = 0;
-    rl.m_max = 0;
+    rl.m_max = Resource_limit::HIGHEST_LIMIT;
     rl.m_resource_id = resid;
     mm.set_resource_limit(rl);
   }
-  rl.m_min = 0;
-  rl.m_max = pages;
-  rl.m_resource_id = 0;
-  mm.set_resource_limit(rl);
 
-  if (!mm.init(NULL /* watchCounter */))
+  if (!mm.init(NULL /* watchCounter */, pages))
   {
     abort();
   }
 
-  mm.map(NULL /* watchCounter */, 0 /* memlock */); // Map all
+  Uint32 dummy_watchdog_counter_marking_page_mem = 0;
+  mm.map(&dummy_watchdog_counter_marking_page_mem, 0 /* memlock */); // Map all
 
   return pc;
 }

@@ -1,17 +1,24 @@
-/* Copyright (c) 2014, 2017, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2014, 2020, Oracle and/or its affiliates.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software Foundation,
-   51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 #ifndef DD__PARTITION_INDEX_IMPL_INCLUDED
 #define DD__PARTITION_INDEX_IMPL_INCLUDED
@@ -20,148 +27,144 @@
 #include <sys/types.h>
 #include <memory>
 #include <new>
-#include <string>
 
-#include "dd/impl/types/weak_object_impl.h"     // dd::Weak_object_impl
-#include "dd/object_id.h"
-#include "dd/properties.h"
-#include "dd/sdi_fwd.h"
-#include "dd/types/object_type.h"               // dd::Object_type
-#include "dd/types/partition_index.h"           // dd::Partition_index
+#include "sql/dd/impl/properties_impl.h"
+#include "sql/dd/impl/types/weak_object_impl.h"  // dd::Weak_object_impl
+#include "sql/dd/object_id.h"
+#include "sql/dd/sdi_fwd.h"
+#include "sql/dd/string_type.h"
+#include "sql/dd/types/index.h"
+#include "sql/dd/types/partition_index.h"  // dd::Partition_index
 
 namespace dd {
 
 ///////////////////////////////////////////////////////////////////////////
 
-class Open_dictionary_tables_ctx;
-class Partition_impl;
-class Raw_record;
 class Index;
 class Object_key;
 class Object_table;
+class Open_dictionary_tables_ctx;
 class Partition;
+class Partition_impl;
+class Raw_record;
 class Sdi_rcontext;
 class Sdi_wcontext;
 class Weak_object;
 
 ///////////////////////////////////////////////////////////////////////////
 
-class Partition_index_impl : public Weak_object_impl,
-                             public Partition_index
-{
-public:
+class Partition_index_impl : public Weak_object_impl, public Partition_index {
+ public:
   Partition_index_impl();
 
   Partition_index_impl(Partition_impl *partition, Index *index);
 
-  Partition_index_impl(const Partition_index_impl &src,
-                       Partition_impl *parent, Index *index);
+  Partition_index_impl(const Partition_index_impl &src, Partition_impl *parent,
+                       Index *index);
 
-  virtual ~Partition_index_impl()
-  { }
+  ~Partition_index_impl() override {}
 
-public:
-  virtual const Object_table &object_table() const
-  { return Partition_index::OBJECT_TABLE(); }
+ public:
+  const Object_table &object_table() const override;
 
-  virtual bool validate() const;
+  bool validate() const override;
 
-  virtual bool restore_attributes(const Raw_record &r);
+  bool restore_attributes(const Raw_record &r) override;
 
-  virtual bool store_attributes(Raw_record *r);
+  bool store_attributes(Raw_record *r) override;
 
-  void serialize(Sdi_wcontext *wctx, Sdi_writer *w) const;
+  void serialize(Sdi_wcontext *wctx, Sdi_writer *w) const override;
 
-  bool deserialize(Sdi_rcontext *rctx, const RJ_Value &val);
+  bool deserialize(Sdi_rcontext *rctx, const RJ_Value &val) override;
 
-  void debug_print(String_type &outb) const;
+  void debug_print(String_type &outb) const override;
 
-  void set_ordinal_position(uint)
-  { }
+  void set_ordinal_position(uint) {}
 
-  virtual uint ordinal_position() const
-  { return -1; }
+  virtual uint ordinal_position() const { return -1; }
 
-public:
+ public:
+  static void register_tables(Open_dictionary_tables_ctx *otx);
+
   /////////////////////////////////////////////////////////////////////////
   // Partition.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual const Partition &partition() const;
+  const Partition &partition() const override;
 
-  virtual Partition &partition();
+  Partition &partition() override;
 
-  Partition_impl &partition_impl()
-  { return *m_partition; }
+  Partition_impl &partition_impl() { return *m_partition; }
 
   /////////////////////////////////////////////////////////////////////////
   // Index.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual const Index &index() const;
+  const Index &index() const override;
 
-  virtual Index &index();
+  Index &index() override;
 
   /////////////////////////////////////////////////////////////////////////
   // Options.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual const Properties &options() const
-  { return *m_options; }
+  const Properties &options() const override { return m_options; }
 
-  virtual Properties &options()
-  { return *m_options; }
+  Properties &options() override { return m_options; }
 
-  virtual bool set_options_raw(const String_type &options_raw);
+  bool set_options(const Properties &options) override {
+    return m_options.insert_values(options);
+  }
+
+  bool set_options(const String_type &options_raw) override {
+    return m_options.insert_values(options_raw);
+  }
 
   /////////////////////////////////////////////////////////////////////////
   // se_private_data.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual const Properties &se_private_data() const
-  { return *m_se_private_data; }
+  const Properties &se_private_data() const override {
+    return m_se_private_data;
+  }
 
-  virtual Properties &se_private_data()
-  { return *m_se_private_data; }
+  Properties &se_private_data() override { return m_se_private_data; }
 
-  virtual bool set_se_private_data_raw(const String_type &se_private_data_raw);
+  bool set_se_private_data(const String_type &se_private_data_raw) override {
+    return m_se_private_data.insert_values(se_private_data_raw);
+  }
 
-  virtual void set_se_private_data(const Properties &se_private_data);
+  bool set_se_private_data(const Properties &se_private_data) override {
+    return m_se_private_data.insert_values(se_private_data);
+  }
 
   /////////////////////////////////////////////////////////////////////////
   // Tablespace.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual Object_id tablespace_id() const
-  { return m_tablespace_id; }
+  Object_id tablespace_id() const override { return m_tablespace_id; }
 
-  virtual void set_tablespace_id(Object_id tablespace_id)
-  { m_tablespace_id= tablespace_id; }
+  void set_tablespace_id(Object_id tablespace_id) override {
+    m_tablespace_id = tablespace_id;
+  }
 
-  // Fix "inherits ... via dominance" warnings
-  virtual Weak_object_impl *impl()
-  { return Weak_object_impl::impl(); }
-  virtual const Weak_object_impl *impl() const
-  { return Weak_object_impl::impl(); }
-
-public:
-  static Partition_index_impl *restore_item(Partition_impl *partition)
-  {
-    return new (std::nothrow) Partition_index_impl(partition, NULL);
+ public:
+  static Partition_index_impl *restore_item(Partition_impl *partition) {
+    return new (std::nothrow) Partition_index_impl(partition, nullptr);
   }
 
   static Partition_index_impl *clone(const Partition_index_impl &other,
                                      Partition_impl *partition);
 
-public:
-  virtual Object_key *create_primary_key() const;
-  virtual bool has_new_primary_key() const;
+ public:
+  Object_key *create_primary_key() const override;
+  bool has_new_primary_key() const override;
 
-private:
+ private:
   // Fields.
 
-  std::unique_ptr<Properties> m_options;
-  std::unique_ptr<Properties> m_se_private_data;
+  Properties_impl m_options;
+  Properties_impl m_se_private_data;
 
   // References to tightly-coupled objects.
 
@@ -175,17 +178,20 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////
 
-class Partition_index_type : public Object_type
-{
-public:
-  virtual void register_tables(Open_dictionary_tables_ctx *otx) const;
+/**
+  Used to sort Partition_index objects for the same partition in
+  the same order as Index objects for the table.
+*/
 
-  virtual Weak_object *create_object() const
-  { return new (std::nothrow) Partition_index_impl(); }
+struct Partition_index_order_comparator {
+  bool operator()(const dd::Partition_index *pi1,
+                  const dd::Partition_index *pi2) const {
+    return pi1->index().ordinal_position() < pi2->index().ordinal_position();
+  }
 };
 
 ///////////////////////////////////////////////////////////////////////////
 
-}
+}  // namespace dd
 
-#endif // DD__PARTITION_INDEX_IMPL_INCLUDED
+#endif  // DD__PARTITION_INDEX_IMPL_INCLUDED

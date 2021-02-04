@@ -1,17 +1,24 @@
-/* Copyright (c) 2015, 2017, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2015, 2020, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software Foundation,
-   51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 #ifndef DD_CACHE__DICTIONARY_CLIENT_INCLUDED
 #define DD_CACHE__DICTIONARY_CLIENT_INCLUDED
@@ -21,19 +28,59 @@
 #include <string>
 #include <vector>
 
-#include "dd/object_id.h"
+#include "my_compiler.h"
 #include "my_dbug.h"
-#include "object_registry.h"                  // Object_registry
+#include "object_registry.h"  // Object_registry
+#include "sql/dd/object_id.h"
+#include "sql/dd/string_type.h"
 
 class THD;
+struct LEX_USER;
+
 namespace dd {
 class Schema;
 class Table;
+class Entity_object;
 }  // namespace dd
 
 namespace dd {
 namespace cache {
 
+class SPI_lru_cache;
+
+/**
+  A smart-pointer for managing an SPI_lru_cache even when it is only
+  forward declared. Automaticlly allocated cache with new, and assigns
+  m_spi_lru_cache to it, when dereferenced using non-const
+  operator->(). Destructor deletes the object pointed to by
+  m_spi_lru_cache.
+*/
+class SPI_lru_cache_owner_ptr {
+  SPI_lru_cache *m_spi_lru_cache = nullptr;
+
+ public:
+  /** Calls delete on m_spi_lru_cache unless nullptr. */
+  ~SPI_lru_cache_owner_ptr();
+
+  /**
+    Creates cache on demand if m_spi_lru_cache is nullptr.
+    @return pointer to cache.
+  */
+  SPI_lru_cache *operator->();
+
+  /**
+    Const overload which does not create cache on demand, but merely
+    returns the pointer.
+    @return pointer to cache (may be nullptr)
+  */
+  const SPI_lru_cache *operator->() const { return m_spi_lru_cache; }
+
+  /*
+    Predicate for nullptr.
+    @return true if points to valid cache, false otherwise.
+   */
+  bool is_nullptr() const { return (m_spi_lru_cache == nullptr); }
+};
 
 /**
   Implementation of a dictionary client.
@@ -93,13 +140,11 @@ namespace cache {
         client itself, or by the dictionary subsystem.
 */
 
-template <typename T> class Cache_element;
+template <typename T>
+class Cache_element;
 
-class Dictionary_client
-{
-public:
-
-
+class Dictionary_client {
+ public:
   /**
     Class to help releasing and deleting objects.
 
@@ -126,11 +171,10 @@ public:
     and are deleted when the auto releaser goes out of scope.
   */
 
-  class Auto_releaser
-  {
+  class Auto_releaser {
     friend class Dictionary_client;
 
-  private:
+   private:
     Dictionary_client *m_client;
     Object_registry m_release_registry;
     Auto_releaser *m_prev;
@@ -143,13 +187,11 @@ public:
     */
 
     template <typename T>
-    void auto_release(Cache_element<T> *element)
-    {
+    void auto_release(Cache_element<T> *element) {
       // Catch situations where we do not use a non-default releaser.
-      DBUG_ASSERT(m_prev != NULL);
+      DBUG_ASSERT(m_prev != nullptr);
       m_release_registry.put(element);
     }
-
 
     /**
       Transfer an object from the current to the previous auto releaser.
@@ -159,8 +201,7 @@ public:
     */
 
     template <typename T>
-    void transfer_release(const T* object);
-
+    void transfer_release(const T *object);
 
     /**
       Remove an element from some auto releaser down the chain.
@@ -181,10 +222,7 @@ public:
     // Create a new empty auto releaser. Used only by the Dictionary_client.
     Auto_releaser();
 
-
-  public:
-
-
+   public:
     /**
       Create a new auto releaser and link it into the dictionary client
       as the current releaser.
@@ -195,26 +233,28 @@ public:
 
     explicit Auto_releaser(Dictionary_client *client);
 
-
     // Release all objects registered and restore previous releaser.
     ~Auto_releaser();
-
 
     // Debug dump to stderr.
     template <typename T>
     void dump() const;
   };
 
+ private:
+  std::vector<Entity_object *> m_uncached_objects;  // Objects to be deleted.
+  Object_registry m_registry_committed;    // Registry of committed objects.
+  Object_registry m_registry_uncommitted;  // Registry of uncommitted objects.
+  Object_registry m_registry_dropped;      // Registry of dropped objects.
+  THD *m_thd;                        // Thread context, needed for cache misses.
+  Auto_releaser m_default_releaser;  // Default auto releaser.
+  Auto_releaser *m_current_releaser;  // Current auto releaser.
 
-private:
-  std::vector<Dictionary_object*> m_uncached_objects; // Objects to be deleted.
-  Object_registry m_registry_committed;   // Registry of committed objects.
-  Object_registry m_registry_uncommitted; // Registry of uncommitted objects.
-  Object_registry m_registry_dropped;     // Registry of dropped objects.
-  THD *m_thd;                             // Thread context, needed for cache misses.
-  Auto_releaser m_default_releaser;       // Default auto releaser.
-  Auto_releaser *m_current_releaser;      // Current auto releaser.
-
+  /**
+    Se-private ids known not to exist in either TABLES or PARTITIONS
+    or both.
+  */
+  SPI_lru_cache_owner_ptr m_no_table_spids;
 
   /**
     Get a dictionary object.
@@ -237,7 +277,7 @@ private:
     transparently by the shared cache.
 
     @note This function must be called with type T being the same as
-          T::cache_partition_type. Dynamic casting to the actual subtype
+          T::Cache_partition. Dynamic casting to the actual subtype
           must be done at an outer level.
 
     @tparam      K       Key type.
@@ -256,9 +296,8 @@ private:
   */
 
   template <typename K, typename T>
-  bool acquire(const K &key, const T **object,
-               bool *local_committed, bool *local_uncommitted);
-
+  bool acquire(const K &key, const T **object, bool *local_committed,
+               bool *local_uncommitted) MY_ATTRIBUTE((warn_unused_result));
 
   /**
     Get an uncommitted dictionary object that can be modified safely.
@@ -280,7 +319,6 @@ private:
 
   template <typename K, typename T>
   void acquire_uncommitted(const K &key, T **object, bool *dropped);
-
 
   /**
     Mark all objects of a certain type as not being used by this client.
@@ -304,7 +342,6 @@ private:
   template <typename T>
   size_t release(Object_registry *registry);
 
-
   /**
     Release all objects in the submitted object registry.
 
@@ -326,26 +363,26 @@ private:
   */
 
   template <typename T>
-  void auto_delete(Dictionary_object *object)
-  {
+  void auto_delete(T *object) {
 #ifndef DBUG_OFF
     // Make sure we do not sign up a shared object for auto delete.
-    Cache_element<typename T::cache_partition_type> *element= nullptr;
+    Cache_element<typename T::Cache_partition> *element = nullptr;
     m_registry_committed.get(
-      static_cast<const typename T::cache_partition_type*>(object),
-      &element);
+        static_cast<const typename T::Cache_partition *>(object), &element);
     DBUG_ASSERT(element == nullptr);
 
     // Make sure we do not sign up an uncommitted object for auto delete.
     m_registry_uncommitted.get(
-      static_cast<const typename T::cache_partition_type*>(object),
-      &element);
+        static_cast<const typename T::Cache_partition *>(object), &element);
     DBUG_ASSERT(element == nullptr);
+
+    // We must require a top level non-default releaser to ensure a
+    // predictable life span of the objects.
+    DBUG_ASSERT(m_current_releaser != &m_default_releaser);
 #endif
 
     m_uncached_objects.push_back(object);
   }
-
 
   /**
     Remove an object from the auto delete vector.
@@ -355,22 +392,18 @@ private:
   */
 
   template <typename T>
-  void no_auto_delete(Dictionary_object *object)
-  {
+  void no_auto_delete(T *object) {
 #ifndef DBUG_OFF
     // Make sure the object has been registered as uncommitted.
-    Cache_element<typename T::cache_partition_type> *element= nullptr;
+    Cache_element<typename T::Cache_partition> *element = nullptr;
     m_registry_uncommitted.get(
-      static_cast<const typename T::cache_partition_type*>(object),
-      &element);
+        static_cast<const typename T::Cache_partition *>(object), &element);
     DBUG_ASSERT(element != nullptr);
 #endif
     m_uncached_objects.erase(std::remove(m_uncached_objects.begin(),
-                                          m_uncached_objects.end(),
-                                          object),
+                                         m_uncached_objects.end(), object),
                              m_uncached_objects.end());
   }
-
 
   /**
     Transfer object ownership from caller to Dictionary_client,
@@ -388,8 +421,7 @@ private:
   */
 
   template <typename T>
-  void register_uncommitted_object(T* object);
-
+  void register_uncommitted_object(T *object);
 
   /**
     Transfer object ownership from caller to Dictionary_client,
@@ -412,8 +444,7 @@ private:
   */
 
   template <typename T>
-  void register_dropped_object(T* object);
-
+  void register_dropped_object(T *object);
 
   /**
     Remove the uncommitted objects from the client and (depending
@@ -438,17 +469,34 @@ private:
   template <typename T>
   void remove_uncommitted_objects(bool commit_to_shared_cache);
 
-public:
+  template <typename T>
+  using Const_ptr_vec = std::vector<const T *>;
 
+  /**
+    Fetch objects from DD tables that match the supplied key.
 
+    @tparam Object_type Type of object to fetch.
+    @param coll         Vector to fill with objects.
+    @param object_key   The search key. If key is not supplied, then
+                        we do full index scan.
+
+    @return false       Success.
+    @return true        Failure (error is reported).
+  */
+
+  template <typename Object_type>
+  bool fetch(Const_ptr_vec<Object_type> *coll, const Object_key *object_key)
+      MY_ATTRIBUTE((warn_unused_result));
+
+ public:
   // Initialize an instance with a default auto releaser.
   explicit Dictionary_client(THD *thd);
-
 
   // Make sure all objects are released.
   ~Dictionary_client();
 
-
+  MY_COMPILER_DIAGNOSTIC_PUSH()
+  MY_COMPILER_CLANG_WORKAROUND_TPARAM_DOCBUG()
   /**
     Retrieve an object by its object id.
 
@@ -459,10 +507,11 @@ public:
     @retval       false   No error.
     @retval       true    Error (from handling a cache miss).
   */
+  MY_COMPILER_DIAGNOSTIC_POP()
 
   template <typename T>
-  bool acquire(Object_id id, const T** object);
-
+  bool acquire(Object_id id, const T **object)
+      MY_ATTRIBUTE((warn_unused_result));
 
   /**
     Retrieve an object by its object id.
@@ -478,8 +527,8 @@ public:
   */
 
   template <typename T>
-  bool acquire_for_modification(Object_id id, T** object);
-
+  bool acquire_for_modification(Object_id id, T **object)
+      MY_ATTRIBUTE((warn_unused_result));
 
   /**
     Retrieve an object by its object id without caching it.
@@ -498,8 +547,8 @@ public:
    */
 
   template <typename T>
-  bool acquire_uncached(Object_id id, T** object);
-
+  bool acquire_uncached(Object_id id, T **object)
+      MY_ATTRIBUTE((warn_unused_result));
 
   /**
     Retrieve a possibly uncommitted object by its object id without caching it.
@@ -522,8 +571,8 @@ public:
    */
 
   template <typename T>
-  bool acquire_uncached_uncommitted(Object_id id, T** object);
-
+  bool acquire_uncached_uncommitted(Object_id id, T **object)
+      MY_ATTRIBUTE((warn_unused_result));
 
   /**
     Retrieve an object by its name.
@@ -537,8 +586,8 @@ public:
   */
 
   template <typename T>
-  bool acquire(const String_type &object_name, const T** object);
-
+  bool acquire(const String_type &object_name, const T **object)
+      MY_ATTRIBUTE((warn_unused_result));
 
   /**
     Retrieve an object by its name.
@@ -554,8 +603,8 @@ public:
   */
 
   template <typename T>
-  bool acquire_for_modification(const String_type &object_name, T** object);
-
+  bool acquire_for_modification(const String_type &object_name, T **object)
+      MY_ATTRIBUTE((warn_unused_result));
 
   /**
     Retrieve an object by its schema- and object name.
@@ -581,8 +630,7 @@ public:
 
   template <typename T>
   bool acquire(const String_type &schema_name, const String_type &object_name,
-               const T** object);
-
+               const T **object) MY_ATTRIBUTE((warn_unused_result));
 
   /**
     Retrieve an object by its schema- and object name.
@@ -610,9 +658,8 @@ public:
 
   template <typename T>
   bool acquire_for_modification(const String_type &schema_name,
-                                const String_type &object_name,
-                                T** object);
-
+                                const String_type &object_name, T **object)
+      MY_ATTRIBUTE((warn_unused_result));
 
   /**
     Retrieve an object by its schema- and object name.
@@ -626,7 +673,7 @@ public:
     @note This is a variant of the method above asking for an object of type
           T, and hence using T's functions for updating name keys etc.
           This function, however, returns the instance pointed to as type
-          T::cache_partition_type to ease handling of various subtypes
+          T::Cache_partition to ease handling of various subtypes
           of the same base type.
 
     @todo TODO: We should change the MDL acquisition (see above) for a more
@@ -644,8 +691,8 @@ public:
 
   template <typename T>
   bool acquire(const String_type &schema_name, const String_type &object_name,
-               const typename T::cache_partition_type** object);
-
+               const typename T::Cache_partition **object)
+      MY_ATTRIBUTE((warn_unused_result));
 
   /**
     Retrieve an object by its schema- and object name.
@@ -661,7 +708,7 @@ public:
     @note This is a variant of the method above asking for an object of type
           T, and hence using T's functions for updating name keys etc.
           This function, however, returns the instance pointed to as type
-          T::cache_partition_type to ease handling of various subtypes
+          T::Cache_partition to ease handling of various subtypes
           of the same base type.
 
     @todo TODO: We should change the MDL acquisition (see above) for a more
@@ -680,8 +727,8 @@ public:
   template <typename T>
   bool acquire_for_modification(const String_type &schema_name,
                                 const String_type &object_name,
-                                typename T::cache_partition_type** object);
-
+                                typename T::Cache_partition **object)
+      MY_ATTRIBUTE((warn_unused_result));
 
   /**
     Retrieve a table object by its se private id.
@@ -702,8 +749,8 @@ public:
 
   bool acquire_uncached_table_by_se_private_id(const String_type &engine,
                                                Object_id se_private_id,
-                                               Table **table);
-
+                                               Table **table)
+      MY_ATTRIBUTE((warn_unused_result));
 
   /**
     Retrieve a table object by its partition se private id.
@@ -717,10 +764,8 @@ public:
   */
 
   bool acquire_uncached_table_by_partition_se_private_id(
-         const String_type &engine,
-         Object_id se_partition_id,
-         Table **table);
-
+      const String_type &engine, Object_id se_partition_id, Table **table)
+      MY_ATTRIBUTE((warn_unused_result));
 
   /**
     Retrieve schema and table name by the se private id of the table.
@@ -739,8 +784,8 @@ public:
   bool get_table_name_by_se_private_id(const String_type &engine,
                                        Object_id se_private_id,
                                        String_type *schema_name,
-                                       String_type *table_name);
-
+                                       String_type *table_name)
+      MY_ATTRIBUTE((warn_unused_result));
 
   /**
     Retrieve schema and table name by the se private id of the partition.
@@ -759,13 +804,13 @@ public:
   bool get_table_name_by_partition_se_private_id(const String_type &engine,
                                                  Object_id se_partition_id,
                                                  String_type *schema_name,
-                                                 String_type *table_name);
-
+                                                 String_type *table_name)
+      MY_ATTRIBUTE((warn_unused_result));
 
   /**
-    Retrieve a table name of a given trigger name and schema id.
+    Retrieve a table name of a given trigger name and schema.
 
-    @param        schema_id        schema id of the trigger.
+    @param        schema           Schema containing the trigger.
     @param        trigger_name     Name of the trigger.
     @param  [out] table_name       Name of the table for which
                                    trigger belongs to. Empty string if
@@ -775,31 +820,49 @@ public:
     @retval      true     Error.
   */
 
-  bool get_table_name_by_trigger_name(Object_id schema_id,
+  bool get_table_name_by_trigger_name(const Schema &schema,
                                       const String_type &trigger_name,
-                                      String_type *table_name);
-
+                                      String_type *table_name)
+      MY_ATTRIBUTE((warn_unused_result));
 
   /**
-    Get the highest currently used se private id for the table objects.
+    Check if schema contains foreign key with specified name.
 
-    @param       engine        Name of the engine storing the table.
-    @param [out] max_id        Max SE private id.
+    @param        schema            Schema containing the foreign key.
+    @param        foreign_key_name  Name of the foreign key.
+    @param  [out] exists            Set to true if foreign key with
+                                    the name provided exists in the
+                                    schema, false otherwise.
 
-    @return      true   Failure (error is reported).
-    @return      false  Success.
+    @retval      false    No error.
+    @retval      true     Error.
   */
 
-  bool get_tables_max_se_private_id(const String_type &engine,
-                                    Object_id *max_id);
+  bool check_foreign_key_exists(const Schema &schema,
+                                const String_type &foreign_key_name,
+                                bool *exists)
+      MY_ATTRIBUTE((warn_unused_result));
 
+  /**
+    Check if schema contains check constraint with specified name.
+
+    @param        schema            Schema containing the check constraint.
+    @param        check_cons_name   Name of the check constraint.
+    @param  [out] exists            Set to true if check constraint with
+                                    the name provided exists in the
+                                    schema, false otherwise.
+
+    @retval      false    No error.
+    @retval      true     Error.
+  */
+
+  bool check_constraint_exists(const Schema &schema,
+                               const String_type &check_cons_name,
+                               bool *exists);
 
   /**
     Fetch the names of the components in the schema. Hidden components are
     ignored. E.g., Object with dd::Table::hidden() == true will be ignored.
-
-    @note          This is an intermediate solution which will be replaced
-                   by the implementation in WL#6599.
 
     @tparam        T              Type of object to retrieve names for.
     @param         schema         Schema for which to get component names.
@@ -810,10 +873,70 @@ public:
   */
 
   template <typename T>
-  bool fetch_schema_component_names(
-    const Schema *schema,
-    std::vector<String_type> *names) const;
+  bool fetch_schema_component_names(const Schema *schema,
+                                    std::vector<String_type> *names) const
+      MY_ATTRIBUTE((warn_unused_result));
 
+  /**
+    Fetch the names of the tables in the schema belonging to specific
+    storage engine. E.g., Object with dd::Table::hidden() == true will be
+    ignored.
+
+    @param         schema         Schema for which to get component names.
+    @param         engine         Engine name of tables to match.
+    @param   [out] names          An std::vector containing all object names.
+
+    @return      true   Failure (error is reported).
+    @return      false  Success.
+  */
+
+  bool fetch_schema_table_names_by_engine(const Schema *schema,
+                                          const String_type &engine,
+                                          std::vector<String_type> *names) const
+      MY_ATTRIBUTE((warn_unused_result));
+
+  /**
+    Fetch the names of the server tables in the schema.  Ignore tables
+    hidden by SE.
+
+    @param         schema         Schema for which to get component names.
+    @param   [out] names          An std::vector containing all object names.
+
+    @return      true   Failure (error is reported).
+    @return      false  Success.
+  */
+
+  bool fetch_schema_table_names_not_hidden_by_se(
+      const Schema *schema, std::vector<String_type> *names) const
+      MY_ATTRIBUTE((warn_unused_result));
+
+  /**
+    Fetch all global component ids of the given type.
+
+    @tparam        T              Type of components to get.
+    @param   [out] ids            An std::vector containing all component ids.
+
+    @return      true   Failure (error is reported).
+    @return      false  Success.
+  */
+
+  template <typename T>
+  bool fetch_global_component_ids(std::vector<Object_id> *ids) const
+      MY_ATTRIBUTE((warn_unused_result));
+
+  /**
+    Fetch all global component names of the given type.
+
+    @tparam        T              Type of components to get.
+    @param   [out] names          An std::vector containing all component names.
+
+    @return      true   Failure (error is reported).
+    @return      false  Success.
+  */
+
+  template <typename T>
+  bool fetch_global_component_names(std::vector<String_type> *names) const
+      MY_ATTRIBUTE((warn_unused_result));
 
   /**
     Fetch all components in the schema.
@@ -827,10 +950,8 @@ public:
   */
 
   template <typename T>
-  bool fetch_schema_components(
-    const Schema *schema,
-    std::vector<const T*> *coll) const;
-
+  bool fetch_schema_components(const Schema *schema, Const_ptr_vec<T> *coll)
+      MY_ATTRIBUTE((warn_unused_result));
 
   /**
     Fetch all global components of the given type.
@@ -843,8 +964,23 @@ public:
   */
 
   template <typename T>
-  bool fetch_global_components(std::vector<const T*> *coll) const;
+  bool fetch_global_components(Const_ptr_vec<T> *coll)
+      MY_ATTRIBUTE((warn_unused_result));
 
+  /**
+     Check if a user is referenced as definer by some object of the given type.
+
+     @tparam        T              Type of dictionary objects to check.
+     @param         user           User name, including @ and host.
+     @param   [out] is_definer     True if the user is referenced as definer
+                                   by some object.
+
+     @return      true   Failure (error is reported, is_definer is undefined).
+     @return      false  Success.
+   */
+  template <typename T>
+  bool is_user_definer(const LEX_USER &user, bool *is_definer) const
+      MY_ATTRIBUTE((warn_unused_result));
 
   /**
     Fetch Object ids of all the views referencing base table/ view/ stored
@@ -863,22 +999,77 @@ public:
     @return      false  Success.
   */
   template <typename T>
-  bool fetch_referencing_views_object_id(
-    const char *schema,
-    const char *tbl_or_sf_name,
-    std::vector<Object_id> *view_ids) const;
-
+  bool fetch_referencing_views_object_id(const char *schema,
+                                         const char *tbl_or_sf_name,
+                                         std::vector<Object_id> *view_ids) const
+      MY_ATTRIBUTE((warn_unused_result));
 
   /**
-    Mark all objects acquired by this client as not being used anymore.
+    Fetch the names of tables (children) which have foreign keys
+    defined to the given table (parent).
 
-    This function will release all objects from the client's registry.
+    @param        parent_schema    Schema name of parent table.
+    @param        parent_name      Table name of parent table.
+    @param        parent_engine    Storage engine of parent table.
+    @param        uncommitted      Use READ_UNCOMMITTED isolation.
+    @param[out]   children_schemas Schema names of child tables.
+    @param[out]   children_names   Table names of child tables.
 
-    @return Number of objects released.
+    @return      true   Failure (error is reported).
+    @return      false  Success.
+
+    @note Child tables are identified by matching pairs of names.
+
+    @note This is a temporary workaround until WL#6049. This function will
+          *not* take any locks protecting against DDL changes. So the returned
+          names could become invalid at any time - e.g. due to DROP DATABASE,
+          DROP TABLE or DROP FOREIGN KEY.
   */
 
-  size_t release();
+  bool fetch_fk_children_uncached(const String_type &parent_schema,
+                                  const String_type &parent_name,
+                                  const String_type &parent_engine,
+                                  bool uncommitted,
+                                  std::vector<String_type> *children_schemas,
+                                  std::vector<String_type> *children_names)
+      MY_ATTRIBUTE((warn_unused_result));
 
+  /**
+     Invalidate a cache entry.
+
+     This function will acquire a table object based on the schema qualified
+     table name, and call 'invalidate(table_object)'.
+
+     @note This function only applies to tables yet.
+
+     @param        schema_name   Name of the schema containing the table.
+     @param        table_name    Name of the table.
+
+     @retval       false   No error.
+     @retval       true    Error (from handling a cache miss, or from
+                                  failing to get an MDL lock).
+   */
+
+  bool invalidate(const String_type &schema_name, const String_type &table_name)
+      MY_ATTRIBUTE((warn_unused_result));
+
+  /**
+    Invalidate a cache entry.
+
+    This function will remove and delete an object from the shared cache,
+    based on the id of the object. If the object id is present in the local
+    object registry and the auto releaser, it will be removed from there as
+    well.
+
+    @note There is no particular consideration of already dropped or modified
+          objects in this method.
+
+    @tparam T       Dictionary object type.
+    @param  object  Object to be invalidated.
+  */
+
+  template <typename T>
+  void invalidate(const T *object);
 
   /**
     Remove and delete an object from the cache and the dd tables.
@@ -889,6 +1080,8 @@ public:
     Afterwards, the object pointed to will also be deleted, and finally, the
     corresponding entry in the appropriate dd table is deleted. The object may
     not be accessed after calling this function.
+
+    @sa invalidate()
 
     @note The object parameter is const since the contents of the object
           is not really changed, the object is just deleted. The method
@@ -910,8 +1103,7 @@ public:
   */
 
   template <typename T>
-  bool drop(const T *object);
-
+  bool drop(const T *object) MY_ATTRIBUTE((warn_unused_result));
 
   /**
     Store a new dictionary object.
@@ -939,8 +1131,7 @@ public:
   */
 
   template <typename T>
-  bool store(T* object);
-
+  bool store(T *object) MY_ATTRIBUTE((warn_unused_result));
 
   /**
     Update a persisted dictionary object, but keep the shared cache unchanged.
@@ -968,8 +1159,7 @@ public:
   */
 
   template <typename T>
-  bool update(T* new_object);
-
+  bool update(T *new_object) MY_ATTRIBUTE((warn_unused_result));
 
   /**
     Remove the uncommitted objects from the client.
@@ -985,7 +1175,6 @@ public:
 
   void rollback_modified_objects();
 
-
   /**
     Remove the uncommitted objects from the client and put them into
     the shared cache, thereby making them visible to other clients.
@@ -994,7 +1183,6 @@ public:
   */
 
   void commit_modified_objects();
-
 
   /**
     Remove table statistics entries from mysql.table_stats and
@@ -1007,8 +1195,8 @@ public:
     @return false - on success
   */
   bool remove_table_dynamic_statistics(const String_type &schema_name,
-                                       const String_type &table_name);
-
+                                       const String_type &table_name)
+      MY_ATTRIBUTE((warn_unused_result));
 
   /**
     Debug dump of a partition of the client and its registry to stderr.
@@ -1020,7 +1208,13 @@ public:
   void dump() const;
 };
 
-} // namespace cache
-} // namespace dd
+}  // namespace cache
+}  // namespace dd
 
-#endif // DD_CACHE__DICTIONARY_CLIENT_INCLUDED
+// Functions declarations exported only to facilitate unit testing.
+namespace dd_cache_unittest {
+void insert(dd::cache::SPI_lru_cache_owner_ptr &c, dd::Object_id id);
+bool is_cached(const dd::cache::SPI_lru_cache_owner_ptr &c, dd::Object_id id);
+}  // namespace dd_cache_unittest
+
+#endif  // DD_CACHE__DICTIONARY_CLIENT_INCLUDED

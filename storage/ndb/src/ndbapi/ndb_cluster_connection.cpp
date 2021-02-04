@@ -1,14 +1,21 @@
 /*
-   Copyright (c) 2004, 2016, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2004, 2020, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -31,6 +38,7 @@
 #include <mgmapi_internal.h>
 #include "NdbImpl.hpp"
 #include "NdbDictionaryImpl.hpp"
+#include "ProcessInfo.hpp"
 
 #include <NdbMutex.h>
 #ifdef VM_TRACE
@@ -178,6 +186,13 @@ int Ndb_cluster_connection::start_connect_thread(int (*connect_callback)(void))
                        0, // default stack size
                        "ndb_cluster_connection",
 		       NDB_THREAD_PRIO_LOW);
+    if (m_impl.m_connect_thread == NULL)
+    {
+      ndbout_c("Ndb_cluster_connection::start_connect_thread: "
+               "Failed to create thread for cluster connection.");
+      assert(m_impl.m_connect_thread != NULL);
+      DBUG_RETURN(-1);
+    }
   }
   else if (r < 0)
   {
@@ -288,6 +303,12 @@ Ndb_cluster_connection::no_db_nodes()
   assert(m_impl.m_db_nodes.count() ==
            m_impl.m_nodes_proximity.size());
   return m_impl.m_nodes_proximity.size();
+}
+
+Uint32
+Ndb_cluster_connection::max_api_nodeid() const
+{
+  return m_impl.m_max_api_nodeid;
 }
 
 unsigned
@@ -410,6 +431,11 @@ unsigned Ndb_cluster_connection::get_min_db_version() const
   return m_impl.get_min_db_version();
 }
 
+unsigned Ndb_cluster_connection::get_min_api_version() const
+{
+  return m_impl.get_min_api_version();
+}
+
 int Ndb_cluster_connection::get_latest_error() const
 {
   return m_impl.m_latest_error;
@@ -437,7 +463,11 @@ Ndb_cluster_connection_impl(const char * connect_string,
     m_latest_error_msg(),
     m_latest_error(0),
     m_data_node_neighbour(0),
-    m_multi_wait_group(0)
+    m_multi_wait_group(0),
+    m_uri_scheme(NULL),
+    m_uri_host(NULL),
+    m_uri_path(NULL),
+    m_uri_port(0)
 {
   DBUG_ENTER("Ndb_cluster_connection");
   DBUG_PRINT("enter",("Ndb_cluster_connection this=0x%lx", (long) this));
@@ -590,6 +620,10 @@ Ndb_cluster_connection_impl::~Ndb_cluster_connection_impl()
   if(m_multi_wait_group)
     delete m_multi_wait_group;
   m_multi_wait_group = 0;
+
+  m_uri_scheme.clear();
+  m_uri_path.clear();
+  m_uri_host.clear();
 
   DBUG_VOID_RETURN;
 }
@@ -902,11 +936,46 @@ Ndb_cluster_connection_impl::set_name(const char *name)
 }
 
 int
+Ndb_cluster_connection_impl::set_service_uri(const char * scheme,
+                                             const char * host,
+                                             int port, const char * path)
+{
+  if(! ProcessInfo::isValidUri(scheme, path))
+  {
+    return 1;
+  }
+
+  /* Clear out existing values */
+  m_uri_scheme.clear();
+  m_uri_host.clear();
+  m_uri_port = 0;
+  m_uri_path.clear();
+
+  /* If already connected, ClusterMgr will send new ProcessInfo reports.
+     Otherwise save a copy of values until connected.
+  */
+  if(m_transporter_facade->theClusterMgr->getNoOfConnectedNodes())
+  {
+    m_transporter_facade->theClusterMgr->setProcessInfoUri(scheme, host,
+                                                           port, path);
+  }
+  else
+  {
+    m_uri_scheme.assign(scheme);
+    m_uri_host.assign(host);
+    m_uri_port = port;
+    m_uri_path.assign(path);
+  }
+
+  return 0;
+}
+
+int
 Ndb_cluster_connection_impl::init_nodes_vector(Uint32 nodeid,
-					       const ndb_mgm_configuration 
-					       &config)
+                               const ndb_mgm_configuration &config)
 {
   DBUG_ENTER("Ndb_cluster_connection_impl::init_nodes_vector");
+  Uint32 my_location_domain_id = m_location_domain_id[nodeid];
   ndb_mgm_configuration_iterator iter(config, CFG_SECTION_CONNECTION);
   
   for(iter.first(); iter.valid(); iter.next())
@@ -933,17 +1002,82 @@ Ndb_cluster_connection_impl::init_nodes_vector(Uint32 nodeid,
     if(iter.get(CFG_TYPE_OF_SECTION, &type)) continue;
 
     switch(type){
-    case CONNECTION_TYPE_SHM:{
-      break;
-    }
-    case CONNECTION_TYPE_SCI:{
-      break;
-    }
+    case CONNECTION_TYPE_SHM:
+      /**
+       * We use same algorithm also for SHM transporters.
+       * A shared memory transporter is obviously in the
+       * same location domain, but for test purposes we
+       * will still respect the location domain concept
+       * and decrease group value by 10 if we are in same
+       * location domain id and on the same host and by
+       * 5 if we are on same location domain id and not
+       * on same host and if we are only same host we will
+       * decrease it by 1.
+       */
     case CONNECTION_TYPE_TCP:{
       // connecting through localhost
       // check if config_hostname is local
-      if (SocketServer::tryBind(0,remoteHostName))
-	group--; // upgrade group value
+      // check if in same location domain
+
+      /**
+       * There is a configuration item on a communication
+       * linked called Group. This item is mostly set by
+       * other config parameters and checks of the hosts
+       * involved.
+       *
+       * By default the group is set to 55. If two nodes
+       * are in the same location domain the group is set
+       * to 50. If they are both in the same location
+       * domain and additionally on the same host the
+       * group is set to 45.
+       * If no location domain is set and we are on the
+       * same host, we set the group to 54.
+       *
+       * If the nodes are on the same host, but the test
+       * below fails, it is possible in the MySQL server
+       * to set ndb_data_node_neighbour to indicate which
+       * data node is closest to us. This will also have
+       * an impact on the group number.
+       *
+       * Finally it is possible to set the group number
+       * from the configuration to implement any type of
+       * priorities among the nodes.
+       *
+       * The changes due to location domain and hosts
+       * are only relative, so it is relative to the
+       * numbers provided in the config.
+       *
+       * One should not set the config of group to
+       * anything smaller than 50 given that data
+       * node neighbour decreases the group number
+       * by 50.
+       *
+       * If someone has set a node to be in different
+       * location domains and they are still running on the
+       * same host we trust that the user have done this for
+       * a good reason, whether it be testing or some other
+       * reason.
+       */
+      if (my_location_domain_id != 0 &&
+               my_location_domain_id ==
+               m_location_domain_id[remoteNodeId])
+      {
+        if (SocketServer::tryBind(0,remoteHostName))
+        {
+	  group -= 10; // upgrade group value
+        }
+        else
+        {
+          group -= 5;
+        }
+      }
+      else if (my_location_domain_id == 0)
+      {
+        if (SocketServer::tryBind(0,remoteHostName))
+        {
+	  group -= 1; // upgrade group value
+        }
+      }
       break;
     }
     }
@@ -1128,23 +1262,56 @@ Ndb_cluster_connection_impl::configure(Uint32 nodeId,
       m_config.m_default_hashmap_size = default_hashmap_size;
     }
 
+    memset(&m_location_domain_id[0], 0, sizeof(m_location_domain_id));
     // Configure timeouts
     {
       Uint32 timeout = 120000;
+      Uint32 max_node_id = 0;
       // Use new iterator to leave iter valid.
       ndb_mgm_configuration_iterator iterall(config, CFG_SECTION_NODE);
       for (; iterall.valid(); iterall.next())
       {
         Uint32 tmp1 = 0, tmp2 = 0;
+        Uint32 nodeId = 0;
+        Uint32 location_domain_id = 0;
+        Uint32 node_type;
+        char *host_str;
+        iterall.get(CFG_NODE_ID, &nodeId);
+        iterall.get(CFG_TYPE_OF_SECTION, &node_type);
+        if (node_type == NODE_TYPE_API)
+        {
+          if (max_node_id < nodeId)
+          {
+            max_node_id = nodeId;
+          }
+        }
         iterall.get(CFG_DB_TRANSACTION_CHECK_INTERVAL, &tmp1);
         iterall.get(CFG_DB_TRANSACTION_DEADLOCK_TIMEOUT, &tmp2);
+        iterall.get(CFG_LOCATION_DOMAIN_ID, &location_domain_id);
+        iterall.get(CFG_NODE_HOST, (const char**)&host_str);
+        require(nodeId != 0);
+        if (host_str != NULL && location_domain_id != 0)
+        {
+          m_location_domain_id[nodeId] = location_domain_id;
+        }
         tmp1 += tmp2;
         if (tmp1 > timeout)
           timeout = tmp1;
       }
       m_config.m_waitfor_timeout = timeout;
+      m_max_api_nodeid = max_node_id;
     }
   }
+
+  m_my_node_id = nodeId;
+  m_my_location_domain_id = m_location_domain_id[nodeId];
+
+  // System name
+  ndb_mgm_configuration_iterator s_iter(config, CFG_SECTION_SYSTEM);
+  const char * tmp_system_name;
+  s_iter.get(CFG_SYS_NAME, & tmp_system_name);
+  m_system_name.assign(tmp_system_name);
+
   DBUG_RETURN(init_nodes_vector(nodeId, config));
 }
 
@@ -1208,6 +1375,18 @@ void Ndb_cluster_connection::set_data_node_neighbour(Uint32 node)
 void Ndb_cluster_connection::set_name(const char *name)
 {
   m_impl.set_name(name);
+}
+
+int Ndb_cluster_connection::set_service_uri(const char * scheme,
+                                            const char * host, int port,
+                                            const char * path)
+{
+  return m_impl.set_service_uri(scheme, host, port, path);
+}
+
+const char * Ndb_cluster_connection::get_system_name() const
+{
+  return m_impl.m_system_name.c_str();
 }
 
 int Ndb_cluster_connection_impl::connect(int no_retries,
@@ -1275,7 +1454,10 @@ int Ndb_cluster_connection_impl::connect(int no_retries,
       ndb_mgm_destroy_configuration(props);
       DBUG_RETURN(-1);
     }
-
+    m_transporter_facade->theClusterMgr->setProcessInfoUri(m_uri_scheme.c_str(),
+                                                           m_uri_host.c_str(),
+                                                           m_uri_port,
+                                                           m_uri_path.c_str());
     ndb_mgm_destroy_configuration(props);
     m_transporter_facade->connected();
     m_latest_error = 0;
@@ -1448,7 +1630,85 @@ Ndb_cluster_connection::release_ndb_wait_group(NdbWaitGroup *group)
 }
 
 Uint32
-Ndb_cluster_connection_impl::select_node(const Uint16 * nodes,
+Ndb_cluster_connection_impl::select_any(NdbImpl *impl_ndb)
+{
+  Uint16 prospective_node_ids[MAX_NDB_NODES];
+  Uint32 num_prospective_nodes = 0;
+  Uint32 my_location_domain_id = m_my_location_domain_id;
+  if (my_location_domain_id == 0)
+  {
+    return 0;
+  }
+  for (Uint32 i = 0; i < m_nodes_proximity.size(); i++)
+  {
+    Uint32 nodeid = m_nodes_proximity[i].id;
+    if (my_location_domain_id == m_location_domain_id[nodeid] &&
+        impl_ndb->get_node_available(nodeid))
+    {
+      prospective_node_ids[num_prospective_nodes++] = nodeid;
+    }
+  }
+  if (num_prospective_nodes == 0)
+  {
+    return 0;
+  }
+  else if (num_prospective_nodes == 1)
+  {
+    return prospective_node_ids[0];
+  }
+  else
+  {
+    return select_node(impl_ndb, prospective_node_ids, num_prospective_nodes);
+  }
+}
+
+/**
+ * Select from the same location domain if possible, otherwise select
+ * primary node. If primary is in correct location domain we will pick
+ * it.
+ */
+Uint32
+Ndb_cluster_connection_impl::select_location_based(NdbImpl *impl_ndb,
+                                                   const Uint16 * nodes,
+                                                   Uint32 cnt)
+{
+  Uint16 prospective_node_ids[MAX_NDB_NODES];
+  Uint32 num_prospective_nodes = 0;
+  Uint32 my_location_domain_id = m_my_location_domain_id;
+
+  if (my_location_domain_id == 0)
+  {
+    return nodes[0];
+  }
+  for (Uint32 i = 0; i < cnt; i++)
+  {
+    if (my_location_domain_id == m_location_domain_id[nodes[i]] &&
+        impl_ndb->get_node_available(nodes[i]))
+    {
+      if (i == 0)
+      {
+        return nodes[0];
+      }
+      prospective_node_ids[num_prospective_nodes++] = nodes[i];
+    }
+  }
+  if (num_prospective_nodes == 0)
+  {
+    return nodes[0];
+  }
+  else if (num_prospective_nodes == 1)
+  {
+    return prospective_node_ids[0];
+  }
+  else
+  {
+    return select_node(impl_ndb, prospective_node_ids, num_prospective_nodes);
+  }
+}
+
+Uint32
+Ndb_cluster_connection_impl::select_node(NdbImpl *impl_ndb,
+                                         const Uint16 * nodes,
                                          Uint32 cnt)
 {
   if (cnt == 1)
@@ -1465,8 +1725,8 @@ Ndb_cluster_connection_impl::select_node(const Uint16 * nodes,
   const Uint32 nodes_arr_cnt = m_nodes_proximity.size();
 
   Uint32 best_node = nodes[0];
-  Uint32 best_idx;
-  Uint32 best_usage;
+  Uint32 best_idx = Uint32(~0);
+  Uint32 best_usage = 0;
   Int32 best_score = MAX_PROXIMITY_GROUP; // Lower is better
 
   if (!m_impl.m_optimized_node_selection)
@@ -1482,6 +1742,11 @@ Ndb_cluster_connection_impl::select_node(const Uint16 * nodes,
         continue;
 
       checked.set(candidate_node);
+
+      if (!impl_ndb->get_node_available(candidate_node))
+      {
+        continue;
+      }
 
       for (Uint32 i = 0; i < nodes_arr_cnt; i++)
       {
@@ -1519,6 +1784,9 @@ Ndb_cluster_connection_impl::select_node(const Uint16 * nodes,
 
       checked.set(candidate_node);
 
+      if (!impl_ndb->get_node_available(candidate_node))
+        continue;
+
       for (Uint32 i = 0; i < nodes_arr_cnt; i++)
       {
         if (nodes_arr[i].adjusted_group > best_score)
@@ -1555,8 +1823,11 @@ Ndb_cluster_connection_impl::select_node(const Uint16 * nodes,
       }
     }
   }
-  nodes_arr[best_idx].hint_count =
-    (nodes_arr[best_idx].hint_count + 1) & HINT_COUNT_MASK;
+  if (best_idx != Uint32(~0))
+  {
+    nodes_arr[best_idx].hint_count =
+      (nodes_arr[best_idx].hint_count + 1) & HINT_COUNT_MASK;
+  }
   return best_node;
 }
 

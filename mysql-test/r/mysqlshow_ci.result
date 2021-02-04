@@ -79,11 +79,17 @@ Database: information_schema
 +---------------------------------------+
 |                Tables                 |
 +---------------------------------------+
+| ADMINISTRABLE_ROLE_AUTHORIZATIONS     |
+| APPLICABLE_ROLES                      |
 | CHARACTER_SETS                        |
+| CHECK_CONSTRAINTS                     |
 | COLLATION_CHARACTER_SET_APPLICABILITY |
 | COLLATIONS                            |
 | COLUMN_PRIVILEGES                     |
+| COLUMN_STATISTICS                     |
 | COLUMNS                               |
+| COLUMNS_EXTENSIONS                    |
+| ENABLED_ROLES                         |
 | ENGINES                               |
 | EVENTS                                |
 | FILES                                 |
@@ -97,26 +103,29 @@ Database: information_schema
 | INNODB_CMP_RESET                      |
 | INNODB_CMPMEM                         |
 | INNODB_CMPMEM_RESET                   |
+| INNODB_COLUMNS                        |
+| INNODB_DATAFILES                      |
+| INNODB_FIELDS                         |
+| INNODB_FOREIGN                        |
+| INNODB_FOREIGN_COLS                   |
 | INNODB_FT_BEING_DELETED               |
 | INNODB_FT_CONFIG                      |
 | INNODB_FT_DEFAULT_STOPWORD            |
 | INNODB_FT_DELETED                     |
 | INNODB_FT_INDEX_CACHE                 |
 | INNODB_FT_INDEX_TABLE                 |
+| INNODB_INDEXES                        |
 | INNODB_METRICS                        |
-| INNODB_SYS_COLUMNS                    |
-| INNODB_SYS_DATAFILES                  |
-| INNODB_SYS_FIELDS                     |
-| INNODB_SYS_FOREIGN                    |
-| INNODB_SYS_FOREIGN_COLS               |
-| INNODB_SYS_INDEXES                    |
-| INNODB_SYS_TABLES                     |
-| INNODB_SYS_TABLESPACES                |
-| INNODB_SYS_TABLESTATS                 |
-| INNODB_SYS_VIRTUAL                    |
+| INNODB_SESSION_TEMP_TABLESPACES       |
+| INNODB_TABLES                         |
+| INNODB_TABLESPACES                    |
+| INNODB_TABLESPACES_BRIEF              |
+| INNODB_TABLESTATS                     |
 | INNODB_TEMP_TABLE_INFO                |
 | INNODB_TRX                            |
+| INNODB_VIRTUAL                        |
 | KEY_COLUMN_USAGE                      |
+| KEYWORDS                              |
 | OPTIMIZER_TRACE                       |
 | PARAMETERS                            |
 | PARTITIONS                            |
@@ -124,34 +133,47 @@ Database: information_schema
 | PROCESSLIST                           |
 | PROFILING                             |
 | REFERENTIAL_CONSTRAINTS               |
+| RESOURCE_GROUPS                       |
+| ROLE_COLUMN_GRANTS                    |
+| ROLE_ROUTINE_GRANTS                   |
+| ROLE_TABLE_GRANTS                     |
 | ROUTINES                              |
 | SCHEMA_PRIVILEGES                     |
 | SCHEMATA                              |
-| SHOW_STATISTICS                       |
-| SHOW_STATISTICS_DYNAMIC               |
+| SCHEMATA_EXTENSIONS                   |
 | ST_GEOMETRY_COLUMNS                   |
 | ST_SPATIAL_REFERENCE_SYSTEMS          |
+| ST_UNITS_OF_MEASURE                   |
 | STATISTICS                            |
-| STATISTICS_BASE                       |
-| STATISTICS_DYNAMIC                    |
 | TABLE_CONSTRAINTS                     |
+| TABLE_CONSTRAINTS_EXTENSIONS          |
 | TABLE_PRIVILEGES                      |
 | TABLES                                |
-| TABLES_DYNAMIC                        |
+| TABLES_EXTENSIONS                     |
 | TABLESPACES                           |
+| TABLESPACES_EXTENSIONS                |
 | TRIGGERS                              |
+| USER_ATTRIBUTES                       |
 | USER_PRIVILEGES                       |
+| VIEW_ROUTINE_USAGE                    |
+| VIEW_TABLE_USAGE                      |
 | VIEWS                                 |
 +---------------------------------------+
 Database: INFORMATION_SCHEMA
 +---------------------------------------+
 |                Tables                 |
 +---------------------------------------+
+| ADMINISTRABLE_ROLE_AUTHORIZATIONS     |
+| APPLICABLE_ROLES                      |
 | CHARACTER_SETS                        |
+| CHECK_CONSTRAINTS                     |
 | COLLATION_CHARACTER_SET_APPLICABILITY |
 | COLLATIONS                            |
 | COLUMN_PRIVILEGES                     |
+| COLUMN_STATISTICS                     |
 | COLUMNS                               |
+| COLUMNS_EXTENSIONS                    |
+| ENABLED_ROLES                         |
 | ENGINES                               |
 | EVENTS                                |
 | FILES                                 |
@@ -165,26 +187,29 @@ Database: INFORMATION_SCHEMA
 | INNODB_CMP_RESET                      |
 | INNODB_CMPMEM                         |
 | INNODB_CMPMEM_RESET                   |
+| INNODB_COLUMNS                        |
+| INNODB_DATAFILES                      |
+| INNODB_FIELDS                         |
+| INNODB_FOREIGN                        |
+| INNODB_FOREIGN_COLS                   |
 | INNODB_FT_BEING_DELETED               |
 | INNODB_FT_CONFIG                      |
 | INNODB_FT_DEFAULT_STOPWORD            |
 | INNODB_FT_DELETED                     |
 | INNODB_FT_INDEX_CACHE                 |
 | INNODB_FT_INDEX_TABLE                 |
+| INNODB_INDEXES                        |
 | INNODB_METRICS                        |
-| INNODB_SYS_COLUMNS                    |
-| INNODB_SYS_DATAFILES                  |
-| INNODB_SYS_FIELDS                     |
-| INNODB_SYS_FOREIGN                    |
-| INNODB_SYS_FOREIGN_COLS               |
-| INNODB_SYS_INDEXES                    |
-| INNODB_SYS_TABLES                     |
-| INNODB_SYS_TABLESPACES                |
-| INNODB_SYS_TABLESTATS                 |
-| INNODB_SYS_VIRTUAL                    |
+| INNODB_SESSION_TEMP_TABLESPACES       |
+| INNODB_TABLES                         |
+| INNODB_TABLESPACES                    |
+| INNODB_TABLESPACES_BRIEF              |
+| INNODB_TABLESTATS                     |
 | INNODB_TEMP_TABLE_INFO                |
 | INNODB_TRX                            |
+| INNODB_VIRTUAL                        |
 | KEY_COLUMN_USAGE                      |
+| KEYWORDS                              |
 | OPTIMIZER_TRACE                       |
 | PARAMETERS                            |
 | PARTITIONS                            |
@@ -192,23 +217,30 @@ Database: INFORMATION_SCHEMA
 | PROCESSLIST                           |
 | PROFILING                             |
 | REFERENTIAL_CONSTRAINTS               |
+| RESOURCE_GROUPS                       |
+| ROLE_COLUMN_GRANTS                    |
+| ROLE_ROUTINE_GRANTS                   |
+| ROLE_TABLE_GRANTS                     |
 | ROUTINES                              |
 | SCHEMA_PRIVILEGES                     |
 | SCHEMATA                              |
-| SHOW_STATISTICS                       |
-| SHOW_STATISTICS_DYNAMIC               |
+| SCHEMATA_EXTENSIONS                   |
 | ST_GEOMETRY_COLUMNS                   |
 | ST_SPATIAL_REFERENCE_SYSTEMS          |
+| ST_UNITS_OF_MEASURE                   |
 | STATISTICS                            |
-| STATISTICS_BASE                       |
-| STATISTICS_DYNAMIC                    |
 | TABLE_CONSTRAINTS                     |
+| TABLE_CONSTRAINTS_EXTENSIONS          |
 | TABLE_PRIVILEGES                      |
 | TABLES                                |
-| TABLES_DYNAMIC                        |
+| TABLES_EXTENSIONS                     |
 | TABLESPACES                           |
+| TABLESPACES_EXTENSIONS                |
 | TRIGGERS                              |
+| USER_ATTRIBUTES                       |
 | USER_PRIVILEGES                       |
+| VIEW_ROUTINE_USAGE                    |
+| VIEW_TABLE_USAGE                      |
 | VIEWS                                 |
 +---------------------------------------+
 Wildcard: inf_rmation_schema
@@ -244,8 +276,6 @@ DROP DATABASE b12688860_db;
 # sql_mode = 'NO_BACKSLASH_ESCAPES'
 SET @OLD_SQL_MODE = @@SQL_MODE;
 SET GLOBAL sql_mode = 'NO_BACKSLASH_ESCAPES';
-Warnings:
-Warning	3090	Changing sql mode 'NO_AUTO_CREATE_USER' is deprecated. It will be removed in a future release.
 SHOW GLOBAL VARIABLES LIKE 'sql_mode';
 Variable_name	Value
 sql_mode	NO_BACKSLASH_ESCAPES
@@ -274,8 +304,6 @@ Database: test  Wildcard: `t%
 DROP TABLE ```t1`, ```t2`;
 # sql_mode = ''
 SET GLOBAL sql_mode = '';
-Warnings:
-Warning	3090	Changing sql mode 'NO_AUTO_CREATE_USER' is deprecated. It will be removed in a future release.
 SHOW GLOBAL VARIABLES LIKE 'sql_mode';
 Variable_name	Value
 sql_mode	

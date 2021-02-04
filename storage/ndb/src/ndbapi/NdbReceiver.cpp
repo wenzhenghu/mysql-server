@@ -1,14 +1,21 @@
 /*
-   Copyright (c) 2003, 2015, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2003, 2020, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -124,16 +131,19 @@ public:
   }
 
   /**
-   * We know 'bufSizeWords', the total max size of data to store 
-   * in the buffer. In addition there are some overhead required by
+   * Calculate total words required to be allocated for the
+   * NdbReceiverBuffer structure.
+   *
+   * We know 'batchSizeWords', the total max size of data to fetch
+   * from the data nodes. In addition there are some overhead required by
    * the buffer management itself. Calculate total words required to
    * be allocated for the NdbReceiverBuffer structure.
    */
-  static Uint32 calculateSizeInWords(Uint32 bufSizeWords, 
-                                     Uint32 batchRows,
-                                     Uint32 keySize)
+  static Uint32 calculateBufferSizeInWords(Uint32 batchRows,
+                                           Uint32 batchSizeWords, 
+                                           Uint32 keySize)
   {
-    return  bufSizeWords +          // Words to store
+    return  batchSizeWords +        // Words to store
             1 +                     // 'eodMagic' in buffer
             headerWords +           // Admin overhead
             ((keySize > 0)          // Row + optional key indexes
@@ -286,7 +296,7 @@ NdbReceiver::~NdbReceiver()
 {
   DBUG_ENTER("NdbReceiver::~NdbReceiver");
   if (m_id != NdbObjectIdMap::InvalidId) {
-    m_ndb->theImpl->theNdbObjectIdMap.unmap(m_id, this);
+    m_ndb->theImpl->unmapRecipient(m_id, this);
   }
   DBUG_VOID_RETURN;
 }
@@ -322,7 +332,7 @@ NdbReceiver::init(ReceiverType type, void* owner)
   {
     if (m_ndb)
     {
-      m_id = m_ndb->theImpl->theNdbObjectIdMap.map(this);
+      m_id = m_ndb->theImpl->mapRecipient(this);
       if (m_id == NdbObjectIdMap::InvalidId)
       {
         setErrorCode(4000);
@@ -430,8 +440,6 @@ NdbReceiver::prepareReceive(NdbReceiverBuffer *buffer)
 
   The client should be prepared to receive, and buffer, upto 
   'batch_size' rows from each fragment.
-  ::ndbrecord_bufsize() might be usefull for calculating the
-  buffersize to allocate for this resultset.
 */
 //static
 void
@@ -459,8 +467,6 @@ NdbReceiver::calculate_batch_size(const NdbImpl& theImpl,
   if (unlikely(batch_size > batch_byte_size)) {
     batch_size= batch_byte_size;
   }
-
-  return;
 }
 
 void
@@ -493,26 +499,37 @@ NdbReceiver::ndbrecord_rowsize(const NdbRecord *result_record,
 
 /**
  * Calculate max size (In Uint32 words) of a 'packed' result row,
- * including optional 'keyinfo' and 'range_no'.
+ * including optional 'keyinfo', 'range_no' and 'correlation'.
+ *
+ * Note that
+ *   - keyInfo is stored in its own 'key storage' in the buffer.
+ *   - 'correlation' is not stored in the receive buffer at all.
  */
 static
 Uint32 packed_rowsize(const NdbRecord *result_record,
                       const Uint32* read_mask,
                       const NdbRecAttr *first_rec_attr,
                       Uint32 keySizeWords,
-                      bool read_range_no)
+                      bool read_range_no,
+                      bool read_correlation)
 {
   Uint32 nullCount = 0;
   Uint32 bitPos = 0;
   const Uint8 *pos = NULL;
 
+  bool pk_is_known = false;
   if (likely(result_record != NULL))
   {
     for (Uint32 i= 0; i<result_record->noOfColumns; i++)
     {
       const NdbRecord::Attr *col= &result_record->columns[i];
+      const bool is_pk= (col->flags & NdbRecord::IsKey);
       const Uint32 attrId= col->attrId;
 
+      if (is_pk)
+      {
+        pk_is_known = true;
+      }
       /* Skip column if result_mask says so and we don't need
        * to read it 
        */
@@ -545,7 +562,12 @@ Uint32 packed_rowsize(const NdbRecord *result_record,
   // variable size bitmask the 'packed' columns and their null bits.
   if (sizeInWords > 0)
   {
-    const Uint32 attrCount= result_record->columns[result_record->noOfColumns -1].attrId+1;
+    Uint32 attrCount= result_record->columns[result_record->noOfColumns -1].attrId+1;
+    if (! pk_is_known)
+    {
+      // Hidden key column is still present in bitmask
+      attrCount++;
+    }
     const Uint32 sigBitmaskWords= ((attrCount+nullCount+31)>>5);
     sizeInWords += (1+sigBitmaskWords);   //AttrHeader + bitMask
   }
@@ -555,6 +577,12 @@ Uint32 packed_rowsize(const NdbRecord *result_record,
   if (read_range_no)
   {
     sizeInWords += 2;
+  }
+  // The optional CORR_FACTOR is transfered
+  // as AttributeHeader::CORR_FACTOR64 + an Uint64
+  if (read_correlation)
+  {
+    sizeInWords += 3;
   }
 
   // KeyInfo is transfered in a seperate signal,
@@ -577,72 +605,134 @@ Uint32 packed_rowsize(const NdbRecord *result_record,
 }
 
 /**
- * Calculate max size (In Uint32 words) of a buffer containing
- * 'batch_rows' of packed result rows. Size also include 
- * overhead required by the NdbReceiverBuffer itself.
+ * Calculate the two parameters 'batch_bytes' and 
+ * 'buffer_bytes' required for result set of 'batch_rows':
+ *
+ * - 'batch_bytes' is the 'batch_size_bytes' argument to be
+ *   specified as part of a SCANREQ signal. It could be set
+ *   as an IN argument, in which case it would be an upper limit
+ *   of the allowed batch size. If '0' it will return the max
+ *   'byte' size required for all 'batch_rows'. If set, it will
+ *   also be capped to the max required 'batch_rows' size.
+ *
+ * - 'buffer_bytes' is the size of the buffer needed to be allocated
+ *   in order to store the result batch of size batch_rows / _bytes.
+ *   Size also include overhead required by the NdbReceiverBuffer itself.
  */
-static
-Uint32 ndbrecord_bufsize(Uint32 batchRows,
-                         Uint32 batchBytes,      //Optional upper limit of batch size
-                         Uint32 fragments,       //Frags handled by this receiver (>= 1)
-                         Uint32 rowSizeWords,    //Packed size, from ::packed_rowsize() 
-                         Uint32 keySizeWords)    //In words
-{
-  /**
-   * Size of batch is either limited by max 'batchRows' fetched,
-   * or when the total 'batchBytes' limit is reached. In the
-   * later case we are allowed to over-allocate by allowing 
-   * each fragment delivering to this NdbReceiver to complete
-   * the current row / key. If KeyInfo is requested, an additional
-   *'info' word is also added for each key which comes in addition
-   *  to the 'batch_byte' limit
-   */
-  assert(batchRows > 0);
-  Uint32 batchSizeWords = batchRows * rowSizeWords;
-
-  // Result set size may be limited by 'batch_words' if specified.
-  if (batchBytes > 0)
-  {
-    const Uint32 batchWords = (batchBytes+3) / sizeof(Uint32);
-    // Batch size + over alloc last row + info word if keyinfo20
-    const Uint32 batchSizeLimit = batchWords
-                                + (rowSizeWords * fragments)
-                                + ((keySizeWords > 0) ? batchRows : 0);
-
-    if (batchSizeWords > batchSizeLimit)
-      batchSizeWords = batchSizeLimit;
-  }
-
-  return NdbReceiverBuffer::calculateSizeInWords(batchSizeWords, batchRows, keySizeWords);
-}
-
 //static
-Uint32
-NdbReceiver::result_bufsize(Uint32 batchRows,
-                            Uint32 batchBytes,
-                            Uint32 fragments,
-                            const NdbRecord *result_record,
+void
+NdbReceiver::result_bufsize(const NdbRecord *result_record,
                             const Uint32* read_mask,
                             const NdbRecAttr *first_rec_attr,
                             Uint32 keySizeWords,
-                            bool read_range_no)
+                            bool   read_range_no,
+                            bool   read_correlation,
+                            Uint32  parallelism,
+                            Uint32  batch_rows,   //Argument in SCANREQ
+                            Uint32& batch_bytes,  //Argument in SCANREQ
+                            Uint32& buffer_bytes) //Buffer needed to store result
 {
+  assert(parallelism >= 1);
+  assert(batch_rows  > 0);
+
+  /**
+   * Calculate size of a single row as sent by TUP.
+   * Include optional 'keyInfo', RANGE_NO and CORR_FACTOR.
+   */
   const Uint32 rowSizeWords= packed_rowsize(
                                        result_record,
                                        read_mask,
                                        first_rec_attr,
                                        keySizeWords,
-                                       read_range_no);
+                                       read_range_no,
+                                       read_correlation);
 
-  const Uint32 bufSizeWords= ndbrecord_bufsize(
-                                          batchRows, 
-                                          batchBytes,
-                                          fragments,
-                                          rowSizeWords,
-                                          keySizeWords);
+  // Size of a full result set of 'batch_rows':
+  const Uint32 fullBatchSizeWords = batch_rows * rowSizeWords;
 
-  // bufsize is in word, return as bytes
-  return bufSizeWords * sizeof(Uint32);
+  /**
+   * Size of batch, and the required 'buffer_bytes', is either 
+   * limited by fetching all 'batch_rows', or by exhausting the max
+   * allowed 'batch_bytes'.
+   *
+   * In the later case we can make no assumption about number of rows we
+   * actually fetched, except that it will be in the range 1..'batch_rows'.
+   * So we need to take a conservative approach in our calulations here. 
+   *
+   * Furthermore, LQH doesn't terminate the batch until *after*
+   * 'batch_bytes' has been exceed. Thus it could over-deliver
+   * upto 'rowSizeWords-1' more than specified in 'batch_bytes'!
+   * When used from SPJ, the available 'batch_bytes' may be divided
+   * among a number of 'parallelism' fragment scans being joined.
+   * Each of these may over-deliver on the last row as described above.
+   *
+   * Note that the CORR_FACTOR is special in that SPJ does not store
+   * it in the receiver buffer. Thus, the size of the CORR_FACTOR64
+   * is subtracted when calculating needed buffer space for the batch.
+   *
+   * If KeyInfo is requested, an additional 'info' word is stored 
+   * in the buffer in addition to the 'keySize' already being part
+   * of the calculated packed_rowsize().
+   */
+  Uint32 maxWordsToBuffer = 0;
+
+  if (batch_bytes == 0 ||
+      batch_bytes > fullBatchSizeWords*sizeof(Uint32))
+  {
+    /**
+     * The result batch is only limited by max 'rows'.
+     * Exclude fetched correlation factors in calculation of
+     * required result buffers.
+     * Note: TUP will not 'over-return' in this case as 
+     * the specified 'batch_bytes' can not be exceeded.
+     */
+    maxWordsToBuffer = fullBatchSizeWords
+                     - ((read_correlation) ?(batch_rows * 3) :0);
+
+    /**
+     * Set/Limit 'batch_bytes' to max 'fullBatchSizeWords', as that
+     * is what it will be allocated result buffer for.
+     */
+    batch_bytes = fullBatchSizeWords*sizeof(Uint32);
+  }
+  else
+  {
+    // Round batch size to 'Words'
+    const Uint32 batchWords = (batch_bytes+sizeof(Uint32)-1)/sizeof(Uint32);
+
+    /**
+     * Batch may be limited by 'bytes' before reaching max 'rows'.
+     * - Add 'over-returned' result from each fragment retrieving rows
+     *   into this batch.
+     * - Subtract CORR_FACTORs retrieved in batch, but not buffered.
+     *   As number of rows returned is not known, we can only assume
+     *   that at least 1 row is returned.
+     */
+    maxWordsToBuffer = batchWords
+                     + ((rowSizeWords-1) * parallelism)  // over-return
+                     - ((read_correlation) ? (1 * 3) : 0); // 1 row
+
+    //Note: 'batch_bytes' is used unmodified in 'SCANREQ'
+  }
+
+  /**
+   * NdbReceiver::execKEYINFO20() will allocate an extra word (allocKey())
+   * for storing the 'info' word in the buffer. 'info' is not part of
+   * the 'key' returned from datanodes, so not part of what packed_rowsize()
+   * already calculated.
+   */ 
+  if (keySizeWords > 0)
+  {
+    maxWordsToBuffer += (1 * batch_rows); // Add 'info' part of keyInfo
+  }
+
+  /**
+   * Calculate max size (In bytes) of a NdbReceiverBuffer containing
+   * 'batch_rows' of packed result rows. Size also include 
+   * overhead required by the NdbReceiverBuffer itself.
+   */
+  buffer_bytes =
+    NdbReceiverBuffer::calculateBufferSizeInWords(batch_rows, maxWordsToBuffer, keySizeWords)*4;
 }
 
 /**
@@ -787,14 +877,6 @@ err:
 }
 
 
-/* Set NdbRecord field to NULL. */
-static void setRecToNULL(const NdbRecord::Attr *col,
-                         char *row)
-{
-  assert(col->flags & NdbRecord::IsNullable);
-  row[col->nullbit_byte_offset]|= 1 << col->nullbit_bit_in_byte;
-}
-
 int
 NdbReceiver::get_range_no() const
 {
@@ -824,13 +906,6 @@ handle_bitfield_ndbrecord(const NdbRecord::Attr* col,
                           char* row)
 {
   Uint32 len = col->bitCount;
-  if (col->flags & NdbRecord::IsNullable)
-  {
-    /* Clear nullbit in row */
-    row[col->nullbit_byte_offset] &=
-      ~(1 << col->nullbit_bit_in_byte);
-  }
-
   char* dest;
   Uint64 mysqldSpace;
 
@@ -873,219 +948,83 @@ handle_bitfield_ndbrecord(const NdbRecord::Attr* col,
 //static
 Uint32
 NdbReceiver::unpackNdbRecord(const NdbRecord *rec,
-                             Uint32 bmlen, 
+                             const Uint32 bmlen,
                              const Uint32* aDataPtr,
                              char* row)
 {
-  /* Use bitmap to determine which columns have been sent */
-  /*
-    We save precious registers for the compiler by putting
-    three values in one i_attrId variable:
-    bit_index : Bit 0-15
-    attrId    : Bit 16-31
-    maxAttrId : Bit 32-47
-
-    We use the same principle to store 3 variables in
-    bitPos_next_index variable:
-    next_index : Bit 0-15
-    bitPos     : Bit 48-52
-    rpm_bmlen  : Bit 32-47
-    0's        : Bit 16-31
-
-    So we can also get bmSize by shifting 27 instead of 32 which
-    is equivalent to shift right 32 followed by shift left 5 when
-    one knows there are zeroes in the  lower bits.
-
-    The compiler has to have quite a significant amount of live
-    variables in parallel here, so by the above handling we increase
-    the access time of these registers by 1-2 cycles, but this is
-    better than using the stack that has high chances of cache
-    misses.
-
-    This routine can easily be executed millions of times per
-    second in one CPU, it's called once for each record retrieved
-    from NDB data nodes in scans.
-  */
-#define rpn_pack_attrId(bit_index, attrId, maxAttrId) \
-  Uint64((bit_index)) + \
-    (Uint64((attrId)) << 16) + \
-    (Uint64((maxAttrId)) << 32)
-#define rpn_bit_index(index_attrId) ((index_attrId) & 0xFFFF)
-#define rpn_attrId(index_attrId) (((index_attrId) >> 16) & 0xFFFF)
-#define rpn_maxAttrId(index_attrId) ((index_attrId) >> 32)
-#define rpn_inc_bit_index() Uint64(1)
-#define rpn_inc_attrId() (Uint64(1) << 16)
-
-#define rpn_pack_bitPos_next_index(bitPos, bmlen, next_index) \
-  Uint64((next_index) & 0xFFFF) + \
-    (Uint64((bmlen)) << 32) + \
-    (Uint64((bitPos)) << 48)
-#define rpn_bmSize(bm_index) (((bm_index) >> 27) & 0xFFFF)
-#define rpn_bmlen(bm_index) (((bm_index) >> 32) & 0xFFFF)
-#define rpn_bitPos(bm_index) (((bm_index) >> 48) & 0x1F)
-#define rpn_next_index(bm_index) ((bm_index) & 0xFFFF)
-#define rpn_zero_bitPos(bm_index) \
-{ \
-  register Uint64 tmp_bitPos_next_index = bm_index; \
-  tmp_bitPos_next_index <<= 16; \
-  tmp_bitPos_next_index >>= 16; \
-  bm_index = tmp_bitPos_next_index; \
-}
-#define rpn_set_bitPos(bm_index, bitPos) \
-{ \
-  register Uint64 tmp_bitPos_next_index = bm_index; \
-  tmp_bitPos_next_index <<= 16; \
-  tmp_bitPos_next_index >>= 16; \
-  tmp_bitPos_next_index += (Uint64(bitPos) << 48); \
-  bm_index = tmp_bitPos_next_index; \
-}
-#define rpn_set_next_index(bm_index, val_next_index) \
-{ \
-  register Uint64 tmp_2_bitPos_next_index = Uint64(val_next_index); \
-  register Uint64 tmp_1_bitPos_next_index = bm_index; \
-  tmp_1_bitPos_next_index >>= 16; \
-  tmp_1_bitPos_next_index <<= 16; \
-  tmp_2_bitPos_next_index &= 0xFFFF; \
-  tmp_1_bitPos_next_index += tmp_2_bitPos_next_index; \
-  bm_index = tmp_1_bitPos_next_index; \
-}
-
-/**
-  * Both these macros can be called with an overflow value
-  * in val_next_index, to protect against this we ensure it
-  * doesn't overflow its 16 bits of space and affect other
-  * variables.
-  */
-
   assert(bmlen <= 0x07FF);
-  register const Uint8 *src = (Uint8*)(aDataPtr + bmlen);
-  Uint32 noOfCols = rec->noOfColumns;
-  const NdbRecord::Attr* max_col = &rec->columns[noOfCols - 1];
+  const Uint8 *src = (Uint8*)(aDataPtr + bmlen);
+  uint bitPos = 0;
+  uint attrId = 0;
+  uint bitIndex = 0;
 
-  const Uint64 maxAttrId = max_col->attrId;
-  assert(maxAttrId <= 0xFFFF);
-
-  /**
-   * Initialise the 3 fields stored in bitPos_next_index
-   *
-   * bitPos set to 0
-   * next_index set to rec->m_attrId_indexes[0]
-   * bmlen initialised
-   * bmSize is always bmlen / 32
-   */
-  register Uint64 bitPos_next_index =
-    rpn_pack_bitPos_next_index(0, bmlen, rec->m_attrId_indexes[0]);
-
-  /**
-   * Initialise the 3 fields stored in i_attrId
-   *
-   * bit_index set to 0
-   * attrId set to 0
-   * maxAttrId initialised
-   */
-  for (register Uint64 i_attrId = rpn_pack_attrId(0, 0, maxAttrId) ;
-       (rpn_bit_index(i_attrId) < rpn_bmSize(bitPos_next_index)) &&
-        (rpn_attrId(i_attrId) <= rpn_maxAttrId(i_attrId));
-        i_attrId += (rpn_inc_attrId() + rpn_inc_bit_index()))
+  /* Use bitmap to determine which columns have been sent */
+  for (uint nextBit = BitmaskImpl::find_first(bmlen, aDataPtr);
+       nextBit != BitmaskImpl::NotFound;
+       nextBit = BitmaskImpl::find_next(bmlen, aDataPtr, bitIndex+1))
   {
-    const NdbRecord::Attr* col = &rec->columns[rpn_next_index(bitPos_next_index)];
-    if (BitmaskImpl::get(rpn_bmlen(bitPos_next_index),
-                                   aDataPtr,
-                                   rpn_bit_index(i_attrId)))
+    /* Found bit in column presence bitmask, get corresponding
+     * Attr struct from NdbRecord
+     */
+    attrId += (nextBit-bitIndex);
+    bitIndex = nextBit;
+    assert(attrId < rec->m_attrId_indexes_length);
+
+    const uint next_index = rec->m_attrId_indexes[attrId];
+    assert (next_index < rec->noOfColumns);
+
+    const NdbRecord::Attr* col = &rec->columns[next_index];
+    assert((col->flags & NdbRecord::IsBlob) == 0);
+
+    /* If col is nullable, check for null and set/clear NULL-bit */
+    if (col->flags & NdbRecord::IsNullable)
     {
-      /* Found bit in column presence bitmask, get corresponding
-       * Attr struct from NdbRecord
-       */
-      Uint32 align = col->orgAttrSize;
-
-      assert(rpn_attrId(i_attrId) < rec->m_attrId_indexes_length);
-      assert (rpn_next_index(bitPos_next_index) < rec->noOfColumns);
-      assert((col->flags & NdbRecord::IsBlob) == 0);
-
-      /* If col is nullable, check for null and set bit */
-      if (col->flags & NdbRecord::IsNullable)
+      const char null_byte = row[col->nullbit_byte_offset];
+      const char null_mask = (1 << col->nullbit_bit_in_byte);
+      bitIndex++;
+      if (BitmaskImpl::get(bmlen, aDataPtr, bitIndex))
       {
-        i_attrId += rpn_inc_bit_index();
-        if (BitmaskImpl::get(rpn_bmlen(bitPos_next_index),
-                             aDataPtr,
-                             rpn_bit_index(i_attrId)))
-        {
-          setRecToNULL(col, row);
-          assert(rpn_bitPos(bitPos_next_index) < 32);
-          rpn_set_next_index(bitPos_next_index,
-                             rec->m_attrId_indexes[rpn_attrId(i_attrId) + 1]);
-          continue; /* Next column */
-        }
-      }
-      if (likely(align != DictTabInfo::aBit))
-      {
-        src = pad(src, align, rpn_bitPos(bitPos_next_index));
-        rpn_zero_bitPos(bitPos_next_index);
-      }
-      else
-      {
-        Uint32 bitPos = rpn_bitPos(bitPos_next_index);
-        const Uint8 *loc_src = src;
-        handle_bitfield_ndbrecord(col,
-                                  loc_src,
-                                  bitPos,
-                                  row);
-        rpn_set_bitPos(bitPos_next_index, bitPos);
-        src = loc_src;
-        assert(rpn_bitPos(bitPos_next_index) < 32);
-        rpn_set_next_index(bitPos_next_index,
-                           rec->m_attrId_indexes[rpn_attrId(i_attrId) + 1]);
+        /* NULL value -> set NULL indicator bit */
+        row[col->nullbit_byte_offset] = null_byte | null_mask;
+        assert(bitPos < 32);
         continue; /* Next column */
       }
-
-      {
-        /* Set NULLable attribute to "not NULL". */
-        if (col->flags & NdbRecord::IsNullable)
-        {
-          row[col->nullbit_byte_offset]&= ~(1 << col->nullbit_bit_in_byte);
-        }
-
-        do
-        {
-          Uint32 sz;
-          char *col_row_ptr = &row[col->offset];
-          Uint32 flags = col->flags &
-                         (NdbRecord::IsVar1ByteLen |
-                          NdbRecord::IsVar2ByteLen);
-          if (!flags)
-          {
-            sz = col->maxSize;
-            if (likely(sz == 4))
-            {
-              col_row_ptr[0] = src[0];
-              col_row_ptr[1] = src[1];
-              col_row_ptr[2] = src[2];
-              col_row_ptr[3] = src[3];
-              src += sz;
-              break;
-            }
-          }
-          else if (flags & NdbRecord::IsVar1ByteLen)
-          {
-            sz = 1 + src[0];
-          }
-          else
-          {
-            sz = 2 + src[0] + 256 * src[1];
-          }
-          const Uint8 *source = src;
-          src += sz;
-          memcpy(col_row_ptr, source, sz);
-        } while (0);
-      }
+      /* not-NULL, clear NULL indicator */
+      row[col->nullbit_byte_offset] = null_byte & ~null_mask;
     }
-    rpn_set_next_index(bitPos_next_index,
-                       rec->m_attrId_indexes[rpn_attrId(i_attrId) + 1]);
+
+    const Uint32 align = col->orgAttrSize;
+    if (unlikely(align == DictTabInfo::aBit))
+    {
+      const Uint8 *loc_src = src;
+      handle_bitfield_ndbrecord(col,
+                                loc_src,
+                                bitPos,
+                                row);
+      src = loc_src;
+      assert(bitPos < 32);
+      continue; /* Next column */
+    }
+
+    src = pad(src, align, bitPos);
+    bitPos = 0;
+    Uint32 sz;
+    char *col_row_ptr = &row[col->offset];
+    const Uint32 flags = col->flags &
+                             (NdbRecord::IsVar1ByteLen |
+                              NdbRecord::IsVar2ByteLen);
+    if (!flags)
+      sz = col->maxSize;
+    else if (flags & NdbRecord::IsVar1ByteLen)
+      sz = 1 + src[0];
+    else
+      sz = 2 + src[0] + 256 * src[1];
+
+    const Uint8 *source = src;
+    src += sz;
+    memcpy(col_row_ptr, source, sz);
   }
-  Uint32 len = (Uint32)(((Uint32*)pad(src,
-                                      0,
-                                      rpn_bitPos(bitPos_next_index))) -
-                                        aDataPtr);
+  const Uint32 len = (Uint32)(((Uint32*)pad(src, 0, bitPos)) - aDataPtr);
   return len;
 }
 
@@ -1344,7 +1283,10 @@ NdbReceiver::execTRANSID_AI(const Uint32* aDataPtr, Uint32 aLength)
   if (m_recv_buffer != NULL)
   {
     Uint32 *row_recv = m_recv_buffer->allocRow(aLength);
-    memcpy(row_recv, aDataPtr, aLength*sizeof(Uint32));
+    if (likely(aLength > 0))
+    {
+      memcpy(row_recv, aDataPtr, aLength*sizeof(Uint32));
+    }
   }
   else
   {

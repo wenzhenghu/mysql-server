@@ -1,17 +1,24 @@
-/* Copyright (c) 2014, 2017, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2013, 2020, Oracle and/or its affiliates.
 
   This program is free software; you can redistribute it and/or modify
-  it under the terms of the GNU General Public License as published by
-  the Free Software Foundation; version 2 of the License.
+  it under the terms of the GNU General Public License, version 2.0,
+  as published by the Free Software Foundation.
+
+  This program is also distributed with certain software (including
+  but not limited to OpenSSL) that is licensed under separate terms,
+  as designated in a particular file or component or in included license
+  documentation.  The authors of MySQL hereby grant you an additional
+  permission to link the program and your derivative works with the
+  separately licensed software that they have included with MySQL.
 
   This program is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  GNU General Public License for more details.
+  GNU General Public License, version 2.0, for more details.
 
   You should have received a copy of the GNU General Public License
   along with this program; if not, write to the Free Software
-  Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
+  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 #ifndef TABLE_PREPARED_STMT_INSTANCES
 #define TABLE_PREPARED_STMT_INSTANCES
@@ -24,8 +31,8 @@
 #include <sys/types.h>
 
 #include "my_inttypes.h"
-#include "pfs_prepared_stmt.h"
-#include "table_helper.h"
+#include "storage/perfschema/pfs_prepared_stmt.h"
+#include "storage/perfschema/table_helper.h"
 
 /**
   @addtogroup performance_schema_tables
@@ -36,8 +43,7 @@
   A row of table
   PERFORMANCE_SCHEMA.PREPARED_STATEMENT_INSTANCES.
 */
-struct row_prepared_stmt_instances
-{
+struct row_prepared_stmt_instances {
   /** Column OBJECT_INSTANCE_BEGIN. */
   const void *m_identity;
 
@@ -79,175 +85,137 @@ struct row_prepared_stmt_instances
   PFS_statement_stat_row m_execute_stat;
 };
 
-class PFS_index_prepared_stmt_instances : public PFS_engine_index
-{
-public:
+class PFS_index_prepared_stmt_instances : public PFS_engine_index {
+ public:
   PFS_index_prepared_stmt_instances(PFS_engine_key *key_1)
-    : PFS_engine_index(key_1)
-  {
-  }
+      : PFS_engine_index(key_1) {}
 
   PFS_index_prepared_stmt_instances(PFS_engine_key *key_1,
                                     PFS_engine_key *key_2)
-    : PFS_engine_index(key_1, key_2)
-  {
-  }
+      : PFS_engine_index(key_1, key_2) {}
 
   PFS_index_prepared_stmt_instances(PFS_engine_key *key_1,
                                     PFS_engine_key *key_2,
                                     PFS_engine_key *key_3)
-    : PFS_engine_index(key_1, key_2, key_3)
-  {
-  }
+      : PFS_engine_index(key_1, key_2, key_3) {}
 
-  ~PFS_index_prepared_stmt_instances()
-  {
-  }
+  ~PFS_index_prepared_stmt_instances() override {}
 
   virtual bool match(const PFS_prepared_stmt *pfs) = 0;
 };
 
 class PFS_index_prepared_stmt_instances_by_instance
-  : public PFS_index_prepared_stmt_instances
-{
-public:
+    : public PFS_index_prepared_stmt_instances {
+ public:
   PFS_index_prepared_stmt_instances_by_instance()
-    : PFS_index_prepared_stmt_instances(&m_key), m_key("OBJECT_INSTANCE_BEGIN")
-  {
-  }
+      : PFS_index_prepared_stmt_instances(&m_key),
+        m_key("OBJECT_INSTANCE_BEGIN") {}
 
-  ~PFS_index_prepared_stmt_instances_by_instance()
-  {
-  }
+  ~PFS_index_prepared_stmt_instances_by_instance() override {}
 
-  virtual bool match(const PFS_prepared_stmt *pfs);
+  bool match(const PFS_prepared_stmt *pfs) override;
 
-private:
+ private:
   PFS_key_object_instance m_key;
 };
 
 class PFS_index_prepared_stmt_instances_by_owner_thread
-  : public PFS_index_prepared_stmt_instances
-{
-public:
+    : public PFS_index_prepared_stmt_instances {
+ public:
   PFS_index_prepared_stmt_instances_by_owner_thread()
-    : PFS_index_prepared_stmt_instances(&m_key_1, &m_key_2),
-      m_key_1("OWNER_THREAD_ID"),
-      m_key_2("OWNER_EVENT_ID")
-  {
-  }
+      : PFS_index_prepared_stmt_instances(&m_key_1, &m_key_2),
+        m_key_1("OWNER_THREAD_ID"),
+        m_key_2("OWNER_EVENT_ID") {}
 
-  ~PFS_index_prepared_stmt_instances_by_owner_thread()
-  {
-  }
+  ~PFS_index_prepared_stmt_instances_by_owner_thread() override {}
 
-  bool match(const PFS_prepared_stmt *pfs);
+  bool match(const PFS_prepared_stmt *pfs) override;
 
-private:
+ private:
   PFS_key_thread_id m_key_1;
   PFS_key_event_id m_key_2;
 };
 
 class PFS_index_prepared_stmt_instances_by_statement_id
-  : public PFS_index_prepared_stmt_instances
-{
-public:
+    : public PFS_index_prepared_stmt_instances {
+ public:
   PFS_index_prepared_stmt_instances_by_statement_id()
-    : PFS_index_prepared_stmt_instances(&m_key), m_key("STATEMENT_ID")
-  {
-  }
+      : PFS_index_prepared_stmt_instances(&m_key), m_key("STATEMENT_ID") {}
 
-  ~PFS_index_prepared_stmt_instances_by_statement_id()
-  {
-  }
+  ~PFS_index_prepared_stmt_instances_by_statement_id() override {}
 
-  bool match(const PFS_prepared_stmt *pfs);
+  bool match(const PFS_prepared_stmt *pfs) override;
 
-private:
+ private:
   PFS_key_statement_id m_key;
 };
 
 class PFS_index_prepared_stmt_instances_by_statement_name
-  : public PFS_index_prepared_stmt_instances
-{
-public:
+    : public PFS_index_prepared_stmt_instances {
+ public:
   PFS_index_prepared_stmt_instances_by_statement_name()
-    : PFS_index_prepared_stmt_instances(&m_key), m_key("STATEMENT_NAME")
-  {
-  }
+      : PFS_index_prepared_stmt_instances(&m_key), m_key("STATEMENT_NAME") {}
 
-  ~PFS_index_prepared_stmt_instances_by_statement_name()
-  {
-  }
+  ~PFS_index_prepared_stmt_instances_by_statement_name() override {}
 
-  bool match(const PFS_prepared_stmt *pfs);
+  bool match(const PFS_prepared_stmt *pfs) override;
 
-private:
+ private:
   PFS_key_statement_name m_key;
 };
 
 class PFS_index_prepared_stmt_instances_by_owner_object
-  : public PFS_index_prepared_stmt_instances
-{
-public:
+    : public PFS_index_prepared_stmt_instances {
+ public:
   PFS_index_prepared_stmt_instances_by_owner_object()
-    : PFS_index_prepared_stmt_instances(&m_key_1, &m_key_2, &m_key_3),
-      m_key_1("OWNER_OBJECT_TYPE"),
-      m_key_2("OWNER_OBJECT_SCHEMA"),
-      m_key_3("OWNER_OBJECT_NAME")
-  {
-  }
+      : PFS_index_prepared_stmt_instances(&m_key_1, &m_key_2, &m_key_3),
+        m_key_1("OWNER_OBJECT_TYPE"),
+        m_key_2("OWNER_OBJECT_SCHEMA"),
+        m_key_3("OWNER_OBJECT_NAME") {}
 
-  ~PFS_index_prepared_stmt_instances_by_owner_object()
-  {
-  }
+  ~PFS_index_prepared_stmt_instances_by_owner_object() override {}
 
-  virtual bool match(const PFS_prepared_stmt *table);
+  bool match(const PFS_prepared_stmt *table) override;
 
-private:
+ private:
   PFS_key_object_type_enum m_key_1;
   PFS_key_object_schema m_key_2;
   PFS_key_object_name m_key_3;
 };
 
 /** Table PERFORMANCE_SCHEMA.PREPARED_STATEMENT_INSTANCES. */
-class table_prepared_stmt_instances : public PFS_engine_table
-{
-public:
+class table_prepared_stmt_instances : public PFS_engine_table {
+ public:
   /** Table share */
   static PFS_engine_table_share m_share;
-  static PFS_engine_table *create();
+  static PFS_engine_table *create(PFS_engine_table_share *);
   static int delete_all_rows();
   static ha_rows get_row_count();
 
-  virtual void reset_position(void);
+  void reset_position(void) override;
 
-  virtual int rnd_next();
-  virtual int rnd_pos(const void *pos);
+  int rnd_next() override;
+  int rnd_pos(const void *pos) override;
 
-  virtual int index_init(uint idx, bool sorted);
-  virtual int index_next();
+  int index_init(uint idx, bool sorted) override;
+  int index_next() override;
 
-protected:
-  virtual int read_row_values(TABLE *table,
-                              unsigned char *buf,
-                              Field **fields,
-                              bool read_all);
+ protected:
+  int read_row_values(TABLE *table, unsigned char *buf, Field **fields,
+                      bool read_all) override;
 
   table_prepared_stmt_instances();
 
-public:
-  ~table_prepared_stmt_instances()
-  {
-  }
+ public:
+  ~table_prepared_stmt_instances() override {}
 
-protected:
+ protected:
   int make_row(PFS_prepared_stmt *);
 
   /** Table share lock. */
   static THR_LOCK m_table_lock;
-  /** Fields definition. */
-  static TABLE_FIELD_DEF m_field_def;
+  /** Table definition. */
+  static Plugin_table m_table_def;
 
   /** Current row. */
   row_prepared_stmt_instances m_row;

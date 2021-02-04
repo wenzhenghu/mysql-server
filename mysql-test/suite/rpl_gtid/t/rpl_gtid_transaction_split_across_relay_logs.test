@@ -5,7 +5,7 @@
 # multiple relay logs, on relay log flush, partial transaction is
 # committed. If the same situation occurs when gtid-mode=ON, it will cause that
 # the same GTID will be used for more than one transaction and will cause
-# ER_GTID_NEXT_TYPE_UNDEFINED_GROUP error.
+# ER_GTID_NEXT_TYPE_UNDEFINED_GTID error.
 #
 # Steps to reproduce:
 #   1) Generate two write_row events for non-transactional table (MyISAM)
@@ -21,6 +21,11 @@
 # Problem happens only in gtid mode
 # Run only in row format
 --source include/have_binlog_format_row.inc
+# Test requires relay-log-info-repository = TABLE
+--source include/not_relay_log_info_file.inc
+--source include/force_myisam_default.inc
+--source include/have_myisam.inc
+
 # Disable auto position protocol
 --let use_gtids=0
 --let $rpl_skip_start_slave= 1

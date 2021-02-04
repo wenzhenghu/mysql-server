@@ -55,27 +55,8 @@ into count_builtin_expected;
 select count(name)
 from performance_schema.setup_instruments
 where (name like (concat(instr_name, "%")))
-and (name in (
-"memory/sql/buffered_logs",
-"memory/sql/sql_acl_mem",
-"memory/sql/sql_acl_memex",
-"memory/sql/acl_cache",
-"memory/sql/acl_map_cache",
-"memory/sql/TABLE_SHARE::mem_root",
-"memory/sql/TABLE",
-"memory/sql/Query_cache",
-"memory/sql/native_functions",
-"memory/sql/Event_basic::mem_root",
-"memory/sql/root",
-"memory/sql/load_env_plugins",
-"memory/sql/plugin_ref",
-"memory/sql/plugin_mem_root",
-"memory/sql/plugin_bookmark",
-"memory/csv/TINA_SHARE",
-"memory/sql/tz_storage",
-"memory/sql/servers_cache",
-"memory/sql/udf_mem"
-    ))
+and (name not like "memory/performance_schema/%")
+and (find_in_set(properties, 'global_statistics'))
 into count_global_expected;
 set cmd_1= "select count(*) from (select distinct event_name from performance_schema.";
 set cmd_2= concat(" where event_name like \"",
@@ -213,7 +194,7 @@ until done
 end repeat;
 close pfs_cursor;
 -- Dont want to return a 02000 NOT FOUND, there should be a better way
-signal sqlstate '01000' set message_text='Done', mysql_errno=12000;
+signal sqlstate '01000' set message_text='Done', mysql_errno=42000;
 end
 $
 call check_instrument("wait/synch/mutex/");
@@ -274,7 +255,7 @@ Checking table memory_summary_global_by_event_name ...
 status
 Checking table socket_summary_by_event_name ...
 Warnings:
-Warning	12000	Done
+Warning	42000	Done
 call check_instrument("wait/synch/rwlock/");
 instr_name	is_wait	is_wait_file	is_wait_socket	is_stage	is_statement	is_memory	is_transaction
 wait/synch/rwlock/	1	0	0	0	0	0	0
@@ -333,7 +314,7 @@ Checking table memory_summary_global_by_event_name ...
 status
 Checking table socket_summary_by_event_name ...
 Warnings:
-Warning	12000	Done
+Warning	42000	Done
 call check_instrument("wait/synch/sxlock/");
 instr_name	is_wait	is_wait_file	is_wait_socket	is_stage	is_statement	is_memory	is_transaction
 wait/synch/sxlock/	1	0	0	0	0	0	0
@@ -392,7 +373,7 @@ Checking table memory_summary_global_by_event_name ...
 status
 Checking table socket_summary_by_event_name ...
 Warnings:
-Warning	12000	Done
+Warning	42000	Done
 call check_instrument("wait/synch/cond/");
 instr_name	is_wait	is_wait_file	is_wait_socket	is_stage	is_statement	is_memory	is_transaction
 wait/synch/cond/	1	0	0	0	0	0	0
@@ -451,7 +432,7 @@ Checking table memory_summary_global_by_event_name ...
 status
 Checking table socket_summary_by_event_name ...
 Warnings:
-Warning	12000	Done
+Warning	42000	Done
 call check_instrument("wait/synch/");
 instr_name	is_wait	is_wait_file	is_wait_socket	is_stage	is_statement	is_memory	is_transaction
 wait/synch/	1	0	0	0	0	0	0
@@ -510,7 +491,7 @@ Checking table memory_summary_global_by_event_name ...
 status
 Checking table socket_summary_by_event_name ...
 Warnings:
-Warning	12000	Done
+Warning	42000	Done
 call check_instrument("wait/io/file/");
 instr_name	is_wait	is_wait_file	is_wait_socket	is_stage	is_statement	is_memory	is_transaction
 wait/io/file/	1	1	0	0	0	0	0
@@ -569,7 +550,7 @@ Checking table memory_summary_global_by_event_name ...
 status
 Checking table socket_summary_by_event_name ...
 Warnings:
-Warning	12000	Done
+Warning	42000	Done
 call check_instrument("wait/io/socket/");
 instr_name	is_wait	is_wait_file	is_wait_socket	is_stage	is_statement	is_memory	is_transaction
 wait/io/socket/	1	0	1	0	0	0	0
@@ -628,7 +609,7 @@ Checking table memory_summary_global_by_event_name ...
 status
 Checking table socket_summary_by_event_name ...
 Warnings:
-Warning	12000	Done
+Warning	42000	Done
 call check_instrument("wait/io/table/");
 instr_name	is_wait	is_wait_file	is_wait_socket	is_stage	is_statement	is_memory	is_transaction
 wait/io/table/	1	0	0	0	0	0	0
@@ -687,7 +668,7 @@ Checking table memory_summary_global_by_event_name ...
 status
 Checking table socket_summary_by_event_name ...
 Warnings:
-Warning	12000	Done
+Warning	42000	Done
 call check_instrument("wait/io/");
 instr_name	is_wait	is_wait_file	is_wait_socket	is_stage	is_statement	is_memory	is_transaction
 wait/io/	1	0	0	0	0	0	0
@@ -746,7 +727,7 @@ Checking table memory_summary_global_by_event_name ...
 status
 Checking table socket_summary_by_event_name ...
 Warnings:
-Warning	12000	Done
+Warning	42000	Done
 call check_instrument("wait/lock/table/");
 instr_name	is_wait	is_wait_file	is_wait_socket	is_stage	is_statement	is_memory	is_transaction
 wait/lock/table/	1	0	0	0	0	0	0
@@ -805,7 +786,7 @@ Checking table memory_summary_global_by_event_name ...
 status
 Checking table socket_summary_by_event_name ...
 Warnings:
-Warning	12000	Done
+Warning	42000	Done
 call check_instrument("wait/lock/");
 instr_name	is_wait	is_wait_file	is_wait_socket	is_stage	is_statement	is_memory	is_transaction
 wait/lock/	1	0	0	0	0	0	0
@@ -864,7 +845,7 @@ Checking table memory_summary_global_by_event_name ...
 status
 Checking table socket_summary_by_event_name ...
 Warnings:
-Warning	12000	Done
+Warning	42000	Done
 call check_instrument("wait/");
 instr_name	is_wait	is_wait_file	is_wait_socket	is_stage	is_statement	is_memory	is_transaction
 wait/	1	0	0	0	0	0	0
@@ -923,7 +904,7 @@ Checking table memory_summary_global_by_event_name ...
 status
 Checking table socket_summary_by_event_name ...
 Warnings:
-Warning	12000	Done
+Warning	42000	Done
 call check_instrument("stage/");
 instr_name	is_wait	is_wait_file	is_wait_socket	is_stage	is_statement	is_memory	is_transaction
 stage/	0	0	0	1	0	0	0
@@ -982,7 +963,7 @@ Checking table memory_summary_global_by_event_name ...
 status
 Checking table socket_summary_by_event_name ...
 Warnings:
-Warning	12000	Done
+Warning	42000	Done
 call check_instrument("statement/com/");
 instr_name	is_wait	is_wait_file	is_wait_socket	is_stage	is_statement	is_memory	is_transaction
 statement/com/	0	0	0	0	1	0	0
@@ -1041,7 +1022,7 @@ Checking table memory_summary_global_by_event_name ...
 status
 Checking table socket_summary_by_event_name ...
 Warnings:
-Warning	12000	Done
+Warning	42000	Done
 call check_instrument("statement/sql/");
 instr_name	is_wait	is_wait_file	is_wait_socket	is_stage	is_statement	is_memory	is_transaction
 statement/sql/	0	0	0	0	1	0	0
@@ -1100,7 +1081,7 @@ Checking table memory_summary_global_by_event_name ...
 status
 Checking table socket_summary_by_event_name ...
 Warnings:
-Warning	12000	Done
+Warning	42000	Done
 call check_instrument("statement/abstract/");
 instr_name	is_wait	is_wait_file	is_wait_socket	is_stage	is_statement	is_memory	is_transaction
 statement/abstract/	0	0	0	0	1	0	0
@@ -1159,7 +1140,7 @@ Checking table memory_summary_global_by_event_name ...
 status
 Checking table socket_summary_by_event_name ...
 Warnings:
-Warning	12000	Done
+Warning	42000	Done
 call check_instrument("statement/");
 instr_name	is_wait	is_wait_file	is_wait_socket	is_stage	is_statement	is_memory	is_transaction
 statement/	0	0	0	0	1	0	0
@@ -1218,7 +1199,7 @@ Checking table memory_summary_global_by_event_name ...
 status
 Checking table socket_summary_by_event_name ...
 Warnings:
-Warning	12000	Done
+Warning	42000	Done
 call check_instrument("idle");
 instr_name	is_wait	is_wait_file	is_wait_socket	is_stage	is_statement	is_memory	is_transaction
 idle	1	0	0	0	0	0	0
@@ -1277,7 +1258,7 @@ Checking table memory_summary_global_by_event_name ...
 status
 Checking table socket_summary_by_event_name ...
 Warnings:
-Warning	12000	Done
+Warning	42000	Done
 call check_instrument("memory/");
 instr_name	is_wait	is_wait_file	is_wait_socket	is_stage	is_statement	is_memory	is_transaction
 memory/	0	0	0	0	0	1	0
@@ -1336,7 +1317,7 @@ Checking table memory_summary_global_by_event_name ...
 status
 Checking table socket_summary_by_event_name ...
 Warnings:
-Warning	12000	Done
+Warning	42000	Done
 call check_instrument("memory/performance_schema/");
 instr_name	is_wait	is_wait_file	is_wait_socket	is_stage	is_statement	is_memory	is_transaction
 memory/performance_schema/	0	0	0	0	0	1	0
@@ -1395,7 +1376,7 @@ Checking table memory_summary_global_by_event_name ...
 status
 Checking table socket_summary_by_event_name ...
 Warnings:
-Warning	12000	Done
+Warning	42000	Done
 call check_instrument("transaction");
 instr_name	is_wait	is_wait_file	is_wait_socket	is_stage	is_statement	is_memory	is_transaction
 transaction	0	0	0	0	0	0	1
@@ -1454,5 +1435,5 @@ Checking table memory_summary_global_by_event_name ...
 status
 Checking table socket_summary_by_event_name ...
 Warnings:
-Warning	12000	Done
+Warning	42000	Done
 drop procedure check_instrument;

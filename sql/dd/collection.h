@@ -1,17 +1,24 @@
-/* Copyright (c) 2014, 2017, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2014, 2019, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software Foundation,
-   51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 #ifndef DD__COLLECTION_IMPL_INCLUDED
 #define DD__COLLECTION_IMPL_INCLUDED
@@ -24,6 +31,7 @@
 #include <vector>
 
 #include "my_dbug.h"
+#include "my_inttypes.h"
 
 namespace dd {
 
@@ -33,9 +41,9 @@ class Object_key;
 class Open_dictionary_tables_ctx;
 class Raw_table;
 
-template <typename T> class Collection
-{
-public:
+template <typename T>
+class Collection {
+ public:
   // Pointer to abstract type. Template argument.
   typedef T value_type;
   // Abstract type.
@@ -44,134 +52,122 @@ public:
   typedef typename abstract_type::Impl impl_type;
   typedef std::vector<impl_type *> Array;
 
-private:
+ private:
   Array m_items;
   Array m_removed_items;
 
   void clear_all_items();
 
-  void renumerate_items()
-  {
-    for (size_t i= 0; i < m_items.size(); ++i)
+  void renumerate_items() {
+    for (size_t i = 0; i < m_items.size(); ++i)
       m_items[i]->set_ordinal_position(static_cast<uint>(i + 1));
   }
 
-  class Collection_iterator : public std::iterator<std::forward_iterator_tag, T>
-  {
-  public:
+  class Collection_iterator
+      : public std::iterator<std::forward_iterator_tag, T> {
+   public:
     Collection_iterator(Array *array)
-     :m_array(array),
-      m_current(array->begin())
-    { }
+        : m_array(array), m_current(array->begin()), m_current_obj(nullptr) {}
 
-    bool operator==(const Collection_iterator &iter) const
-    {
-      return (m_array == iter.m_array &&
-              m_current == iter.m_current);
+    Collection_iterator(Array *array, typename Array::iterator it)
+        : m_array(array), m_current(it), m_current_obj(nullptr) {}
+
+    bool operator==(const Collection_iterator &iter) const {
+      return (m_array == iter.m_array && m_current == iter.m_current);
     }
 
-    bool operator!=(const Collection_iterator &iter) const
-    {
-      return (m_array != iter.m_array ||
-              m_current != iter.m_current);
+    bool operator!=(const Collection_iterator &iter) const {
+      return (m_array != iter.m_array || m_current != iter.m_current);
     }
 
-    Collection_iterator& operator++()
-    {
-      if (m_current != m_array->end())
-        ++m_current;
+    Collection_iterator &operator++() {
+      if (m_current != m_array->end()) ++m_current;
       return *this;
     }
 
-    T& operator*();
+    T &operator*();
 
-    Collection_iterator& end()
-    {
-      m_current= m_array->end();
+    Collection_iterator &end() {
+      m_current = m_array->end();
       return *this;
     }
 
-  private:
+    typename Array::iterator current() { return m_current; }
+
+   private:
     Array *m_array;
     typename Array::iterator m_current;
     T m_current_obj;
   };
 
-  class Collection_const_iterator :
-    public std::iterator<std::forward_iterator_tag, const abstract_type*>
-  {
-  public:
+  class Collection_const_iterator
+      : public std::iterator<std::forward_iterator_tag, const abstract_type *> {
+   public:
     Collection_const_iterator(const Array *array)
-     :m_array(array),
-      m_current(array->begin())
-    { }
+        : m_array(array), m_current(array->begin()), m_current_obj(nullptr) {}
 
-    bool operator==(const Collection_const_iterator &iter) const
-    {
-      return (m_array == iter.m_array &&
-              m_current == iter.m_current);
+    Collection_const_iterator(const Array *array,
+                              typename Array::const_iterator it)
+        : m_array(array), m_current(it), m_current_obj(nullptr) {}
+
+    bool operator==(const Collection_const_iterator &iter) const {
+      return (m_array == iter.m_array && m_current == iter.m_current);
     }
 
-    bool operator!=(const Collection_const_iterator &iter) const
-    {
-      return (m_array != iter.m_array ||
-              m_current != iter.m_current);
+    bool operator!=(const Collection_const_iterator &iter) const {
+      return (m_array != iter.m_array || m_current != iter.m_current);
     }
 
-    Collection_const_iterator& operator++()
-    {
-      if (m_current != m_array->end())
-        ++m_current;
+    Collection_const_iterator &operator++() {
+      if (m_current != m_array->end()) ++m_current;
       return *this;
     }
 
-    const abstract_type*& operator*();
+    const abstract_type *&operator*();
 
-    Collection_const_iterator& end()
-    {
-      m_current= m_array->end();
+    Collection_const_iterator &end() {
+      m_current = m_array->end();
       return *this;
     }
 
-  private:
+    typename Array::const_iterator current() const { return m_current; }
+
+   private:
     const Array *m_array;
     typename Array::const_iterator m_current;
     const abstract_type *m_current_obj;
   };
 
-public:
-  Collection()
-  { }
+ public:
+  Collection() {}
 
-  ~Collection()
-  { clear_all_items(); }
+  ~Collection() { clear_all_items(); }
 
   /**
     Remove elements from m_removed_items.  This is used only in case of
     dropping triggers for now.  See comments in
     Table_impl::store_children() for more details.
-
-    @returns void
   */
-
   void clear_removed_items();
 
-
-  Collection(const Collection &)= delete;
-  void operator=(Collection &)= delete;
+  Collection(const Collection &) = delete;
+  void operator=(Collection &) = delete;
 
   typedef Collection_iterator iterator;
   typedef Collection_const_iterator const_iterator;
 
-  void push_back(impl_type *item)
-  {
+  void push_back(impl_type *item) {
     item->set_ordinal_position(static_cast<uint>(m_items.size() + 1));
     m_items.push_back(item);
   }
 
-  void push_front(impl_type *item)
-  {
+  void push_front(impl_type *item) {
     m_items.insert(m_items.begin(), item);
+    renumerate_items();
+  }
+
+  void insert(iterator it, impl_type *item) {
+    m_items.insert(it.current(), item);
     renumerate_items();
   }
 
@@ -179,72 +175,39 @@ public:
 
   /**
     Remove all items and move it to m_removed_items items.
-
-    @returns void.
   */
 
-  void remove_all()
-  {
-    m_removed_items= std::move(m_items);
-  }
-
+  void remove_all() { m_removed_items = std::move(m_items); }
 
   /**
-    Sort the elements based on the custom comparator supplied.
+    Find item and return the position.
 
-    @returns void.
+    @returns iterator pointing to found element.
   */
 
-  template<typename Comparator>
-  void sort_items(Comparator c)
-  {
-    std::sort(m_items.begin(), m_items.end(), c);
-    renumerate_items();
+  iterator find(const impl_type *item);
+
+  iterator begin() { return iterator(&m_items); }
+
+  const_iterator begin() const { return const_iterator(&m_items); }
+
+  iterator end() {
+    iterator it(&m_items);
+    it.end();
+    return it;
   }
 
-
-  /**
-    Move item at position old_index to the new_index.
-
-    @returns void.
-  */
-
-  void move(int old_index, int new_index)
-  {
-    DBUG_ASSERT(0 <= old_index && old_index < static_cast<int>(size()));
-    DBUG_ASSERT(0 <= new_index && new_index < static_cast<int>(size()));
-
-    impl_type *item= m_items[old_index];
-
-    m_items.erase(m_items.begin() + old_index);
-    m_items.insert(m_items.begin() + new_index, item);
-
-    renumerate_items();
+  const_iterator end() const {
+    const_iterator it(&m_items);
+    it.end();
+    return it;
   }
 
+  const_iterator cbegin() const { return begin(); }
 
-  iterator begin()
-  { return iterator(&m_items); }
+  const_iterator cend() const { return end(); }
 
-  const_iterator begin() const
-  { return const_iterator(&m_items); }
-
-  iterator end()
-  {
-    iterator iterator(&m_items);
-    iterator.end();
-    return iterator;
-  }
-
-  const_iterator end() const
-  {
-    const_iterator iterator(&m_items);
-    iterator.end();
-    return iterator;
-  }
-
-  bool empty() const
-  { return m_items.empty() && m_removed_items.empty(); }
+  bool empty() const { return m_items.empty() && m_removed_items.empty(); }
 
   /**
     Check if some of collection elements are removed.
@@ -252,29 +215,25 @@ public:
     @returns void.
   */
 
-  bool has_removed_items() const
-  { return !m_removed_items.empty(); }
+  bool has_removed_items() const { return !m_removed_items.empty(); }
 
+  size_t size() const { return m_items.size(); }
 
-  size_t size() const
-  { return m_items.size(); }
+  const abstract_type *at(size_t n) const;
 
-  const abstract_type* at(size_t n) const;
-
-  T at(size_t n)
-  {
+  T at(size_t n) {
     DBUG_ASSERT(n < size());
     return m_items[n];
   }
 
-  const abstract_type* front() const { return at(0); }
-  T front()                          { return at(0); }
+  const abstract_type *front() const { return at(0); }
+  T front() { return at(0); }
 
-  const abstract_type* back() const  { return at(size() - 1); }
-  T back()                           { return at(size() - 1); }
+  const abstract_type *back() const { return at(size() - 1); }
+  T back() { return at(size() - 1); }
 
-  const abstract_type* operator[] (size_t n) const { return at(n); }
-  T operator[] (size_t n)                          { return at(n); }
+  const abstract_type *operator[](size_t n) const { return at(n); }
+  T operator[](size_t n) { return at(n); }
 
   /**
     @brief
@@ -295,11 +254,8 @@ public:
     @return false - on success.
   */
   template <typename Parent_item>
-  bool restore_items(Parent_item *parent,
-                     Open_dictionary_tables_ctx *otx,
-                     Raw_table *table,
-                     Object_key *key);
-
+  bool restore_items(Parent_item *parent, Open_dictionary_tables_ctx *otx,
+                     Raw_table *table, Object_key *key);
 
   /**
     Populate collection with items read from DD table.
@@ -320,11 +276,8 @@ public:
     @retval False   on success.
   */
   template <typename Parent_item, typename Compare>
-  bool restore_items(Parent_item *parent,
-                     Open_dictionary_tables_ctx *otx,
-                     Raw_table *table,
-                     Object_key *key,
-                     Compare comp);
+  bool restore_items(Parent_item *parent, Open_dictionary_tables_ctx *otx,
+                     Raw_table *table, Object_key *key, Compare comp);
 
   /**
     @brief
@@ -376,6 +329,6 @@ public:
 
 ///////////////////////////////////////////////////////////////////////////
 
-}
+}  // namespace dd
 
-#endif // DD__COLLECTION_PARENT_INCLUDED
+#endif  // DD__COLLECTION_PARENT_INCLUDED

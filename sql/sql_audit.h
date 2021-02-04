@@ -1,16 +1,23 @@
 #ifndef SQL_AUDIT_INCLUDED
 #define SQL_AUDIT_INCLUDED
 
-/* Copyright (c) 2007, 2017, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2007, 2020, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -18,16 +25,16 @@
 
 #include <string.h>
 
+#include "lex_string.h"
 #include "m_string.h"
 #include "my_command.h"
 #include "mysql/plugin_audit.h"
-#include "sql_plugin.h"
-#include "sql_security_ctx.h"       // Security_context
 
 class THD;
+class Security_context;
 struct TABLE_LIST;
 
-static const size_t MAX_USER_HOST_SIZE= 512;
+static const size_t MAX_USER_HOST_SIZE = 512;
 
 /**
   Audit API event to string expanding macro.
@@ -35,24 +42,9 @@ static const size_t MAX_USER_HOST_SIZE= 512;
 #define AUDIT_EVENT(x) x, #x
 
 bool is_audit_plugin_class_active(THD *thd, unsigned long event_class);
+bool is_global_audit_mask_set();
 
-static inline size_t make_user_name(Security_context *sctx, char *buf)
-{
-  LEX_CSTRING sctx_user= sctx->user();
-  LEX_CSTRING sctx_host= sctx->host();
-  LEX_CSTRING sctx_ip= sctx->ip();
-  LEX_CSTRING sctx_priv_user= sctx->priv_user();
-  return static_cast<size_t>(strxnmov(buf, MAX_USER_HOST_SIZE,
-                                      sctx_priv_user.str[0] ?
-                                        sctx_priv_user.str : "", "[",
-                                      sctx_user.length ? sctx_user.str :
-                                                         "", "] @ ",
-                                      sctx_host.length ? sctx_host.str :
-                                                         "", " [",
-                                      sctx_ip.length ? sctx_ip.str : "", "]",
-                                      NullS)
-                             - buf);
-}
+size_t make_user_name(Security_context *sctx, char *buf);
 
 struct st_plugin_int;
 
@@ -65,8 +57,16 @@ void mysql_audit_finalize();
 void mysql_audit_init_thd(THD *thd);
 void mysql_audit_free_thd(THD *thd);
 int mysql_audit_acquire_plugins(THD *thd, mysql_event_class_t event_class,
-                                unsigned long event_subclass);
+                                unsigned long event_subclass,
+                                bool check_audited = true);
 void mysql_audit_release(THD *thd);
+
+/**
+  Enable auditing of the specified THD.
+
+  @param[in] thd THD whose auditing capability is turned on.
+*/
+void mysql_audit_enable_auditing(THD *thd);
 
 /**
   Call audit plugins of GENERAL audit class.
@@ -81,8 +81,8 @@ void mysql_audit_release(THD *thd);
   @return Value returned is not taken into consideration by the server.
 */
 int mysql_audit_notify(THD *thd, mysql_event_general_subclass_t subclass,
-                       const char* subclass_name,
-                       int error_code, const char *msg, size_t msg_len);
+                       const char *subclass_name, int error_code,
+                       const char *msg, size_t msg_len);
 /**
   Call audit plugins of GENERAL LOG audit class.
 
@@ -92,11 +92,10 @@ int mysql_audit_notify(THD *thd, mysql_event_general_subclass_t subclass,
 
   @return Value returned is not taken into consideration by the server.
 */
-inline static
-int mysql_audit_general_log(THD *thd, const char *cmd, size_t cmdlen)
-{
-  return mysql_audit_notify(thd, AUDIT_EVENT(MYSQL_AUDIT_GENERAL_LOG),
-                            0, cmd, cmdlen);
+inline static int mysql_audit_general_log(THD *thd, const char *cmd,
+                                          size_t cmdlen) {
+  return mysql_audit_notify(thd, AUDIT_EVENT(MYSQL_AUDIT_GENERAL_LOG), 0, cmd,
+                            cmdlen);
 }
 
 /**
@@ -124,7 +123,7 @@ int mysql_audit_notify(THD *thd, mysql_event_connection_subclass_t subclass,
   @return 0 continue server flow, otherwise abort.
 */
 int mysql_audit_notify(THD *thd, mysql_event_parse_subclass_t subclass,
-                       const char* subclass_name,
+                       const char *subclass_name,
                        mysql_event_parse_rewrite_plugin_flag *flags,
                        LEX_CSTRING *rewritten_query);
 
@@ -142,9 +141,9 @@ int mysql_audit_notify(THD *thd, mysql_event_parse_subclass_t subclass,
   @return 0 continue server flow, otherwise abort.
 */
 int mysql_audit_notify(THD *thd, mysql_event_authorization_subclass_t subclass,
-                       const char *subclass_name,
-                       const char *database, unsigned int database_length,
-                       const char *name, unsigned int name_length);
+                       const char *subclass_name, const char *database,
+                       unsigned int database_length, const char *name,
+                       unsigned int name_length);
 /**
   Call audit plugins of TABLE ACCESS audit class events for all tables
   available in the list.
@@ -172,9 +171,9 @@ int mysql_audit_table_access_notify(THD *thd, TABLE_LIST *table);
 
   @return 0 continue server flow, otherwise abort.
 */
-int mysql_audit_notify(THD *thd, mysql_event_global_variable_subclass_t subclass,
-                       const char *subclass_name,
-                       const char *name,
+int mysql_audit_notify(THD *thd,
+                       mysql_event_global_variable_subclass_t subclass,
+                       const char *subclass_name, const char *name,
                        const char *value, const unsigned int value_length);
 /**
   Call audit plugins of SERVER STARTUP audit class.
@@ -187,8 +186,7 @@ int mysql_audit_notify(THD *thd, mysql_event_global_variable_subclass_t subclass
   @return 0 continue server start, otherwise abort.
 */
 int mysql_audit_notify(mysql_event_server_startup_subclass_t subclass,
-                       const char *subclass_name,
-                       const char **argv,
+                       const char *subclass_name, const char **argv,
                        unsigned int argc);
 
 /**
@@ -253,8 +251,7 @@ int mysql_audit_notify(THD *thd, mysql_event_connection_subclass_t subclass,
   @return 0 continue server flow, otherwise abort.
 */
 int mysql_audit_notify(THD *thd, mysql_event_command_subclass_t subclass,
-                       const char *subclass_name,
-                       enum_server_command command,
+                       const char *subclass_name, enum_server_command command,
                        const char *command_text);
 /**
   Call audit plugins of QUERY audit class.
@@ -282,11 +279,55 @@ int mysql_audit_notify(THD *thd, mysql_event_query_subclass_t subclass,
 
   @return 0 continue server flow, otherwise abort.
 */
-int mysql_audit_notify(THD *thd,
-                       mysql_event_stored_program_subclass_t subclass,
-                       const char *subclass_name,
-                       const char *database,
-                       const char *name,
-                       void *parameters);
+int mysql_audit_notify(THD *thd, mysql_event_stored_program_subclass_t subclass,
+                       const char *subclass_name, const char *database,
+                       const char *name, void *parameters);
+
+/**
+  Call audit plugins of AUTHENTICATION audit class
+
+  @param[in] thd                    Current thread data.
+  @param[in] subclass               Type of the authentication audit event.
+  @param[in] subclass_name          Name of the subclass.
+  @param[in] status                 Status of the event.
+  @param[in] user                   Name of the user.
+  @param[in] host                   Name of the host.
+  @param[in] authentication_plugin  Current authentication plugin for user.
+  @param[in] is_role                Whether given AuthID is a role or not
+  @param[in] new_user               Name of the new user - In case of rename
+  @param[in] new_host               Name of the new host - In case of rename
+
+  @return 0 continue server flow, otherwise abort.
+*/
+int mysql_audit_notify(THD *thd, mysql_event_authentication_subclass_t subclass,
+                       const char *subclass_name, int status, const char *user,
+                       const char *host, const char *authentication_plugin,
+                       bool is_role, const char *new_user,
+                       const char *new_host);
+
+/**
+  Call audit plugins of MESSAGE audit class.
+
+  @param[in] thd                  Current thread data.
+  @param[in] subclass             Message class subclass name.
+  @param[in] subclass_name        Subclass name length.
+  @param[in] component            Component name.
+  @param[in] component_length     Component name length.
+  @param[in] producer             Producer name.
+  @param[in] producer_length      Producer name length.
+  @param[in] message              Message text.
+  @param[in] message_length       Message text length.
+  @param[in] key_value_map        Key value map pointer.
+  @param[in] key_value_map_length Key value map length.
+
+  @return 0 continue server flow.
+*/
+int mysql_audit_notify(THD *thd, mysql_event_message_subclass_t subclass,
+                       const char *subclass_name, const char *component,
+                       size_t component_length, const char *producer,
+                       size_t producer_length, const char *message,
+                       size_t message_length,
+                       mysql_event_message_key_value_t *key_value_map,
+                       size_t key_value_map_length);
 
 #endif /* SQL_AUDIT_INCLUDED */

@@ -1,14 +1,21 @@
 /*
-   Copyright (c) 2003, 2013, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2003, 2020, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -55,6 +62,8 @@ Filename::set(Ndbfs* fs,
               const Uint32 filenumber[4], bool dir,
               SegmentedSectionPtr ptr)
 {
+  m_base_path_spec = FsOpenReq::BP_MAX;
+
   char buf[PATH_MAX];
 
   const Uint32 type = FsOpenReq::getSuffix(filenumber);
@@ -63,12 +72,14 @@ Filename::set(Ndbfs* fs,
   size_t sz;
   if (version == 2)
   {
+    m_base_path_spec = FsOpenReq::BP_BACKUP;
     sz = BaseString::snprintf(theName, sizeof(theName), "%s", 
                               fs->get_base_path(FsOpenReq::BP_BACKUP).c_str());
     m_base_name = theName + fs->get_base_path(FsOpenReq::BP_BACKUP).length();
   }
   else
   {
+    m_base_path_spec = FsOpenReq::BP_FS;
     sz = BaseString::snprintf(theName, sizeof(theName), "%s", 
                               fs->get_base_path(FsOpenReq::BP_FS).c_str());
     m_base_name = theName + fs->get_base_path(FsOpenReq::BP_FS).length();
@@ -123,16 +134,23 @@ Filename::set(Ndbfs* fs,
   case 2:{
     const Uint32 seq = FsOpenReq::v2_getSequence(filenumber);
     const Uint32 nodeId = FsOpenReq::v2_getNodeId(filenumber);
+    const Uint32 partNum =  FsOpenReq::v2_getPartNum(filenumber);
+    const Uint32 totalParts =  FsOpenReq::v2_getTotalParts(filenumber);
     const Uint32 count = FsOpenReq::v2_getCount(filenumber);
-    
-    BaseString::snprintf(buf, sizeof(buf), "BACKUP%sBACKUP-%u%s",
-	     DIR_SEPARATOR, seq, DIR_SEPARATOR); 
+
+    if(partNum == 0)
+      BaseString::snprintf(buf, sizeof(buf), "BACKUP%sBACKUP-%u%s",
+            DIR_SEPARATOR, seq, DIR_SEPARATOR);
+    else
+      BaseString::snprintf(buf, sizeof(buf), "BACKUP%sBACKUP-%u%sBACKUP-%u-PART-%u-OF-%u%s",
+             DIR_SEPARATOR, seq, DIR_SEPARATOR, seq, partNum, totalParts, DIR_SEPARATOR);
+
     strcat(theName, buf);
-    if(count == 0xffffffff) {
-      BaseString::snprintf(buf, sizeof(buf), "BACKUP-%u.%d",
+    if(count == 0xffff) {
+      BaseString::snprintf(buf, sizeof(buf), "BACKUP-%u.%u",
 	       seq, nodeId); strcat(theName, buf);
     } else {
-      BaseString::snprintf(buf, sizeof(buf), "BACKUP-%u-%d.%d",
+      BaseString::snprintf(buf, sizeof(buf), "BACKUP-%u-%u.%u",
 	       seq, count, nodeId); strcat(theName, buf);
     }
     break;
@@ -160,7 +178,7 @@ Filename::set(Ndbfs* fs,
     }
     else
     {
-#ifdef NDB_WIN32
+#ifdef _WIN32
       char* b= buf;
       while((b= strchr(b, '/')) && b)
       {
@@ -168,6 +186,7 @@ Filename::set(Ndbfs* fs,
       }
 #endif
       Uint32 bp = FsOpenReq::v4_getBasePath(filenumber);
+      m_base_path_spec = bp;
       BaseString::snprintf(theName, sizeof(theName), "%s%s",
                fs->get_base_path(bp).c_str(), buf);
       m_base_name = theName + fs->get_base_path(bp).length();
@@ -186,6 +205,7 @@ Filename::set(Ndbfs* fs,
   case 6:
   {
     Uint32 bp = FsOpenReq::v5_getLcpNo(filenumber);
+    m_base_path_spec = bp;
     sz = BaseString::snprintf(theName, sizeof(theName), "%s",
                               fs->get_base_path(bp).c_str());
     break;

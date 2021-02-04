@@ -98,7 +98,7 @@ drop table t1;
 --replace_result $DEFAULT_ENGINE ENGINE
 # Also we will test behaviour of TIMESTAMP field in SHOW CREATE TABLE and
 # behaviour of DEFAULT literal for such fields
-create table t1 (t1 timestamp not null default '2003-01-01 00:00:00', t2 datetime, t3 timestamp NOT NULL DEFAULT '0000-00-00 00:00:00') charset utf8mb4;
+create table t1 (t1 timestamp not null default '2003-01-01 00:00:00', t2 datetime, t3 timestamp NOT NULL DEFAULT '0000-00-00 00:00:00');
 SET TIMESTAMP=1000000000;
 insert into t1 values ();
 SET TIMESTAMP=1000000001;
@@ -113,7 +113,7 @@ show create table t1;
 show columns from t1;
 drop table t1;
 
-create table t1 (t1 timestamp not null default now(), t2 datetime, t3 timestamp NOT NULL DEFAULT '0000-00-00 00:00:00') charset utf8mb4;
+create table t1 (t1 timestamp not null default now(), t2 datetime, t3 timestamp NOT NULL DEFAULT '0000-00-00 00:00:00');
 SET TIMESTAMP=1000000002;
 insert into t1 values ();
 SET TIMESTAMP=1000000003;
@@ -128,7 +128,7 @@ show create table t1;
 show columns from t1;
 drop table t1;
 
-create table t1 (t1 timestamp not null default '2003-01-01 00:00:00' on update now(), t2 datetime) charset utf8mb4;
+create table t1 (t1 timestamp not null default '2003-01-01 00:00:00' on update now(), t2 datetime);
 SET TIMESTAMP=1000000004;
 insert into t1 values ();
 select * from t1;
@@ -144,7 +144,7 @@ show create table t1;
 show columns from t1;
 drop table t1;
 
-create table t1 (t1 timestamp not null default now() on update now(), t2 datetime) charset utf8mb4;
+create table t1 (t1 timestamp not null default now() on update now(), t2 datetime);
 SET TIMESTAMP=1000000006;
 insert into t1 values ();
 select * from t1;
@@ -160,7 +160,7 @@ show create table t1;
 show columns from t1;
 drop table t1;
 
-create table t1 (t1 timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, t2 datetime, t3 timestamp NOT NULL DEFAULT '0000-00-00 00:00:00') charset utf8mb4;
+create table t1 (t1 timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, t2 datetime, t3 timestamp NOT NULL DEFAULT '0000-00-00 00:00:00');
 SET TIMESTAMP=1000000007;
 insert into t1 values ();
 select * from t1;
@@ -179,7 +179,7 @@ drop table t1;
 # Let us test if CURRENT_TIMESTAMP also works well as default value
 # (Of course NOW and CURRENT_TIMESTAMP are same for parser but still just
 # for demonstartion.)
-create table t1 (t1 timestamp not null default current_timestamp on update current_timestamp, t2 datetime) charset utf8mb4;
+create table t1 (t1 timestamp not null default current_timestamp on update current_timestamp, t2 datetime);
 SET TIMESTAMP=1000000009;
 insert into t1 values ();
 select * from t1;
@@ -247,7 +247,7 @@ drop table t1;
 
 # Unlike for default TIMESTAMP fields we do not interpret first field
 # in this table as TIMESTAMP with DEFAULT NOW() ON UPDATE NOW() properties.
-create table t1 (a timestamp null, b timestamp null) charset utf8mb4;
+create table t1 (a timestamp null, b timestamp null);
 
 #Replace default engine value with static engine string 
 --replace_result $DEFAULT_ENGINE ENGINE
@@ -259,7 +259,7 @@ select * from t1;
 drop table t1;
 
 # But explicit auto-set properties still should be OK.
-create table t1 (a timestamp null default current_timestamp on update current_timestamp, b timestamp null) charset utf8mb4;
+create table t1 (a timestamp null default current_timestamp on update current_timestamp, b timestamp null);
 
 #Replace default engine value with static engine string 
 --replace_result $DEFAULT_ENGINE ENGINE
@@ -274,7 +274,7 @@ drop table t1;
 # This is also a test for bug #2464, DEFAULT keyword in INSERT statement
 # should return default value for column.
 
-create table t1 (a timestamp null default null, b timestamp null default '2003-01-01 00:00:00') charset utf8mb4;
+create table t1 (a timestamp null default null, b timestamp null default '2003-01-01 00:00:00');
 
 #Replace default engine value with static engine string 
 --replace_result $DEFAULT_ENGINE ENGINE
@@ -306,21 +306,6 @@ select max(t) from t1 group by a;
 drop table t1;
 
 #
-# Test for bug #7418 "TIMESTAMP not always converted to DATETIME in MAXDB
-# mode". TIMESTAMP columns should be converted DATETIME columns in MAXDB
-# mode regardless of whether a display width is given.
-#
-set sql_mode='maxdb';
-create table t1 (a timestamp, b timestamp) charset utf8mb4;
-
-#Replace default engine value with static engine string 
---replace_result $DEFAULT_ENGINE ENGINE
-show create table t1;
-# restore default mode
-set sql_mode='';
-drop table t1;
-
-#
 # Bug#7806 - insert on duplicate key and auto-update of timestamp
 #
 create table t1 (a int auto_increment primary key, b int, c timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP);
@@ -344,17 +329,6 @@ drop table t1;
 
 # Restore timezone to default
 set time_zone= @@global.time_zone;
-
-CREATE TABLE t1 (
-`id` int(11) NOT NULL auto_increment,
-`username` varchar(80) NOT NULL default '',
-`posted_on` timestamp NOT NULL default '0000-00-00 00:00:00',
-PRIMARY KEY (`id`)
-) ENGINE=MyISAM DEFAULT CHARSET=latin1 AUTO_INCREMENT=1;
-
-show fields from t1;
-select is_nullable from INFORMATION_SCHEMA.COLUMNS where TABLE_NAME='t1' and COLUMN_NAME='posted_on';
-drop table t1;
 
 #
 # Bug#41370: TIMESTAMP field does not accepts NULL from FROM_UNIXTIME()
@@ -407,10 +381,6 @@ SELECT * FROM t1 WHERE a >= '2010-02-01 09:31:02.0';
 SELECT * FROM t1 WHERE '2010-02-01 09:31:02.0' <= a;
 SELECT * FROM t1 WHERE a <= '2010-02-01 09:31:02.0';
 SELECT * FROM t1 WHERE '2010-02-01 09:31:02.0' >= a;
-
---replace_column 1 x 2 x 3 x 6 x 7 x 8 x 9 x 10 x 12 x
-EXPLAIN
-SELECT * FROM t1 WHERE a >= '2010-02-01 09:31:02.0';
 SELECT * FROM t1 WHERE a >= '2010-02-01 09:31:02.0';
 
 CREATE TABLE t2 ( a TIMESTAMP, KEY ( a ) );
@@ -431,10 +401,8 @@ INSERT INTO t2 VALUES( '2010-02-01 09:31:11' );
 --echo # interval here. This reveals itself only in the number of reads 
 --echo # performed.
 FLUSH STATUS;
---replace_column 1 x 2 x 3 x 6 x 7 x 8 x 9 x 10 x 12 x
-EXPLAIN
 SELECT * FROM t2 WHERE a < '2010-02-01 09:31:02.0';
-SELECT * FROM t2 WHERE a < '2010-02-01 09:31:02.0';
+--skip_if_hypergraph  # Depends on the query plan.
 SHOW STATUS LIKE 'Handler_read_next';
 
 DROP TABLE t1, t2;

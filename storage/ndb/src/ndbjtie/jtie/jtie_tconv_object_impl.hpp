@@ -1,14 +1,21 @@
 /*
- Copyright (c) 2010, 2012, Oracle and/or its affiliates. All rights reserved.
+ Copyright (c) 2010, 2019, Oracle and/or its affiliates. All rights reserved.
 
  This program is free software; you can redistribute it and/or modify
- it under the terms of the GNU General Public License as published by
- the Free Software Foundation; version 2 of the License.
+ it under the terms of the GNU General Public License, version 2.0,
+ as published by the Free Software Foundation.
+
+ This program is also distributed with certain software (including
+ but not limited to OpenSSL) that is licensed under separate terms,
+ as designated in a particular file or component or in included license
+ documentation.  The authors of MySQL hereby grant you an additional
+ permission to link the program and your derivative works with the
+ separately licensed software that they have included with MySQL.
 
  This program is distributed in the hope that it will be useful,
  but WITHOUT ANY WARRANTY; without even the implied warranty of
  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- GNU General Public License for more details.
+ GNU General Public License, version 2.0, for more details.
 
  You should have received a copy of the GNU General Public License
  along with this program; if not, write to the Free Software
@@ -116,14 +123,14 @@ struct ObjectParam< _jtie_Object *, C * > {
             }
         }
         return c;
-    };
+    }
 
     static void
     release(C * c, _jtie_Object * j, JNIEnv * env) {
         TRACE("void ObjectParam.release(C *, _jtie_Object *, JNIEnv *)");
         //printf("    c = %lx\n", (unsigned long)c);
         (void)c; (void)j; (void)env;
-    };
+    }
 };
 
 // Implements the mapping of jtie_Objects parameters to references.
@@ -149,13 +156,13 @@ struct ObjectParam< _jtie_Object *, C & > {
 
         // never actually dereferenced if status indicates an error
         return *c;
-    };
+    }
 
     static void
     release(C & c, _jtie_Object * j, JNIEnv * env) {
         TRACE("void ObjectParam.release(C &, _jtie_Object *, JNIEnv *)");
         ObjectParam< _jtie_Object *, C * >::release(&c, j, env);
-    };
+    }
 };
 
 // Implements the mapping of jtie_Object invocation targets.
@@ -183,14 +190,14 @@ struct Target< _jtie_Object *, C > {
 
         // never actually dereferenced if status indicates an error
         return *c;
-    };
+    }
 
     static void
     release(C & c, _jtie_Object * j, JNIEnv * env) {
         TRACE("void Target.release(C &, _jtie_Object *, JNIEnv *)");
         // match delegation in convert()
         ObjectParam< _jtie_Object *, C * >::release(&c, j, env);
-    };
+    }
 };
 
 // Implements the mapping of jtie_Object results to pointers.

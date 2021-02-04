@@ -1,41 +1,37 @@
 #ifndef MYSQL_SERVICE_PARSER_INCLUDED
 #define MYSQL_SERVICE_PARSER_INCLUDED
-/*  Copyright (c) 2015, Oracle and/or its affiliates. All rights reserved.
+/*  Copyright (c) 2015, 2020, Oracle and/or its affiliates. All rights reserved.
 
-    This program is free software; you can redistribute it and/or
-    modify it under the terms of the GNU General Public License as
-    published by the Free Software Foundation; version 2 of the
-    License.
+    This program is free software; you can redistribute it and/or modify
+    it under the terms of the GNU General Public License, version 2.0,
+    as published by the Free Software Foundation.
+
+    This program is also distributed with certain software (including
+    but not limited to OpenSSL) that is licensed under separate terms,
+    as designated in a particular file or component or in included license
+    documentation.  The authors of MySQL hereby grant you an additional
+    permission to link the program and your derivative works with the
+    separately licensed software that they have included with MySQL.
 
     This program is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-    GNU General Public License for more details.
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License, version 2.0, for more details.
 
     You should have received a copy of the GNU General Public License
     along with this program; if not, write to the Free Software
-    Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA */
+    Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
-#include "my_md5_size.h"
 #include <mysql/mysql_lex_string.h>
 
 #ifndef MYSQL_ABI_CHECK
 #include <stdlib.h>
 #endif
 
-#ifdef __cplusplus
 class THD;
 class Item;
-#define MYSQL_THD THD*
-typedef Item* MYSQL_ITEM;
-#else
-#define MYSQL_THD void*
-typedef void* MYSQL_ITEM;
-#endif /* __cplusplus */
-
-#ifdef __cplusplus
-extern "C" {
-#endif
+#define MYSQL_THD THD *
+typedef Item *MYSQL_ITEM;
 
 /**
   @file include/mysql/service_parser.h
@@ -44,35 +40,36 @@ extern "C" {
   parse tree.
 */
 
-#define PARSER_SERVICE_DIGEST_LENGTH MD5_HASH_SIZE
+/* See DIGEST_HASH_SIZE in sql/sql_digest.h */
+#define PARSER_SERVICE_DIGEST_LENGTH 32
 
 #define STATEMENT_TYPE_SELECT 1
-#define STATEMENT_TYPE_OTHER 2
+#define STATEMENT_TYPE_UPDATE 2
+#define STATEMENT_TYPE_INSERT 3
+#define STATEMENT_TYPE_DELETE 4
+#define STATEMENT_TYPE_REPLACE 5
+#define STATEMENT_TYPE_OTHER 6
 
-typedef
-int (*parse_node_visit_function)(MYSQL_ITEM item, unsigned char* arg);
+typedef int (*parse_node_visit_function)(MYSQL_ITEM item, unsigned char *arg);
 
+typedef int (*sql_condition_handler_function)(int sql_errno,
+                                              const char *sqlstate,
+                                              const char *msg, void *state);
 
-typedef
-int (*sql_condition_handler_function)(int sql_errno,
-                                      const char* sqlstate,
-                                      const char* msg,
-                                      void *state);
-
-struct st_my_thread_handle;
+struct my_thread_handle;
 
 typedef MYSQL_THD (*mysql_current_session_t)();
 
 typedef MYSQL_THD (*mysql_open_session_t)();
 
 typedef void (*mysql_start_thread_t)(MYSQL_THD thd,
-                                     void *(*callback_fun)(void*),
-                                     void *arg,
-                                     struct st_my_thread_handle *thread_handle);
+                                     void *(*callback_fun)(void *), void *arg,
+                                     struct my_thread_handle *thread_handle);
 
-typedef void (*mysql_join_thread_t)(struct st_my_thread_handle *thread_handle);
+typedef void (*mysql_join_thread_t)(struct my_thread_handle *thread_handle);
 
-typedef void (*mysql_set_current_database_t)(MYSQL_THD thd, const MYSQL_LEX_STRING db);
+typedef void (*mysql_set_current_database_t)(MYSQL_THD thd,
+                                             const MYSQL_LEX_STRING db);
 
 /**
   Parses the query.
@@ -113,7 +110,8 @@ typedef int (*mysql_get_statement_type_t)(MYSQL_THD thd);
   @retval 0 Success.
   @retval 1 Parse error.
 */
-typedef int (*mysql_get_statement_digest_t)(MYSQL_THD thd, unsigned char *digest);
+typedef int (*mysql_get_statement_digest_t)(MYSQL_THD thd,
+                                            unsigned char *digest);
 
 /**
   Returns the number of parameters ('?') in the parsed query.
@@ -153,7 +151,7 @@ typedef int (*mysql_extract_prepared_params_t)(MYSQL_THD thd, int *positions);
 */
 typedef int (*mysql_visit_tree_t)(MYSQL_THD thd,
                                   parse_node_visit_function processor,
-                                  unsigned char* arg);
+                                  unsigned char *arg);
 
 /**
   Renders the MYSQL_ITEM as a string and returns a reference in the form of
@@ -195,8 +193,7 @@ typedef MYSQL_LEX_STRING (*mysql_get_query_t)(MYSQL_THD thd);
 */
 typedef MYSQL_LEX_STRING (*mysql_get_normalized_query_t)(MYSQL_THD thd);
 
-
-extern struct mysql_parser_service_st {
+extern "C" struct mysql_parser_service_st {
   mysql_current_session_t mysql_current_session;
   mysql_open_session_t mysql_open_session;
   mysql_start_thread_t mysql_start_thread;
@@ -212,15 +209,14 @@ extern struct mysql_parser_service_st {
   mysql_free_string_t mysql_free_string;
   mysql_get_query_t mysql_get_query;
   mysql_get_normalized_query_t mysql_get_normalized_query;
-} *mysql_parser_service;
+} * mysql_parser_service;
 
 #ifdef MYSQL_DYNAMIC_PLUGIN
 
 #define mysql_parser_current_session() \
-   mysql_parser_service->mysql_current_session()
+  mysql_parser_service->mysql_current_session()
 
-#define mysql_parser_open_session() \
-  mysql_parser_service->mysql_open_session()
+#define mysql_parser_open_session() mysql_parser_service->mysql_open_session()
 
 #define mysql_parser_start_thread(thd, func, arg, thread_handle) \
   mysql_parser_service->mysql_start_thread(thd, func, arg, thread_handle)
@@ -231,11 +227,10 @@ extern struct mysql_parser_service_st {
 #define mysql_parser_set_current_database(thd, db) \
   mysql_parser_service->mysql_set_current_database(thd, db)
 
-#define mysql_parser_parse(thd, query, is_prepared, \
-                           condition_handler, condition_handler_state)  \
-  mysql_parser_service->mysql_parse(thd, query, is_prepared, \
-                                    condition_handler, \
-                                    condition_handler_state)
+#define mysql_parser_parse(thd, query, is_prepared, condition_handler, \
+                           condition_handler_state)                    \
+  mysql_parser_service->mysql_parse(                                   \
+      thd, query, is_prepared, condition_handler, condition_handler_state)
 
 #define mysql_parser_get_statement_type(thd) \
   mysql_parser_service->mysql_get_statement_type(thd)
@@ -258,19 +253,18 @@ extern struct mysql_parser_service_st {
 #define mysql_parser_free_string(string) \
   mysql_parser_service->mysql_free_string(string)
 
-#define mysql_parser_get_query(thd) \
-  mysql_parser_service->mysql_get_query(thd)
+#define mysql_parser_get_query(thd) mysql_parser_service->mysql_get_query(thd)
 
 #define mysql_parser_get_normalized_query(thd) \
   mysql_parser_service->mysql_get_normalized_query(thd)
 
 #else
-typedef void *(*callback_function)(void*);
+typedef void *(*callback_function)(void *);
 MYSQL_THD mysql_parser_current_session();
 MYSQL_THD mysql_parser_open_session();
 void mysql_parser_start_thread(MYSQL_THD thd, callback_function fun, void *arg,
-                               struct st_my_thread_handle *thread_handle);
-void mysql_parser_join_thread(struct st_my_thread_handle *thread_handle);
+                               struct my_thread_handle *thread_handle);
+void mysql_parser_join_thread(struct my_thread_handle *thread_handle);
 void mysql_parser_set_current_database(MYSQL_THD thd,
                                        const MYSQL_LEX_STRING db);
 int mysql_parser_parse(MYSQL_THD thd, const MYSQL_LEX_STRING query,
@@ -282,16 +276,12 @@ int mysql_parser_get_statement_digest(MYSQL_THD thd, unsigned char *digest);
 int mysql_parser_get_number_params(MYSQL_THD thd);
 int mysql_parser_extract_prepared_params(MYSQL_THD thd, int *positions);
 int mysql_parser_visit_tree(MYSQL_THD thd, parse_node_visit_function processor,
-                            unsigned char* arg);
+                            unsigned char *arg);
 MYSQL_LEX_STRING mysql_parser_item_string(MYSQL_ITEM item);
 void mysql_parser_free_string(MYSQL_LEX_STRING string);
 MYSQL_LEX_STRING mysql_parser_get_query(MYSQL_THD thd);
 MYSQL_LEX_STRING mysql_parser_get_normalized_query(MYSQL_THD thd);
 
 #endif /* MYSQL_DYNAMIC_PLUGIN */
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif /* MYSQL_SERVICE_PARSER_INCLUDED */

@@ -1,13 +1,20 @@
-/* Copyright (c) 2016, 2017, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2016, 2019, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -19,6 +26,7 @@
 #include <stddef.h>
 #include <limits>
 #include <new>
+#include <utility>  // std::forward
 
 #include "my_compiler.h"
 #include "my_dbug.h"
@@ -27,8 +35,7 @@
   Functor struct which invokes my_free. Declared here as it is used as the
   defalt value for Stateless_allocator's DEALLOC_FUN template parameter.
 */
-struct My_free_functor
-{
+struct My_free_functor {
   void operator()(void *p, size_t) const;
 };
 
@@ -74,29 +81,28 @@ struct My_free_functor
   assumes that allocators are default-constructible".
 
   @note allocate() throws std::bad_alloc() similarly to the default
-  STL memory allocator. This is necessary - STL functions which allocates
-  memory expects it. Otherwise these functions will try to use the memory,
+  STL memory allocator. This is necessary - STL functions which allocate
+  memory expect it. Otherwise these functions will try to use the memory,
   leading to seg faults if memory allocation was not successful.
 
 */
 
-template <class T, class ALLOC_FUN, class DEALLOC_FUN= My_free_functor>
-class Stateless_allocator
-{
-public:
+template <class T, class ALLOC_FUN, class DEALLOC_FUN = My_free_functor>
+class Stateless_allocator {
+ public:
   typedef T value_type;
   typedef size_t size_type;
   typedef ptrdiff_t difference_type;
 
-  typedef T* pointer;
-  typedef const T* const_pointer;
+  typedef T *pointer;
+  typedef const T *const_pointer;
 
-  typedef T& reference;
-  typedef const T& const_reference;
+  typedef T &reference;
+  typedef const T &const_reference;
 
   template <class T_>
   using Stateless_allocator_type =
-    Stateless_allocator<T_, ALLOC_FUN, DEALLOC_FUN>;
+      Stateless_allocator<T_, ALLOC_FUN, DEALLOC_FUN>;
 
   Stateless_allocator() = default;
 
@@ -104,75 +110,62 @@ public:
   const_pointer address(const_reference r) const { return &r; }
 
   template <class U>
-  Stateless_allocator(const Stateless_allocator_type<U> &)
-  {}
+  Stateless_allocator(const Stateless_allocator_type<U> &) {}
 
   template <class U>
-  Stateless_allocator & operator=(const Stateless_allocator_type<U> &)
-  {}
+  Stateless_allocator &operator=(const Stateless_allocator_type<U> &) {}
 
-  ~Stateless_allocator() = default;
+  pointer allocate(size_type n,
+                   const_pointer hint MY_ATTRIBUTE((unused)) = nullptr) {
+    if (n == 0) return nullptr;
+    if (n > max_size()) throw std::bad_alloc();
 
-  pointer allocate(size_type n, const_pointer hint MY_ATTRIBUTE((unused))= 0)
-  {
-    if (n == 0)
-      return NULL;
-    if (n > max_size())
-      throw std::bad_alloc();
-
-    pointer p= static_cast<pointer>(ALLOC_FUN()(n * sizeof(T)));
-    if (p == NULL)
-      throw std::bad_alloc();
+    pointer p = static_cast<pointer>(ALLOC_FUN()(n * sizeof(T)));
+    if (p == nullptr) throw std::bad_alloc();
     return p;
   }
 
-  void deallocate(pointer p, size_type n) { DEALLOC_FUN()(p,n); }
+  void deallocate(pointer p, size_type n) { DEALLOC_FUN()(p, n); }
 
-  void construct(pointer p, const T& val)
-  {
-    DBUG_ASSERT(p != NULL);
+  template <class U, class... Args>
+  void construct(U *p, Args &&... args) {
+    DBUG_ASSERT(p != nullptr);
     try {
-      new(p) T(val);
+      ::new ((void *)p) U(std::forward<Args>(args)...);
     } catch (...) {
-      DBUG_ASSERT(false); // Constructor should not throw an exception.
+      DBUG_ASSERT(false);  // Constructor should not throw an exception.
     }
   }
 
-  void destroy(pointer p)
-  {
-    DBUG_ASSERT(p != NULL);
+  void destroy(pointer p) {
+    DBUG_ASSERT(p != nullptr);
     try {
       p->~T();
     } catch (...) {
-      DBUG_ASSERT(false); // Destructor should not throw an exception
+      DBUG_ASSERT(false);  // Destructor should not throw an exception
     }
   }
 
-  size_type max_size() const
-  {
+  size_type max_size() const {
     return std::numeric_limits<size_t>::max() / sizeof(T);
   }
 
   template <class U>
-  struct rebind
-  {
+  struct rebind {
     typedef Stateless_allocator<U, ALLOC_FUN, DEALLOC_FUN> other;
   };
 };
 
 template <class T, class ALLOC_FUN, class DEALLOC_FUN>
-bool operator== (const Stateless_allocator<T, ALLOC_FUN, DEALLOC_FUN>&,
-                 const Stateless_allocator<T, ALLOC_FUN, DEALLOC_FUN>&)
-{
-   return true;
+bool operator==(const Stateless_allocator<T, ALLOC_FUN, DEALLOC_FUN> &,
+                const Stateless_allocator<T, ALLOC_FUN, DEALLOC_FUN> &) {
+  return true;
 }
 
-
 template <class T, class ALLOC_FUN, class DEALLOC_FUN>
-bool operator!= (const Stateless_allocator<T, ALLOC_FUN, DEALLOC_FUN>&,
-                 const Stateless_allocator<T, ALLOC_FUN, DEALLOC_FUN>&)
-{
+bool operator!=(const Stateless_allocator<T, ALLOC_FUN, DEALLOC_FUN> &,
+                const Stateless_allocator<T, ALLOC_FUN, DEALLOC_FUN> &) {
   return false;
 }
 
-#endif // STATELESS_ALLOCATOR_INCLUDED
+#endif  // STATELESS_ALLOCATOR_INCLUDED

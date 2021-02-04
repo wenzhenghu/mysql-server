@@ -1,7 +1,7 @@
 # Tests for various concurrency-related aspects of CREATE TABLE ... SELECT
 # and CREATE TABLE like implementation.
 #
-# Note that we don't test general CREATE TABLE ... SELECT/LIKE functionality
+# Note that we do not test general CREATE TABLE ... SELECT/LIKE functionality
 # here as it is already covered by create.test. We are more interested in
 # extreme cases.
 #
@@ -15,15 +15,6 @@
 --source include/force_binlog_format_statement.inc
 # Save the initial number of concurrent sessions.
 --source include/count_sessions.inc
-
-########################################
-##### WL#7554 Force schema `test` to character set latin1
-##### This test should be migrated to utf8mb4
---disable_query_log
-let $testdbcs59=`select default_character_set_name from information_schema.schemata where schema_name='test'`;
-alter schema test default character set latin1;
---enable_query_log
-########################################
 
 # Create auxilliary connections
 connect (addconroot1, localhost, root,,);
@@ -405,7 +396,7 @@ select @a;
 drop table t1;
 
 # Concurrent DROP TABLE
-set debug_sync='create_table_select_before_check_if_exists SIGNAL parked WAIT_FOR go';
+set debug_sync='create_table_select_before_lock SIGNAL parked WAIT_FOR go';
 --send create table if not exists t1 select 1 as i;
 connection addconroot1;
 set debug_sync='now WAIT_FOR parked';
@@ -555,25 +546,6 @@ source include/show_binlog_events.inc;
 --echo #
 
 #
-# MyISAM has limits imposed by the server
-
-let $colnum= 4095;
-let $str= c text;
-while ($colnum)
-{
-  let $str= c$colnum int, $str;
-  dec $colnum;
-}
---eval CREATE TABLE t1 ($str) engine= myisam;
---error ER_TOO_MANY_FIELDS
-ALTER TABLE t1 ADD COLUMN too_much int;
-DROP TABLE t1;
-
-let $str= c4096 int, $str;
---error ER_TOO_MANY_FIELDS
---eval CREATE TABLE t1 ($str) engine= myisam;
-
-#
 # InnoDB has separate internal limits
 
 let $colnum= 1016;
@@ -600,25 +572,6 @@ let $str= c1017 int, $str;
 --echo # 1: Max number of ENUM/SET columns
 
 #
-# MyISAM has limits imposed by the server
-
-let $colnum= 4095;
-let $str= c4096 ENUM('a');
-while ($colnum)
-{
-  let $str= c$colnum ENUM('a$colnum'), $str;
-  dec $colnum;
-}
---eval CREATE TABLE t1 ($str) engine= myisam
---error ER_TOO_MANY_FIELDS
-ALTER TABLE t1 ADD COLUMN too_much ENUM('a9999');
-DROP TABLE t1;
-
-let $str= $str, too_much ENUM('a9999');
---error ER_TOO_MANY_FIELDS
---eval CREATE TABLE t1 ($str) engine= myisam
-
-#
 # InnoDB has separate internal limits
 
 let $colnum= 1016;
@@ -636,25 +589,6 @@ DROP TABLE t1;
 let $str= $str, too_much ENUM('a9999');
 --error ER_TOO_MANY_FIELDS
 --eval CREATE TABLE t1 ($str) engine= innodb
-
-#
-# MyISAM has limits imposed by the server
-
-let $colnum= 4095;
-let $str= c4096 SET('a');
-while ($colnum)
-{
-  let $str= c$colnum SET('a$colnum'), $str;
-  dec $colnum;
-}
---eval CREATE TABLE t1 ($str) engine= myisam
---error ER_TOO_MANY_FIELDS
-ALTER TABLE t1 ADD COLUMN too_much SET('a9999');
-DROP TABLE t1;
-
-let $str= $str, too_much SET('a9999');
---error ER_TOO_MANY_FIELDS
---eval CREATE TABLE t1 ($str) engine= myisam
 
 #
 # InnoDB has separate internal limits
@@ -729,10 +663,3 @@ DROP TABLE t1;
 --source include/wait_until_count_sessions.inc
 
 --source include/restore_default_binlog_format.inc
-
-########################################
-##### WL#7554 set schema `test` back to what it was
---disable_query_log
---eval alter schema test default character set $testdbcs59;
---enable_query_log
-########################################

@@ -1,14 +1,3 @@
-########################################
-##### WL#7554 Force schema `test` to character set latin1
-##### This test should be migrated to utf8mb4
---disable_query_log
-let $testdbcs240=`select default_character_set_name from information_schema.schemata where schema_name='test'`;
-alter schema default character set latin1;
-use test;
---enable_query_log
-########################################
-
---source include/not_embedded.inc
 
 --disable_warnings
 drop table if exists t1, t2;
@@ -150,6 +139,7 @@ PARTITION BY RANGE (TO_DAYS(c3))
 
 insert into t1(c2,c3) values ("Test row",'2010-01-01 00:00:00');
 
+--sorted_result
 SELECT PARTITION_NAME, TABLE_ROWS FROM INFORMATION_SCHEMA.PARTITIONS WHERE TABLE_NAME = 't1' AND TABLE_SCHEMA = 'test';
 SELECT count(*) FROM t1 p where c3 in
 (SELECT c3 FROM t1 t WHERE t.c3 < TIMESTAMP'2011-04-26 19:19:44'
@@ -286,15 +276,15 @@ INSERT INTO t1 VALUES (100);
 --error ER_NO_PARTITION_FOR_GIVEN_VALUE
 insert INTO t1 VALUES (110);
 ANALYZE TABLE t1;
-EXPLAIN PARTITIONS SELECT * FROM t1 WHERE a > 90;
-EXPLAIN PARTITIONS SELECT * FROM t1 WHERE a >= 90;
-EXPLAIN PARTITIONS SELECT * FROM t1 WHERE a = 90;
-EXPLAIN PARTITIONS SELECT * FROM t1 WHERE a = 89;
-EXPLAIN PARTITIONS SELECT * FROM t1 WHERE a >= 89;
-EXPLAIN PARTITIONS SELECT * FROM t1 WHERE a > 89;
-EXPLAIN PARTITIONS SELECT * FROM t1 WHERE a = 100;
-EXPLAIN PARTITIONS SELECT * FROM t1 WHERE a >= 100;
-EXPLAIN PARTITIONS SELECT * FROM t1 WHERE a > 100;
+EXPLAIN SELECT * FROM t1 WHERE a > 90;
+EXPLAIN SELECT * FROM t1 WHERE a >= 90;
+EXPLAIN SELECT * FROM t1 WHERE a = 90;
+EXPLAIN SELECT * FROM t1 WHERE a = 89;
+EXPLAIN SELECT * FROM t1 WHERE a >= 89;
+EXPLAIN SELECT * FROM t1 WHERE a > 89;
+EXPLAIN SELECT * FROM t1 WHERE a = 100;
+EXPLAIN SELECT * FROM t1 WHERE a >= 100;
+EXPLAIN SELECT * FROM t1 WHERE a > 100;
 DROP TABLE t1;
 
 --echo #
@@ -383,7 +373,7 @@ PARTITION BY RANGE(id) (
 INSERT INTO t1 VALUES (1,1), (2,2), (3,3), (4,4), (5,5), (6,6), (7,7), (8,8),
                       (9,9), (10,10), (11,11);
 
-SET @old_tx_isolation := @@session.tx_isolation;
+SET @old_transaction_isolation := @@session.transaction_isolation;
 SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED;
 
 SET autocommit = 0;
@@ -406,7 +396,8 @@ UPDATE t1 SET data = data*2 WHERE data = 2;
 #--replace_regex /.*---TRANSACTION [0-9]+ [0-9]+, .*, OS thread id [0-9]+// /MySQL thread id [0-9]+, query id [0-9]+ .*// /.*([0-9]+ lock struct\(s\)), heap size [0-9]+, ([0-9]+ row lock\(s\)).*/\1 \2/
 #SHOW ENGINE InnoDB STATUS;
 
-SET @@session.tx_isolation = @old_tx_isolation;
+SET @@session.transaction_isolation = @old_transaction_isolation;
+SET autocommit = default;
 
 DROP TABLE t1;
 
@@ -447,24 +438,6 @@ SELECT right(a,1) FROM t1 WHERE b = repeat('0',257) ORDER BY a DESC;
 ALTER TABLE t1 DROP INDEX b;
 SELECT right(a,1) FROM t1 WHERE b = repeat('0',257) ORDER BY a ASC;
 SELECT right(a,1) FROM t1 WHERE b = repeat('0',257) ORDER BY a DESC;
-DROP TABLE t1;
-
-#
-# Bug#32948 - FKs allowed to reference partitioned table
-#
--- echo # Bug#32948
-CREATE TABLE t1 (c1 INT, PRIMARY KEY (c1)) ENGINE=INNODB;
-CREATE TABLE t2 (c1 INT, PRIMARY KEY (c1),
-                 FOREIGN KEY (c1) REFERENCES t1 (c1)
-                 ON DELETE CASCADE)
-ENGINE=INNODB;
---error ER_FOREIGN_KEY_ON_PARTITIONED
-ALTER TABLE t1 PARTITION BY HASH(c1) PARTITIONS 5;
---error ER_FOREIGN_KEY_ON_PARTITIONED
-ALTER TABLE t2 PARTITION BY HASH(c1) PARTITIONS 5;
---error ER_ROW_IS_REFERENCED
-ALTER TABLE t1 ENGINE=MyISAM;
-DROP TABLE t2;
 DROP TABLE t1;
 
 #
@@ -549,7 +522,7 @@ engine = innodb
 partition by range (year(a))
 (partition p0 values less than (2006),
  partition p1 values less than (2007));
-explain partitions select * from t1
+explain select * from t1
 where a between '2006-01-01' and '2007-06-01';
 drop table t1;
 
@@ -640,21 +613,6 @@ SELECT COUNT(*) FROM t1;
 DROP TABLE t1;
 
 #
-# Bug #31893 Partitions: crash if subpartitions and engine change
-#
-create table t1 (int_column int, char_column char(5))
-  PARTITION BY RANGE (int_column) subpartition by key (char_column) subpartitions 2
-  (PARTITION p1 VALUES LESS THAN (5) ENGINE = InnoDB);
---error ER_CHECK_NOT_IMPLEMENTED
-alter table t1
-ENGINE = MyISAM
-PARTITION BY RANGE (int_column)
-   subpartition by key (char_column) subpartitions 2
-  (PARTITION p1 VALUES LESS THAN (5));
-show create table t1;
-drop table t1;
-
-#
 # BUG#46483 - drop table of partitioned table may leave extraneous file
 # Note: was only repeatable with InnoDB plugin
 #
@@ -666,7 +624,7 @@ DROP TABLE t1;
 # Before the fix it should show extra file like #sql-2405_2.par
 --list_files $MYSQLD_DATADIR/test/ *
 
---disable_parsing
+--disable_testcase BUG#0000
 --echo #
 --echo # Bug#47343: InnoDB fails to clean-up after lock wait timeout on
 --echo #            REORGANIZE PARTITION
@@ -709,7 +667,7 @@ COMMIT;
 DROP TABLE t1;
 
 #
-# Bug #55146    Assertion `m_part_spec.start_part == m_part_spec.end_part' in index_read_idx_map
+# Bug #55146    Assertion 'm_part_spec.start_part == m_part_spec.end_part' in index_read_idx_map
 #
 
 CREATE TABLE t1 (i1 int NOT NULL primary key, f1 int) ENGINE = InnoDB
@@ -721,7 +679,7 @@ SELECT * FROM t1 WHERE i1 = ( SELECT i1 FROM t1 WHERE f1=0 LIMIT 1 );
 
 DROP TABLE t1;
 
---enable_parsing
+--enable_testcase
 
 --echo #
 --echo # Bug#54783: optimize table crashes with invalid timestamp default value and NO_ZERO_DATE
@@ -770,10 +728,10 @@ FLUSH TABLES t1 FOR EXPORT;
 --replace_result #p# #P#
 --list_files $MYSQLD_DATADIR/test/ t1*
 --echo # Copying the .cfg and .ibd files as backup
---copy_file $MYSQLD_DATADIR/test/t1#P#p0.cfg $MYSQLD_DATADIR/test/backup_t1#P#p0.cfg
---copy_file $MYSQLD_DATADIR/test/t1#P#p0.ibd $MYSQLD_DATADIR/test/backup_t1#P#p0.ibd
---copy_file $MYSQLD_DATADIR/test/t1#P#p1.cfg $MYSQLD_DATADIR/test/backup_t1#P#p1.cfg
---copy_file $MYSQLD_DATADIR/test/t1#P#p1.ibd $MYSQLD_DATADIR/test/backup_t1#P#p1.ibd
+--copy_file $MYSQLD_DATADIR/test/t1#p#p0.cfg $MYSQLD_DATADIR/test/backup_t1#p#p0.cfg
+--copy_file $MYSQLD_DATADIR/test/t1#p#p0.ibd $MYSQLD_DATADIR/test/backup_t1#p#p0.ibd
+--copy_file $MYSQLD_DATADIR/test/t1#p#p1.cfg $MYSQLD_DATADIR/test/backup_t1#p#p1.cfg
+--copy_file $MYSQLD_DATADIR/test/t1#p#p1.ibd $MYSQLD_DATADIR/test/backup_t1#p#p1.ibd
 UNLOCK TABLES;
 --echo # List of files after UNLOCK (no .cfg files).
 --replace_result #p# #P#
@@ -783,10 +741,10 @@ ALTER TABLE t1 DISCARD TABLESPACE;
 --replace_result #p# #P#
 --list_files $MYSQLD_DATADIR/test/ t1*
 --echo # Moving the .cfg and .ibd files back from backup
---move_file $MYSQLD_DATADIR/test/backup_t1#P#p0.cfg $MYSQLD_DATADIR/test/t1#P#p0.cfg
---move_file $MYSQLD_DATADIR/test/backup_t1#P#p0.ibd $MYSQLD_DATADIR/test/t1#P#p0.ibd
---move_file $MYSQLD_DATADIR/test/backup_t1#P#p1.cfg $MYSQLD_DATADIR/test/t1#P#p1.cfg
---move_file $MYSQLD_DATADIR/test/backup_t1#P#p1.ibd $MYSQLD_DATADIR/test/t1#P#p1.ibd
+--move_file $MYSQLD_DATADIR/test/backup_t1#p#p0.cfg $MYSQLD_DATADIR/test/t1#p#p0.cfg
+--move_file $MYSQLD_DATADIR/test/backup_t1#p#p0.ibd $MYSQLD_DATADIR/test/t1#p#p0.ibd
+--move_file $MYSQLD_DATADIR/test/backup_t1#p#p1.cfg $MYSQLD_DATADIR/test/t1#p#p1.cfg
+--move_file $MYSQLD_DATADIR/test/backup_t1#p#p1.ibd $MYSQLD_DATADIR/test/t1#p#p1.ibd
 ALTER TABLE t1 IMPORT TABLESPACE;
 --echo # List of files after IMPORT (.cfg files still there).
 --replace_result #p# #P#
@@ -811,10 +769,13 @@ START TRANSACTION WITH CONSISTENT SNAPSHOT;
 ALTER TABLE t1 ADD INDEX idx1 (b);
 --connection default
 --echo # con default
+--skip_if_hypergraph  # Doesn't use the index, so the plan is still valid.
 --error ER_TABLE_DEF_CHANGED
 SELECT b FROM t1 WHERE b = 0;
+--skip_if_hypergraph  # Doesn't use the index, so the plan is still valid.
 --error ER_TABLE_DEF_CHANGED
 SELECT b FROM t1 WHERE b = 0;
+--skip_if_hypergraph  # Doesn't use the index, so the plan is still valid.
 --error ER_TABLE_DEF_CHANGED
 SELECT * FROM t1;
 --disconnect con1
@@ -832,10 +793,13 @@ START TRANSACTION WITH CONSISTENT SNAPSHOT;
 ALTER TABLE t1 ADD INDEX idx1 (b);
 --connection default
 --echo # con default
+--skip_if_hypergraph  # Doesn't use the index, so the plan is still valid.
 --error ER_TABLE_DEF_CHANGED
 SELECT b FROM t1 WHERE b = 0;
+--skip_if_hypergraph  # Doesn't use the index, so the plan is still valid.
 --error ER_TABLE_DEF_CHANGED
 SELECT b FROM t1 WHERE b = 0;
+--skip_if_hypergraph  # Doesn't use the index, so the plan is still valid.
 --error ER_TABLE_DEF_CHANGED
 SELECT * FROM t1;
 --disconnect con1
@@ -1050,6 +1014,7 @@ PARTITION BY HASH (a) PARTITIONS 2;
 
 ANALYZE TABLE t1;
 
+--sorted_result
 SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE
 CREATE_TIME IS NOT NULL AND TABLE_NAME='t1';
 
@@ -1057,9 +1022,11 @@ INSERT INTO t1 VALUES (1),(2),(3),(4),(5),(6),(7),(8);
 
 ANALYZE TABLE t1;
 
+# Remove workaround of "OR FALSE" from the end of WHERE clause after fix
+# of Bug#26389402 for I_S views definitions.
 SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE
 CREATE_TIME IS NOT NULL AND UPDATE_TIME IS NOT NULL
-AND TABLE_NAME='t1';
+AND TABLE_NAME='t1' OR FALSE;
 
 DROP TABLE t1;
 
@@ -1135,103 +1102,392 @@ DROP TABLE t1;
 --rmdir $MYSQL_TMP_DIR/temp_dir/test
 --rmdir $MYSQL_TMP_DIR/temp_dir
 
+# TODO : Enable following once shared tablespaces are allowed in Partitioned
+#	 Tables (wl#12034).
+# #Create one partition in general tablespace and other in different path
+#
+# --replace_result $MYSQL_TMP_DIR MYSQL_TMP_DIR
+# let $restart_parameters = restart: --innodb-directories=$MYSQL_TMP_DIR;
+# --source include/restart_mysqld.inc
+#
+# --replace_result $MYSQL_TMP_DIR MYSQL_TMP_DIR
+# eval CREATE TABLESPACE ts1 ADD DATAFILE '$MYSQL_TMP_DIR/ts1.ibd' ENGINE=Innodb;
+#
+# --replace_result $MYSQL_TMP_DIR MYSQL_TMP_DIR
+# eval CREATE TABLE `t1` (
+#        `f1` INT(10) UNSIGNED NOT NULL AUTO_INCREMENT,
+#        `f2` MEDIUMTEXT NOT NULL,
+#        `f3` CHAR(100) NOT NULL,
+#        `f4` TINYINT(1) unsigned NOT NULL,
+#        PRIMARY KEY (`f1`,`f4`)
+#      ) TABLESPACE ts1 ENGINE=InnoDB AUTO_INCREMENT=0 DEFAULT CHARSET=latin1
+#      PARTITION BY LIST (`f4`)
+#      (PARTITION p0 VALUES IN (0) ENGINE = InnoDB,
+#       PARTITION p1 VALUES IN (1) DATA DIRECTORY = '$MYSQL_TMP_DIR/temp_tblspc' ENGINE = InnoDB);
+#
+# --replace_result $MYSQL_TMP_DIR MYSQL_TMP_DIR
+# SHOW CREATE TABLE t1;
+#
+# OPTIMIZE TABLE t1;
+# --replace_result $MYSQL_TMP_DIR MYSQL_TMP_DIR
+# SHOW CREATE TABLE t1;
+#
+# ALTER TABLE t1 OPTIMIZE PARTITION p0;
+# --replace_result $MYSQL_TMP_DIR MYSQL_TMP_DIR
+# SHOW CREATE TABLE t1;
+#
+# ALTER TABLE t1 OPTIMIZE PARTITION p1;
+# --replace_result $MYSQL_TMP_DIR MYSQL_TMP_DIR
+# SHOW CREATE TABLE t1;
+#
+# DROP TABLE t1;
+# DROP TABLESPACE ts1;
+#
+# --rmdir $MYSQL_TMP_DIR/temp_tblspc/test
+# --rmdir $MYSQL_TMP_DIR/temp_tblspc
+#
+# #Create partitions in two different tablespaces
+#
+# --replace_result $MYSQL_TMP_DIR MYSQL_TMP_DIR
+# eval CREATE TABLESPACE ts1 ADD DATAFILE '$MYSQL_TMP_DIR/ts1.ibd' ENGINE=Innodb;
+#
+# --replace_result $MYSQL_TMP_DIR MYSQL_TMP_DIR
+# eval CREATE TABLESPACE ts2 ADD DATAFILE '$MYSQL_TMP_DIR/ts2.ibd' ENGINE=Innodb;
+#
+# eval CREATE TABLE `t1` (
+#        `f1` INT(10) UNSIGNED NOT NULL AUTO_INCREMENT,
+#        `f4` TINYINT(1) unsigned NOT NULL,
+#        PRIMARY KEY (`f1`,`f4`)
+#      )  ENGINE=InnoDB AUTO_INCREMENT=0 DEFAULT CHARSET=latin1
+#      PARTITION BY LIST (`f4`)
+#      (PARTITION p0 VALUES IN (0) TABLESPACE ts1 ENGINE = InnoDB,
+#       PARTITION p1 VALUES IN (1) TABLESPACE ts2 ENGINE = InnoDB);
+#
+# SHOW CREATE TABLE t1;
+# OPTIMIZE TABLE t1;
+# SHOW CREATE TABLE t1;
+# DROP TABLE t1;
+# DROP TABLESPACE ts1;
+# DROP TABLESPACE ts2;
+#
+# #Create partitions to use differeent avaliable tablespace options
+#
+# --replace_result $MYSQL_TMP_DIR MYSQL_TMP_DIR
+# eval CREATE TABLESPACE ts1 ADD DATAFILE '$MYSQL_TMP_DIR/ts1.ibd' ENGINE=Innodb;
+#
+# --replace_result $MYSQL_TMP_DIR MYSQL_TMP_DIR
+# eval CREATE TABLE `t1` (
+#        `f1` INT(10) UNSIGNED NOT NULL AUTO_INCREMENT,
+#        `f4` TINYINT(1) unsigned NOT NULL,
+#        PRIMARY KEY (`f1`,`f4`)
+#      )  ENGINE=InnoDB AUTO_INCREMENT=0 DEFAULT CHARSET=latin1
+#      PARTITION BY LIST (`f4`)
+#      (PARTITION p0 VALUES IN (0) TABLESPACE ts1 ENGINE = InnoDB,
+#       PARTITION p1 VALUES IN (1) TABLESPACE innodb_file_per_table DATA DIRECTORY='$MYSQL_TMP_DIR/temp_dir' ENGINE = InnoDB,
+#       PARTITION p2 VALUES IN (2) TABLESPACE innodb_file_per_table ENGINE = InnoDB,
+#       PARTITION p3 VALUES IN (3) TABLESPACE innodb_system ENGINE = InnoDB);
+#
+# --replace_result $MYSQL_TMP_DIR MYSQL_TMP_DIR
+# SHOW CREATE TABLE t1;
+#
+# OPTIMIZE TABLE t1;
+# --replace_result $MYSQL_TMP_DIR MYSQL_TMP_DIR
+# SHOW CREATE TABLE t1;
+#
+# DROP TABLE t1;
+# DROP TABLESPACE ts1;
+#
+# --rmdir $MYSQL_TMP_DIR/temp_dir/test
+# --rmdir $MYSQL_TMP_DIR/temp_dir
 
-#Create one partition in general tablespace and other in different path
+--echo
+--echo Bug #25942592    INNODB: FAILING ASSERTION: INDEX->PAGE != 0XFFFFFFFF
+--echo                   IN BTR0CUR.CC LINE 816
+--echo
+call mtr.add_suppression("Missing .ibd file for table");
 
---replace_result $MYSQL_TMP_DIR MYSQL_TMP_DIR
-eval CREATE TABLESPACE ts1 ADD DATAFILE '$MYSQL_TMP_DIR/ts1.ibd' ENGINE=Innodb;
+#Unnamed Partitioins
+CREATE TABLE t1(c1 INT,c2 CHAR (1),c3 DATE) ENGINE=InnoDB PARTITION BY HASH
+(TO_DAYS(c3)) PARTITIONS 12;
+ALTER TABLE t1 ADD INDEX(c1);
+ALTER TABLE t1 DISCARD PARTITION p2 TABLESPACE;
+--error ER_TABLESPACE_DISCARDED
+SELECT COUNT(*)FROM t1,t1 AS b WHERE t1.c1=''AND t1.c2=b.c1;
 
---replace_result $MYSQL_TMP_DIR MYSQL_TMP_DIR
-eval CREATE TABLE `t1` (
-       `f1` INT(10) UNSIGNED NOT NULL AUTO_INCREMENT,
-       `f2` MEDIUMTEXT NOT NULL,
-       `f3` CHAR(100) NOT NULL,
-       `f4` TINYINT(1) unsigned NOT NULL,
-       PRIMARY KEY (`f1`,`f4`)
-     ) TABLESPACE ts1 ENGINE=InnoDB AUTO_INCREMENT=0 DEFAULT CHARSET=latin1
-     PARTITION BY LIST (`f4`)
-     (PARTITION p0 VALUES IN (0) ENGINE = InnoDB,
-      PARTITION p1 VALUES IN (1) DATA DIRECTORY = '$MYSQL_TMP_DIR/temp_tblspc' ENGINE = InnoDB);
+#Named partitions
+CREATE TABLE t2 (c1 int,c2 CHAR (1),c3 date,key(c1)) ENGINE=InnoDB
+PARTITION BY RANGE (TO_DAYS(c3))
+(
+PARTITION p0 VALUES LESS THAN (TO_DAYS('1979-01-01')),
+PARTITION p1 VALUES LESS THAN (TO_DAYS('1989-01-01')),
+PARTITION p2 VALUES LESS THAN (TO_DAYS('1999-01-01'))
+);
 
---replace_result $MYSQL_TMP_DIR MYSQL_TMP_DIR
-SHOW CREATE TABLE t1;
+ALTER TABLE t2 DISCARD PARTITION p2 TABLESPACE;
+--error ER_TABLESPACE_DISCARDED
+SELECT COUNT(*)FROM t2,t2 AS b WHERE t2.c1=''AND t2.c2=b.c1;
+DROP TABLE t1,t2;
 
-OPTIMIZE TABLE t1;
---replace_result $MYSQL_TMP_DIR MYSQL_TMP_DIR
-SHOW CREATE TABLE t1;
+--echo
+--echo Bug #26034430    ASSERTION `PART_REC_BUF_PTR' FAILED.
+--echo
+--echo
 
-ALTER TABLE t1 OPTIMIZE PARTITION p0;
---replace_result $MYSQL_TMP_DIR MYSQL_TMP_DIR
-SHOW CREATE TABLE t1;
+CREATE TABLE t1 ( a INT NOT NULL, b INT NOT NULL, c INT NOT NULL, PRIMARY KEY(a,b)) PARTITION BY RANGE (a)(PARTITION x1 VALUES LESS THAN (1));
 
-ALTER TABLE t1 OPTIMIZE PARTITION p1;
---replace_result $MYSQL_TMP_DIR MYSQL_TMP_DIR
-SHOW CREATE TABLE t1;
+SELECT * FROM t1 WHERE (a = 1 and b = 1 and c = 'b') OR (a > 2) ORDER BY a DESC;
+
+CREATE TABLE t(id INT(11) UNSIGNED NOT NULL AUTO_INCREMENT, dttm DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, msg
+TEXT,PRIMARY KEY (id,dttm))ENGINE=INNODB DEFAULT CHARSET=UTF8MB4 ROW_FORMAT=DYNAMIC PARTITION BY RANGE
+COLUMNS(dttm) (PARTITION pf_201612 VALUES LESS THAN ('20170101') ENGINE = INNODB);
+
+SELECT * FROM t WHERE dttm > '2017-01-19' ORDER BY id DESC;
+
+DROP TABLE t,t1;
+
+
+--echo
+--echo Bug #26731025	INNODB PARTITION TABLE WILL LOCK INTO THE NEAR RECORD AS A CONDITION IN THE USE
+--echo
+--echo
+
+--connect (con1,localhost,root,,)
+--connect (con2,localhost,root,,)
+
+--connection default
+
+create table test12 (name varchar(30),age bigint,grade bigint,date datetime
+not null,partition_id int not null,
+  PRIMARY KEY (`name`,`PARTITION_ID`),
+  KEY `IDX_DATE` (`date`,`name`,`partition_id`),
+  KEY `IDX_AGE` (`age`,`partition_id`) ) PARTITION BY RANGE
+COLUMNS(PARTITION_ID)
+(PARTITION p0 VALUES LESS THAN (0) ENGINE = InnoDB,
+ PARTITION P1 VALUES LESS THAN (1) ENGINE = InnoDB,
+ PARTITION P2 VALUES LESS THAN (2) ENGINE = InnoDB,
+ PARTITION P3 VALUES LESS THAN (3) ENGINE = InnoDB,
+ PARTITION P4 VALUES LESS THAN (4) ENGINE = InnoDB,
+ PARTITION P5 VALUES LESS THAN (5) ENGINE = InnoDB,
+ PARTITION P6 VALUES LESS THAN (6) ENGINE = InnoDB,
+ PARTITION P7 VALUES LESS THAN (7) ENGINE = InnoDB,
+ PARTITION P8 VALUES LESS THAN (8) ENGINE = InnoDB,
+ PARTITION P9 VALUES LESS THAN (9) ENGINE = InnoDB);
+
+ insert into test12 values('Tom1',20,1,'2017-08-25
+12:12:12',1),('Tom2',21,1,'2017-08-25 12:12:12',1),('Tom3',23,1,'2017-08-25
+12:12:12',1);
+
+begin;update test12 set grade=3,date=now()  where age=23 and
+partition_id=1;
+
+--connection con1
+begin;update test12 set grade=1,date=now()  where age=21 and
+partition_id=1;
+
+--connection con2
+begin;update test12 set grade=0,date=now()  where age=20 and
+partition_id=1;
+
+--disconnect con1
+--disconnect con2
+
+--connection default
+drop table test12;
+
+
+--echo #
+--echo # Bug#27073100: PARTITION UPDATE_TIME NOT CORRECT AFTER RESTART/REBUILD
+--echo #
+
+--echo # Set up.
+CREATE TABLE t1 (fld1 INT(11) NOT NULL, fld2 INT(11) NOT NULL,
+fld3 DATE NOT NULL,  fld4 DATE NOT NULL,
+PRIMARY KEY (fld1, fld3),  KEY(fld1)) PARTITION
+BY RANGE (YEAR(fld3))
+(PARTITION p01 VALUES LESS THAN (1985) ENGINE = InnoDB,
+PARTITION p02 VALUES LESS THAN (1986) ENGINE = InnoDB,
+PARTITION p03 VALUES LESS THAN MAXVALUE ENGINE = InnoDB);
+INSERT INTO t1 VALUES('11', '11111', '1984-11-16',
+'2008-11-16'), ('12', '11112', '1985-11-16', '2008-11-16'),
+('13', '11113', '1986-11-16', '2008-11-16');
+
+--echo # Fetch the count of 'update_time' which is not null.
+SELECT TABLE_NAME, COUNT(UPDATE_TIME) FROM INFORMATION_SCHEMA.PARTITIONS
+WHERE TABLE_SCHEMA = 'test' AND TABLE_NAME = 't1' ORDER BY
+PARTITION_ORDINAL_POSITION;
+
+--echo # Rebuild the table.
+ALTER TABLE t1 ENGINE=INNODB;
+
+--echo # After table rebuild, the 'update_time' will be set to NULL.
+--echo # Hence the count would return 0.
+SELECT TABLE_NAME, COUNT(UPDATE_TIME) FROM INFORMATION_SCHEMA.PARTITIONS
+WHERE TABLE_SCHEMA = 'test' AND TABLE_NAME = 't1' ORDER BY
+PARTITION_ORDINAL_POSITION;
+
+--echo # Update the table where partition p02 is updated.
+UPDATE t1 SET fld2 = 71000 WHERE fld1 = 12 AND fld3 = '1985-11-16';
+
+--echo # Without fix, the count for 'update_time' will be 3. After fix,
+--echo # it will be 1 since only partition 'p02' is updated.
+SELECT TABLE_NAME, COUNT(UPDATE_TIME)
+FROM INFORMATION_SCHEMA.PARTITIONS WHERE TABLE_SCHEMA = 'test' AND
+TABLE_NAME = 't1' ORDER BY PARTITION_ORDINAL_POSITION;
 
 DROP TABLE t1;
-DROP TABLESPACE ts1;
 
---rmdir $MYSQL_TMP_DIR/temp_tblspc/test
---rmdir $MYSQL_TMP_DIR/temp_tblspc
+--echo
+--echo BUG#26553164 - INNODB PARTITION TABLE HAS UNEXPECTED ROW LOCK
+--echo
 
-#Create partitions in two different tablespaces
+--connect (conn1,localhost,root,,)
 
---replace_result $MYSQL_TMP_DIR MYSQL_TMP_DIR
-eval CREATE TABLESPACE ts1 ADD DATAFILE '$MYSQL_TMP_DIR/ts1.ibd' ENGINE=Innodb;
+--connection default
 
---replace_result $MYSQL_TMP_DIR MYSQL_TMP_DIR
-eval CREATE TABLESPACE ts2 ADD DATAFILE '$MYSQL_TMP_DIR/ts2.ibd' ENGINE=Innodb;
+CREATE TABLE `t1` (
+  `id` int(11) NOT NULL,
+  `dt` datetime NOT NULL,
+  `data` varchar(10) DEFAULT NULL,
+  PRIMARY KEY (`id`,`dt`),
+  KEY `idx_dt` (`dt`)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1
+/*!50100 PARTITION BY RANGE (to_days(dt))
+(PARTITION p20170218 VALUES LESS THAN (736744) ENGINE = InnoDB,
+ PARTITION p20170219 VALUES LESS THAN (736745) ENGINE = InnoDB,
+ PARTITION pMax VALUES LESS THAN MAXVALUE ENGINE = InnoDB) */;
 
-eval CREATE TABLE `t1` (
-       `f1` INT(10) UNSIGNED NOT NULL AUTO_INCREMENT,
-       `f4` TINYINT(1) unsigned NOT NULL,
-       PRIMARY KEY (`f1`,`f4`)
-     )  ENGINE=InnoDB AUTO_INCREMENT=0 DEFAULT CHARSET=latin1
-     PARTITION BY LIST (`f4`)
-     (PARTITION p0 VALUES IN (0) TABLESPACE ts1 ENGINE = InnoDB,
-      PARTITION p1 VALUES IN (1) TABLESPACE ts2 ENGINE = InnoDB);
+INSERT INTO t1 VALUES (1, '2018-04-25 10:18:00', '1');
+INSERT INTO t1 VALUES (2, '2018-04-25 10:18:01', '2');
+INSERT INTO t1 VALUES (3, '2018-04-25 10:18:02', '3');
 
-SHOW CREATE TABLE t1;
-OPTIMIZE TABLE t1;
-SHOW CREATE TABLE t1;
-DROP TABLE t1;
-DROP TABLESPACE ts1;
-DROP TABLESPACE ts2;
+SELECT * FROM t1;
 
-#Create partitions to use differeent avaliable tablespace options
+begin;
+UPDATE t1 SET data = '11' WHERE id = 1;
 
---replace_result $MYSQL_TMP_DIR MYSQL_TMP_DIR
-eval CREATE TABLESPACE ts1 ADD DATAFILE '$MYSQL_TMP_DIR/ts1.ibd' ENGINE=Innodb;
+--connection conn1
+begin;
+UPDATE t1 SET data = '22' WHERE id = 2;
+commit;
 
---replace_result $MYSQL_TMP_DIR MYSQL_TMP_DIR
-eval CREATE TABLE `t1` (
-       `f1` INT(10) UNSIGNED NOT NULL AUTO_INCREMENT,
-       `f4` TINYINT(1) unsigned NOT NULL,
-       PRIMARY KEY (`f1`,`f4`)
-     )  ENGINE=InnoDB AUTO_INCREMENT=0 DEFAULT CHARSET=latin1
-     PARTITION BY LIST (`f4`)
-     (PARTITION p0 VALUES IN (0) TABLESPACE ts1 ENGINE = InnoDB,
-      PARTITION p1 VALUES IN (1) TABLESPACE innodb_file_per_table DATA DIRECTORY='$MYSQL_TMP_DIR/temp_dir' ENGINE = InnoDB,
-      PARTITION p2 VALUES IN (2) TABLESPACE innodb_file_per_table ENGINE = InnoDB,
-      PARTITION p3 VALUES IN (3) TABLESPACE innodb_system ENGINE = InnoDB);
+--disconnect conn1
 
---replace_result $MYSQL_TMP_DIR MYSQL_TMP_DIR
-SHOW CREATE TABLE t1;
-
-OPTIMIZE TABLE t1;
---replace_result $MYSQL_TMP_DIR MYSQL_TMP_DIR
-SHOW CREATE TABLE t1;
+--connection default
+SELECT * FROM t1;
 
 DROP TABLE t1;
-DROP TABLESPACE ts1;
 
---rmdir $MYSQL_TMP_DIR/temp_dir/test
---rmdir $MYSQL_TMP_DIR/temp_dir
+--echo #
+--echo # WL#1074 - Descending index support.
+--echo #
+CREATE TABLE t1
+(a VARCHAR(10),
+ b VARCHAR(10),
+ PRIMARY KEY (a DESC, b DESC),
+ KEY ab_asc (a ASC, b ASC),
+ KEY a_asc_b_desc (a ASC, b DESC),
+ key a_desc_b_asc (a DESC, b ASC))
+ENGINE = InnoDB
+PARTITION BY KEY (a, b) PARTITIONS 3;
+INSERT INTO t1 VALUES ("0", "0"), ("1", "1"), ("2", "2"), ("3", "3"),
+("4", "4"), ("55", "55"), ("54", "54"), ("1", "2"), ("1", "4"), ("1", "3"),
+("55", "54"), ("0", "1");
+ANALYZE TABLE t1;
 
+--echo # Test non ordered index access
+FLUSH STATUS;
+--sorted_result
+SELECT * FROM t1 FORCE INDEX (`PRIMARY`);
+--skip_if_hypergraph  # Index not supported, so different query plan.
+SHOW STATUS WHERE Variable_name LIKE 'Handler%' AND Value >0;
+FLUSH STATUS;
+--sorted_result
+SELECT * FROM t1 FORCE INDEX (`ab_asc`);
+--skip_if_hypergraph  # Index not supported, so different query plan.
+SHOW STATUS WHERE Variable_name LIKE 'Handler%' AND Value >0;
+FLUSH STATUS;
+--sorted_result
+SELECT * FROM t1 FORCE INDEX (`a_asc_b_desc`);
+--skip_if_hypergraph  # Index not supported, so different query plan.
+SHOW STATUS WHERE Variable_name LIKE 'Handler%' AND Value >0;
+FLUSH STATUS;
+--sorted_result
+SELECT * FROM t1 FORCE INDEX (`a_desc_b_asc`);
+--skip_if_hypergraph  # Index not supported, so different query plan.
+SHOW STATUS WHERE Variable_name LIKE 'Handler%' AND Value >0;
 
-########################################
-##### WL#7554 set schema `test` back to what it was
---disable_query_log
---eval alter schema test default character set $testdbcs240;
---enable_query_log
-########################################
+--echo # Test sorted index access
+FLUSH STATUS;
+SELECT * FROM t1 ORDER BY a DESC, b DESC;
+--skip_if_hypergraph  # Index not supported, so different query plan.
+SHOW STATUS WHERE Variable_name LIKE 'Handler%' AND Value >0;
+FLUSH STATUS;
+SELECT * FROM t1 ORDER BY a, b;
+--skip_if_hypergraph  # Index not supported, so different query plan.
+SHOW STATUS WHERE Variable_name LIKE 'Handler%' AND Value >0;
+FLUSH STATUS;
+SELECT * FROM t1 ORDER BY a, b DESC;
+--skip_if_hypergraph  # Index not supported, so different query plan.
+SHOW STATUS WHERE Variable_name LIKE 'Handler%' AND Value >0;
+FLUSH STATUS;
+SELECT * FROM t1 ORDER BY a DESC, b;
+--skip_if_hypergraph  # Index not supported, so different query plan.
+SHOW STATUS WHERE Variable_name LIKE 'Handler%' AND Value >0;
+--replace_regex /"rows_examined_per_scan": [0-9]+/"rows_examined_per_scan": "X"/ /_per_join": [0-9]+/_per_join": "X"/ /_per_join": "[0-9]+K"/_per_join": "X"/  /"filtered": "[0-9.]+"/"filtered": "X"/ /_cost": "[0-9.]+"/_cost": "X"/ /"data_read_per_join": "[0-9.]+"/"data_read_per_join": "X"/
+EXPLAIN FORMAT=JSON SELECT * FROM t1 ORDER BY a DESC, b DESC;
+--replace_regex /"rows_examined_per_scan": [0-9]+/"rows_examined_per_scan": "X"/ /_per_join": [0-9]+/_per_join": "X"/ /_per_join": "[0-9]+K"/_per_join": "X"/  /"filtered": "[0-9.]+"/"filtered": "X"/ /_cost": "[0-9.]+"/_cost": "X"/ /"data_read_per_join": "[0-9.]+"/"data_read_per_join": "X"/
+EXPLAIN FORMAT=JSON SELECT * FROM t1 ORDER BY a, b;
+--replace_regex /"rows_examined_per_scan": [0-9]+/"rows_examined_per_scan": "X"/ /_per_join": [0-9]+/_per_join": "X"/ /_per_join": "[0-9]+K"/_per_join": "X"/  /"filtered": "[0-9.]+"/"filtered": "X"/ /_cost": "[0-9.]+"/_cost": "X"/ /"data_read_per_join": "[0-9.]+"/"data_read_per_join": "X"/
+EXPLAIN FORMAT=JSON SELECT * FROM t1 ORDER BY a, b DESC;
+--replace_regex /"rows_examined_per_scan": [0-9]+/"rows_examined_per_scan": "X"/ /_per_join": [0-9]+/_per_join": "X"/ /_per_join": "[0-9]+K"/_per_join": "X"/  /"filtered": "[0-9.]+"/"filtered": "X"/ /_cost": "[0-9.]+"/_cost": "X"/ /"data_read_per_join": "[0-9.]+"/"data_read_per_join": "X"/
+EXPLAIN FORMAT=JSON SELECT * FROM t1 ORDER BY a DESC, b;
+
+--echo # Test index access in different sort order
+FLUSH STATUS;
+SELECT * FROM t1 FORCE INDEX (`PRIMARY`) ORDER BY a, b;
+--skip_if_hypergraph  # Index not supported, so different query plan.
+SHOW STATUS WHERE Variable_name LIKE 'Handler%' AND Value >0;
+FLUSH STATUS;
+SELECT * FROM t1 FORCE INDEX (`PRIMARY`) ORDER BY a DESC, b;
+--skip_if_hypergraph  # Index not supported, so different query plan.
+SHOW STATUS WHERE Variable_name LIKE 'Handler%' AND Value >0;
+FLUSH STATUS;
+SELECT * FROM t1 FORCE INDEX (`PRIMARY`) ORDER BY a, b DESC;
+--skip_if_hypergraph  # Index not supported, so different query plan.
+SHOW STATUS WHERE Variable_name LIKE 'Handler%' AND Value >0;
+FLUSH STATUS;
+SELECT * FROM t1 FORCE INDEX (`PRIMARY`) ORDER BY a DESC, b;
+--skip_if_hypergraph  # Index not supported, so different query plan.
+SHOW STATUS WHERE Variable_name LIKE 'Handler%' AND Value >0;
+--replace_regex /"rows_examined_per_scan": [0-9]+/"rows_examined_per_scan": "X"/ /_per_join": [0-9]+/_per_join": "X"/ /_per_join": "[0-9]+K"/_per_join": "X"/  /"filtered": "[0-9.]+"/"filtered": "X"/ /_cost": "[0-9.]+"/_cost": "X"/ /"data_read_per_join": "[0-9.]+"/"data_read_per_join": "X"/
+EXPLAIN FORMAT=JSON SELECT * FROM t1 FORCE INDEX (`PRIMARY`) ORDER BY a, b;
+--replace_regex /"rows_examined_per_scan": [0-9]+/"rows_examined_per_scan": "X"/ /_per_join": [0-9]+/_per_join": "X"/ /_per_join": "[0-9]+K"/_per_join": "X"/  /"filtered": "[0-9.]+"/"filtered": "X"/ /_cost": "[0-9.]+"/_cost": "X"/ /"data_read_per_join": "[0-9.]+"/"data_read_per_join": "X"/
+EXPLAIN FORMAT=JSON SELECT * FROM t1 FORCE INDEX (`PRIMARY`) ORDER BY a DESC, b;
+--replace_regex /"rows_examined_per_scan": [0-9]+/"rows_examined_per_scan": "X"/ /_per_join": [0-9]+/_per_join": "X"/ /_per_join": "[0-9]+K"/_per_join": "X"/  /"filtered": "[0-9.]+"/"filtered": "X"/ /_cost": "[0-9.]+"/_cost": "X"/ /"data_read_per_join": "[0-9.]+"/"data_read_per_join": "X"/
+EXPLAIN FORMAT=JSON SELECT * FROM t1 FORCE INDEX (`PRIMARY`) ORDER BY a, b DESC;
+
+--echo # Test HANDLER statements.
+FLUSH STATUS;
+HANDLER t1 OPEN;
+HANDLER t1 READ `PRIMARY` FIRST;
+HANDLER t1 READ `PRIMARY` NEXT;
+HANDLER t1 READ `PRIMARY` NEXT;
+HANDLER t1 READ `PRIMARY` NEXT;
+HANDLER t1 READ `PRIMARY` NEXT;
+HANDLER t1 READ `PRIMARY` LAST;
+HANDLER t1 READ `PRIMARY` PREV;
+HANDLER t1 READ `PRIMARY` PREV;
+HANDLER t1 READ `PRIMARY` PREV;
+HANDLER t1 READ ab_asc FIRST;
+HANDLER t1 READ ab_asc NEXT;
+HANDLER t1 READ ab_asc NEXT;
+HANDLER t1 READ ab_asc NEXT;
+HANDLER t1 READ ab_asc NEXT;
+HANDLER t1 READ ab_asc LAST;
+HANDLER t1 READ ab_asc PREV;
+HANDLER t1 READ ab_asc PREV;
+HANDLER t1 READ ab_asc PREV;
+HANDLER t1 CLOSE;
+SHOW STATUS WHERE Variable_name LIKE 'Handler%' AND Value >0;
+DROP TABLE t1;
+                                            

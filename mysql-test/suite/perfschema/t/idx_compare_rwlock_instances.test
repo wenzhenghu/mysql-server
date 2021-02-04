@@ -1,12 +1,11 @@
 #
 # Verify that query results are the same with and without indexes.
 #
---source include/not_windows_embedded.inc
 --source include/have_debug_sync.inc
 
 let $table = "rwlock_instances";
 let $name_column = NAME;
-let $target_name = wait/synch/rwlock/sql/MDL_lock::rwlock;
+let $target_name = wait/synch/prlock/sql/MDL_lock::rwlock;
 
 --echo TABLE: $table
 --echo INDEXES: PK (OBJECT_INSTANCE_BEGIN), KEY (NAME), KEY (WRITE_LOCKED_BY_THREAD_ID)

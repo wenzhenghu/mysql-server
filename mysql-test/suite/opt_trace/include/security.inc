@@ -2,8 +2,6 @@
 # by lack of privileges.
 
 --source include/have_optimizer_trace.inc
-# Grant tests not performed with embedded server
--- source include/not_embedded.inc
 connection default;
 let $DEFAULT_TRACE_MEM_SIZE=1048576; # 1MB
 set @old_size = @@global.optimizer_trace_max_mem_size;
@@ -11,7 +9,7 @@ eval set global optimizer_trace_max_mem_size=$DEFAULT_TRACE_MEM_SIZE;
 
 connection default;
 select user();
-create database somedb character set latin1;
+create database somedb;
 use somedb;
 create table t1(a varchar(100));
 insert into t1 values("first");
@@ -522,7 +520,7 @@ select QUERY, length(TRACE), INSUFFICIENT_PRIVILEGES from information_schema.OPT
 --echo # could see anyway:
 --replace_column 7 #
 show create trigger trg2;
-select * from t2, t3 limit 1;
+select * from t2, t3 order by t2.a, t3.a limit 1;
 --echo # Trace exposed content of t1 which we could see anyway:
 set optimizer_trace_offset=0,optimizer_trace_limit=100;
 select a from (select a from t1 where a like "f%") as tt where a like "fi%";

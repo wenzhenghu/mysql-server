@@ -1,32 +1,51 @@
-/* Copyright (c) 2014, 2017, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2014, 2019, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software Foundation,
-   51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 #ifndef DD__UTILS_INCLUDED
 #define DD__UTILS_INCLUDED
 
-#include <ostream>
-#include <string>
+#include "sql/dd/string_type.h"  // dd::String_type
+#include "sql/tztime.h"          // my_time_t
 
-#include "dd/string_type.h"                    // dd::String_type
+struct CHARSET_INFO;
+
+class THD;
 
 namespace dd {
+/**
+  Create a lex string for the query from the string supplied
+  and execute the query.
+
+  @param thd     Thread handle.
+  @param q_buf   String containing the query text.
+
+  @retval false  Success.
+  @retval true   Error.
+*/
+bool execute_query(THD *thd, const dd::String_type &q_buf);
 
 ///////////////////////////////////////////////////////////////////////////
 
 class Properties;
-
 
 /**
   Escaping of a String_type. Escapable characters are '\', '=' and
@@ -39,7 +58,6 @@ class Properties;
 */
 void escape(String_type *dst, const String_type &src);
 
-
 /**
   In place unescaping of String_type. Escapable characters are '\', '='
   and ';'. Escape character is '\'. Iterate over all characters, remove
@@ -51,7 +69,6 @@ void escape(String_type *dst, const String_type &src);
     @retval false     if success
 */
 bool unescape(String_type &dest);
-
 
 /**
   Start at it, iterate until we hit an unescaped c or the end
@@ -73,10 +90,8 @@ bool unescape(String_type &dest);
     @retval true     if an error occurred
     @retval false    if success
 */
-bool eat_to(String_type::const_iterator &it,
-            String_type::const_iterator end,
+bool eat_to(String_type::const_iterator &it, String_type::const_iterator end,
             char c);
-
 
 /**
   Start at it, find first unescaped occorrence of c, create
@@ -100,7 +115,6 @@ bool eat_to(String_type::const_iterator &it,
 bool eat_str(String_type &dest, String_type::const_iterator &it,
              String_type::const_iterator end, char c);
 
-
 /**
   Start at it, find a key and value separated by an unescaped '='. Value
   is supposed to be terminated by an unescaped ';' or by the end of the
@@ -115,13 +129,48 @@ bool eat_str(String_type &dest, String_type::const_iterator &it,
     @retval true      if an error occurred
     @retval false     if success
 */
-bool eat_pairs(String_type::const_iterator &it,
-               String_type::const_iterator end,
+bool eat_pairs(String_type::const_iterator &it, String_type::const_iterator end,
                dd::Properties *props);
-
 
 ///////////////////////////////////////////////////////////////////////////
 
-}
+/**
+   Convert seconds since epoch, to a datetime ulonglong using my_tz_OFFSET0
+   suitable for timestamp fields in the DD.
 
-#endif // DD__UTILS_INCLUDED
+   @param seconds_since_epoch value to convert
+   @return time value converted to datetime ulonglong
+ */
+ulonglong my_time_t_to_ull_datetime(my_time_t seconds_since_epoch);
+
+///////////////////////////////////////////////////////////////////////////
+
+/**
+  Method to verify if string is in lowercase.
+
+  @param   str       String to verify.
+  @param   cs        Character set.
+
+  @retval  true    If string is in lowercase.
+  @retval  false   Otherwise.
+*/
+bool is_string_in_lowercase(const String_type &str, const CHARSET_INFO *cs);
+
+///////////////////////////////////////////////////////////////////////////
+
+/**
+  Helper function to do rollback or commit, depending on
+  error. Also closes tables and releases transactional
+  locks, regardless of error.
+
+  @param thd   Thread
+  @param error If true, the transaction will be rolledback.
+               otherwise, it is committed.
+
+  @returns false on success, otherwise true.
+*/
+bool end_transaction(THD *thd, bool error);
+
+}  // namespace dd
+
+#endif  // DD__UTILS_INCLUDED

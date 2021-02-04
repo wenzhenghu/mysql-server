@@ -1,14 +1,21 @@
 /*
-   Copyright (c) 2004, 2015, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2004, 2020, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -46,6 +53,10 @@ printSCAN_FRAGREQ(FILE * output, const Uint32 * theData,
     fprintf(output, "(desc)");
   if (ScanFragReq::getTupScanFlag(sig->requestInfo))
     fprintf(output, "t");
+  if (ScanFragReq::getFirstMatchFlag(sig->requestInfo))
+    fprintf(output, "f");
+  if (ScanFragReq::getQueryThreadFlag(sig->requestInfo))
+    fprintf(output, "q");
   if (ScanFragReq::getNoDiskFlag(sig->requestInfo))
     fprintf(output, "(nodisk)");
   fprintf(output, " attrLen: %u",
@@ -54,6 +65,8 @@ printSCAN_FRAGREQ(FILE * output, const Uint32 * theData,
           ScanFragReq::getReorgFlag(sig->requestInfo));
   fprintf(output, " corr: %u",
           ScanFragReq::getCorrFactorFlag(sig->requestInfo));
+  fprintf(output, " mfrag: %u",
+          ScanFragReq::getMultiFragFlag(sig->requestInfo));
   fprintf(output, " stat: %u",
           ScanFragReq::getStatScanFlag(sig->requestInfo));
   fprintf(output, " ni: %u",
@@ -91,6 +104,11 @@ printSCAN_FRAGCONF(FILE * output, const Uint32 * theData,
   fprintf(output, " transId1: 0x%x\n", sig->transId1);
   fprintf(output, " transId2: 0x%x\n", sig->transId2);
   fprintf(output, " total_len: %u\n", sig->total_len);
-
+  if (len >= ScanFragConf::SignalLength_ext)
+    fprintf(output, " activeMask: 0x%x\n", sig->activeMask);
+  else
+    fprintf(output, " activeMask: 0(not an ext-signal)\n");
+  if (len >= ScanFragConf::SignalLength_query)
+    fprintf(output, " senderRef = %x\n", sig->senderRef);
   return true;
 }

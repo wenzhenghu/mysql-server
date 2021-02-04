@@ -72,134 +72,172 @@ flush status;
 insert into t2 (a) values (1001);
 --error ER_DUP_ENTRY
 insert into t1 (a) values (f2(1));
+--sorted_result
 select * from t2;
 rollback;
+--sorted_result
 select * from t2;
 
 insert into t2 (a) values (1002);
 --error ER_DUP_ENTRY
 insert into t3 (a) select f2(2) from t1;
+--sorted_result
 select * from t2;
 rollback;
+--sorted_result
 select * from t2;
 
 insert into t2 (a) values (1003);
 --error ER_DUP_ENTRY
 update t1 set a= a + f2(3);
+--sorted_result
 select * from t2;
 rollback;
+--sorted_result
 select * from t2;
 
 insert into t2 (a) values (1004);
 --error ER_DUP_ENTRY
 update t1, t3 set t1.a = 0, t3.a = 0 where (f2(4) = 4) and (t1.a = t3.a);
+--sorted_result
 select * from t2;
 rollback;
+--sorted_result
 select * from t2;
 
 insert into t2 (a) values (1005);
 --error ER_DUP_ENTRY
 delete from t1 where (a = f2(5));
+--sorted_result
 select * from t2;
 rollback;
+--sorted_result
 select * from t2;
 
 insert into t2 (a) values (1006);
 --error ER_DUP_ENTRY
 delete from t1, t3 using t1, t3 where (f2(6) = 6) ;
+--sorted_result
 select * from t2;
 rollback;
+--sorted_result
 select * from t2;
 
 insert into t2 (a) values (1007);
 --error ER_DUP_ENTRY
 replace t1 values (f2(7));
+--sorted_result
 select * from t2;
 rollback;
+--sorted_result
 select * from t2;
 
 insert into t2 (a) values (1008);
 --error ER_DUP_ENTRY
 replace into t3 (a) select f2(8) from t1;
+--sorted_result
 select * from t2;
 rollback;
+--sorted_result
 select * from t2;
 
 insert into t2 (a) values (1009);
 --error ER_DUP_ENTRY
 select f2(9) from t1 ;
+--sorted_result
 select * from t2;
 rollback;
+--sorted_result
 select * from t2;
 
 insert into t2 (a) values (1010);
 --error ER_DUP_ENTRY
 show databases where (f2(10) = 10);
+--sorted_result
 select * from t2;
 rollback;
+--sorted_result
 select * from t2;
 
 insert into t2 (a) values (1011);
 --error ER_DUP_ENTRY
 show tables where (f2(11) = 11);
+--sorted_result
 select * from t2;
 rollback;
+--sorted_result
 select * from t2;
 
 insert into t2 (a) values (1012);
 --error ER_DUP_ENTRY
 show triggers where (f2(12) = 12);
+--sorted_result
 select * from t2;
 rollback;
+--sorted_result
 select * from t2;
 
 insert into t2 (a) values (1013);
 --error ER_DUP_ENTRY
 show table status where (f2(13) = 13);
+--sorted_result
 select * from t2;
 rollback;
+--sorted_result
 select * from t2;
 
 insert into t2 (a) values (1014);
 --error ER_DUP_ENTRY
 show open tables where (f2(14) = 14);
+--sorted_result
 select * from t2;
 rollback;
+--sorted_result
 select * from t2;
 
 insert into t2 (a) values (1015);
 --error ER_DUP_ENTRY
 show columns in information_schema.routines where (f2(15) = 15);
+--sorted_result
 select * from t2;
 rollback;
+--sorted_result
 select * from t2;
 
 insert into t2 (a) values (1016);
 --error ER_DUP_ENTRY
 show status where (f2(16) = 16);
+--sorted_result
 select * from t2;
 rollback;
+--sorted_result
 select * from t2;
 
 insert into t2 (a) values (1017);
 --error ER_DUP_ENTRY
 show variables where (f2(17) = 17);
+--sorted_result
 select * from t2;
 rollback;
+--sorted_result
 select * from t2;
 
 insert into t2 (a) values (1018);
 --error ER_DUP_ENTRY
 show charset where (f2(18) = 18);
+--sorted_result
 select * from t2;
 rollback;
+--sorted_result
 select * from t2;
 
 insert into t2 (a) values (1019);
 --error ER_DUP_ENTRY
 show collation where (f2(19) = 19);
+--sorted_result
 select * from t2;
 rollback;
+--sorted_result
 select * from t2;
 
 --echo # We need at least one procedure to make sure the WHERE clause is
@@ -208,31 +246,39 @@ create procedure dummy() begin end;
 insert into t2 (a) values (1020);
 --error ER_DUP_ENTRY
 show procedure status where (f2(20) = 20);
+--sorted_result
 select * from t2;
 rollback;
+--sorted_result
 select * from t2;
 drop procedure dummy;
 
 insert into t2 (a) values (1021);
 --error ER_DUP_ENTRY
 show function status where (f2(21) = 21);
+--sorted_result
 select * from t2;
 rollback;
+--sorted_result
 select * from t2;
 
 insert into t2 (a) values (1022);
 prepare stmt from "insert into t1 (a) values (f2(22))";
 --error ER_DUP_ENTRY
 execute stmt;
+--sorted_result
 select * from t2;
 rollback;
+--sorted_result
 select * from t2;
 
 insert into t2 (a) values (1023);
 --error ER_DUP_ENTRY
 do (f2(23));
+--sorted_result
 select * from t2;
 rollback;
+--sorted_result
 select * from t2;
 
 ## Please note :
@@ -254,8 +300,10 @@ delimiter ;|
 insert into t2 (a) values (1024);
 --error ER_DUP_ENTRY
 call bug12713_call();
+--sorted_result
 select * from t2;
 rollback;
+--sorted_result
 select * from t2;
 
 --echo =======================================================================
@@ -267,8 +315,10 @@ insert into t2 (a) values (1025);
 --replace_result $MYSQLTEST_VARDIR ..
 --error ER_DUP_ENTRY
 eval select f2(25) into outfile "$MYSQLTEST_VARDIR/tmp/dml.out" from t1;
+--sorted_result
 select * from t2;
 rollback;
+--sorted_result
 select * from t2;
 --remove_file $MYSQLTEST_VARDIR/tmp/dml.out
 
@@ -277,8 +327,10 @@ insert into t2 (a) values (1026);
 --error ER_DUP_ENTRY
 eval load data infile "../../std_data/words.dat" ignore into table t1 (a) set a:=f2(26);
 
+--sorted_result
 select * from t2;
 rollback;
+--sorted_result
 select * from t2;
 
 --echo =======================================================================
@@ -288,8 +340,10 @@ select * from t2;
 insert into t2 (a) values (1027);
 --error ER_DUP_ENTRY
 select f2(27) into @foo;
+--sorted_result
 select * from t2;
 rollback;
+--sorted_result
 select * from t2;
 
 --echo =======================================================================
@@ -314,8 +368,10 @@ end|
 delimiter ;|
 
 insert into t2 (a) values (1028);
+--sorted_result
 call bug12713_dump_spvars ();
 rollback;
+--sorted_result
 select * from t2;
 
 --echo =======================================================================
@@ -360,13 +416,6 @@ set @binlog_format=@@global.binlog_format;
 set sql_mode=no_engine_substitution;
 create table t1 (a int unique); 
 create table t2 (a int) engine=myisam;
---echo # Warm-up data-dictionary cache.
---disable_result_log
---disable_query_log
-show create table t1;
-show create table t2;
---enable_query_log
---enable_result_log
 set sql_mode=default;
 --echo #
 --echo # An auxiliary procedure to track Handler_prepare and Handler_commit
@@ -418,6 +467,16 @@ begin
   end if;
 end|
 delimiter ;|
+--enable_query_log
+--enable_result_log
+--echo # Warm-up data-dictionary cache.
+--disable_result_log
+--disable_query_log
+show create table t1;
+show create table t2;
+show create procedure p_verify_status_increment;
+--enable_query_log
+--enable_result_log
 --echo # Reset Handler_commit and Handler_prepare counters
 flush status;
 --echo #
@@ -614,7 +673,7 @@ begin
 end|
 delimiter ;|
 --disable_warnings
-call p_verify_status_increment(4, 0, 2, 0);
+call p_verify_status_increment(6, 4, 2, 0);
 --enable_warnings
 
 --echo # 16. A function changes non-trans-table.
@@ -625,7 +684,8 @@ call p_verify_status_increment(4, 0, 2, 0);
 --echo #
 select f1();
 --disable_warnings
-call p_verify_status_increment(1, 0, 2, 0);
+--echo # Extra commit comes from load of f1 into data-dictionary cache,
+call p_verify_status_increment(2, 0, 2, 0);
 commit;
 call p_verify_status_increment(1, 0, 2, 0);
 --enable_warnings
@@ -671,14 +731,14 @@ create temporary table t2 (a int);
 let $have_debug = `SELECT VERSION() LIKE '%debug%'`;
 if (!$have_debug)
 {
-  --replace_regex /6/X/
-  call p_verify_status_increment(6, 0, 0, 0);
+  --replace_regex /8/X/
+  call p_verify_status_increment(8, 0, 0, 0);
 }
 
 if ($have_debug)
 {
-  --replace_regex /7/X/
-  call p_verify_status_increment(7, 0, 0, 0);
+  --replace_regex /9/X/
+  call p_verify_status_increment(9, 0, 0, 0);
 }
 --enable_warnings
 set sql_mode=default;
@@ -719,7 +779,7 @@ call p_verify_status_increment(2, 0, 1, 0);
 alter table t2 add column b int default 5;
 --echo # A commit is done internally by ALTER. 
 --disable_warnings
-call p_verify_status_increment(2, 0, 3, 0);
+call p_verify_status_increment(3, 0, 3, 0);
 commit;
 --echo # There is nothing left to commit
 call p_verify_status_increment(0, 0, 0, 0);
@@ -733,7 +793,7 @@ call p_verify_status_increment(0, 0, 0, 0);
 --echo
 truncate table t2;
 --disable_warnings
-call p_verify_status_increment(4, 0, 4, 0);
+call p_verify_status_increment(6, 0, 4, 0);
 commit;
 --echo # There is nothing left to commit
 call p_verify_status_increment(0, 0, 0, 0);
@@ -818,17 +878,17 @@ create table t2 (a int);
 # COM_PREPARE.
 if (`SELECT $PS_PROTOCOL = 0`)
 {
-  --replace_regex /(call p_verify_status_increment.*)7(.*6)/\1<commit_count>\2/
-  call p_verify_status_increment(7, 4, 6, 0);
+  --replace_regex /11/<commit_count>/
+  call p_verify_status_increment(11, 4, 6, 0);
 }
 if (`SELECT $PS_PROTOCOL > 0`)
 {
-  --replace_regex /(call p_verify_status_increment.*)8(.*6)/\1<commit_count>\2/
-  call p_verify_status_increment(8, 4, 6, 0);
+  --replace_regex /12/<commit_count>/
+  call p_verify_status_increment(12, 4, 6, 0);
 }
 --echo # One extra transaction to load table 't2' into data-dictionary cache.
 do (select f1() from t1 where a=2);
-call p_verify_status_increment(2, 2, 3, 2);
+call p_verify_status_increment(4, 2, 3, 2);
 commit;
 call p_verify_status_increment(2, 2, 2, 2);
 --enable_warnings
@@ -878,57 +938,71 @@ create table t3 select a from t2;
 # COM_PREPARE.
 if (`SELECT $PS_PROTOCOL = 0`)
 {
- --replace_regex /9/<commit_count>/
-  call p_verify_status_increment(9, 4, 4, 4);
+ --replace_regex /12/<commit_count>/
+  call p_verify_status_increment(12, 4, 4, 4);
 }
 if (`SELECT $PS_PROTOCOL > 0`)
 {
-  --replace_regex /10/<commit_count>/
-  call p_verify_status_increment(10, 4, 4, 4);
+  --replace_regex /13/<commit_count>/
+  call p_verify_status_increment(13, 4, 4, 4);
 }
 alter table t3 add column (b int);
 
 if (!$have_debug)
 {
-  --replace_regex /5/X/
-  call p_verify_status_increment(5, 4, 2, 0);
+  --replace_regex /20/X/
+  call p_verify_status_increment(20, 4, 2, 0);
 }
 
 if ($have_debug)
 {
-  --replace_regex /6/X/
-  call p_verify_status_increment(6, 4, 2, 0);
+  --replace_regex /21/X/
+  call p_verify_status_increment(21, 4, 2, 0);
 }
 
 alter table t3 rename t4;
-call p_verify_status_increment(7, 4, 3, 0);
+call p_verify_status_increment(20, 4, 3, 0);
 rename table t4 to t3;
-call p_verify_status_increment(9, 4, 5, 0);
+call p_verify_status_increment(24, 4, 5, 0);
 truncate table t3;
-call p_verify_status_increment(4, 4, 4, 0);
+
+if (!$have_debug)
+{
+  --replace_regex /10/X/
+  call p_verify_status_increment(10, 4, 4, 0);
+}
+
+if ($have_debug)
+{
+  --replace_regex /11/X/
+  call p_verify_status_increment(11, 4, 4, 0);
+}
+
 create view v1 as select * from t2;
-call p_verify_status_increment(5, 0, 3, 0);
+call p_verify_status_increment(7, 4, 3, 0);
 check table t1;
 call p_verify_status_increment(2, 0, 2, 0);
 --echo # Sic: after this bug is fixed, CHECK leaves no pending transaction
 commit;
 call p_verify_status_increment(0, 0, 0, 0);
 check table t1, t2, t3;
-call p_verify_status_increment(6, 0, 6, 0);
+--echo # Extra transactions to load t3 into data-dictionary and table caches
+call p_verify_status_increment(9, 0, 6, 0);
 commit;
 call p_verify_status_increment(0, 0, 0, 0);
 drop view v1;
 
+--echo # One extra transaction to load v1 into data-dictionary cache.
 if (!$have_debug)
 {
-  --replace_regex /\(3/(X/
-  call p_verify_status_increment(3, 0, 3, 0);
+  --replace_regex /\(6/(X/
+  call p_verify_status_increment(6, 4, 3, 0);
 }
 
 if ($have_debug)
 {
-  --replace_regex /4/X/
-  call p_verify_status_increment(4, 0, 3, 0);
+  --replace_regex /7/X/
+  call p_verify_status_increment(7, 4, 3, 0);
 }
 
 --enable_warnings

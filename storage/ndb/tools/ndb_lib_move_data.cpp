@@ -1,19 +1,27 @@
-/* Copyright (c) 2016, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2013, 2020, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 #include <ndb_global.h>
+#include "m_ctype.h"
 #include <NdbOut.hpp>
 #include <NdbApi.hpp>
 #include <NDBT.hpp>
@@ -88,6 +96,7 @@ Ndb_move_data::Attr::Attr()
   size_in_bytes = 0;
   length_bytes = 0;
   data_size = 0;
+  tiny_bytes = 0;
   pad_char = -1;
   equal = false;
 }
@@ -129,6 +138,12 @@ Ndb_move_data::set_type(Attr& attr, const NdbDictionary::Column* c)
   case NdbDictionary::Column::Blob:
     attr.type = Attr::TypeBlob;
     attr.length_bytes = 0;
+    if (unlikely(c->getPartSize() == 0))
+    {
+      /* Tiny BLOB/TEXT, store inline size */
+      attr.tiny_bytes = c->getInlineSize();
+      require(attr.tiny_bytes);
+    }
     break;
   default:
     attr.type = Attr::TypeOther;
@@ -137,8 +152,11 @@ Ndb_move_data::set_type(Attr& attr, const NdbDictionary::Column* c)
 }
 
 Uint32
-Ndb_move_data::calc_str_len_truncated(CHARSET_INFO *cs, char *data, Uint32 maxlen)
+Ndb_move_data::calc_str_len_truncated(CHARSET_INFO *cs, const char *data, Uint32 maxlen)
 {
+  if (!cs)
+    return maxlen; // no charset found, do not truncate
+
   const char *begin = (const char*) data;
   const char *end= (const char*) (data+maxlen);
   int errors = 0;
@@ -335,6 +353,15 @@ Ndb_move_data::check_tables()
         {
           continue;
         }
+
+        /* OK if columns just differ by being part of the PK */
+        a1ColCopy.setPrimaryKey(false);
+        a2ColCopy.setPrimaryKey(false);
+
+        if ((attr1.equal = attr2.equal = a1ColCopy.equal(a2ColCopy)))
+        {
+          continue;
+        }
       }
 
       if (attr1.type == Attr::TypeArray &&
@@ -418,6 +445,7 @@ Ndb_move_data::Op::Op()
   updateop = 0;
   values = 0;
   buflen = 32 * 1024;
+  static_assert(32 * 1024 >= (4 * MAX_TUPLE_SIZE_IN_WORDS), "");
   require(buflen >= (4 * MAX_TUPLE_SIZE_IN_WORDS));
   buf1 = new char [buflen];
   buf2 = new char [buflen];
@@ -545,8 +573,9 @@ Ndb_move_data::copy_data_to_array(const char* data1, const Attr& attr2,
       if (length1x > attr2.data_size)
       {
         require(opts.flags & Opts::MD_ATTRIBUTE_DEMOTION);
-        length1 = attr2.data_size;
         op.truncated_in_batch++;
+        length1 = calc_str_len_truncated(attr2.column->getCharset(),
+                                         data1, attr2.data_size);
       }
 
       uchar* uptr = (uchar*)&op.buf2[0];
@@ -648,6 +677,13 @@ Ndb_move_data::copy_array_to_blob(const Attr& attr1, const Attr& attr2)
       if (attr1.length_bytes == 0)
         while (length1 != 0 && data1[length1-1] == attr1.pad_char)
           length1--;
+      if (unlikely(attr2.tiny_bytes && length1 > attr2.tiny_bytes))
+      {
+        require(m_opts.flags & Opts::MD_ATTRIBUTE_DEMOTION);
+        op.truncated_in_batch++;
+        length1 = calc_str_len_truncated(attr2.column->getCharset(),
+                                         data1, attr2.tiny_bytes);
+      }
       char* data1copy = alloc_data(length1);
       memcpy(data1copy, data1, length1);
       CHK2(bh2->setValue(data1copy, length1) == 0, (bh2->getNdbError()));
@@ -730,14 +766,14 @@ Ndb_move_data::copy_blob_to_blob(const Attr& attr1, const Attr& attr2)
       require(bytes == data_length);
       
       // prevent TINYTEXT/TINYBLOB overflow by truncating data
-      if(attr2.column->getPartSize() == 0)
+      if(attr2.tiny_bytes)
       {
-        Uint32 inline_size = attr2.column->getInlineSize();
-        if(bytes > inline_size) 
+        if(bytes > attr2.tiny_bytes)
         {
-          data_length = calc_str_len_truncated(attr2.column->getCharset(),
-                                               data, inline_size);
+          require(m_opts.flags & Opts::MD_ATTRIBUTE_DEMOTION);
           op.truncated_in_batch++;
+          data_length = calc_str_len_truncated(attr2.column->getCharset(),
+                                               data, attr2.tiny_bytes);
         }
       }
       CHK2(bh2->setValue(data, data_length) == 0,
@@ -1049,7 +1085,7 @@ Ndb_move_data::set_error_code(int code, const char* fmt, ...)
   require(code != 0);
   Error& e = m_error;
   e.code = code;
-  my_vsnprintf(e.message, sizeof(e.message), fmt, ap);
+  vsnprintf(e.message, sizeof(e.message), fmt, ap);
   va_end(ap);
 }
 

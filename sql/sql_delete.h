@@ -1,17 +1,24 @@
-/* Copyright (c) 2006, 2017, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2006, 2020, Oracle and/or its affiliates.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA */
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 #ifndef SQL_DELETE_INCLUDED
 #define SQL_DELETE_INCLUDED
@@ -19,106 +26,98 @@
 #include <stddef.h>
 #include <sys/types.h>
 
-#include "my_base.h"        // ha_rows
+#include "my_base.h"  // ha_rows
 #include "my_sqlcommand.h"
 #include "my_table_map.h"
-#include "query_result.h"   // Query_result_interceptor
-#include "sql_cmd_dml.h"    // Sql_cmd_dml
-#include "sql_lex.h"
+#include "sql/query_result.h"  // Query_result_interceptor
+#include "sql/sql_cmd_dml.h"   // Sql_cmd_dml
 
 class Item;
-class JOIN;
+class SELECT_LEX_UNIT;
+class Select_lex_visitor;
 class THD;
 class Unique;
 struct TABLE;
 struct TABLE_LIST;
-template <class T> class List;
-template <typename T> class SQL_I_List;
+template <class T>
+class List;
+template <typename T>
+class SQL_I_List;
 
-class Query_result_delete final : public Query_result_interceptor
-{
+class Query_result_delete final : public Query_result_interceptor {
   /// Pointers to temporary files used for delayed deletion of rows
-  Unique **tempfiles;
+  Unique **tempfiles{nullptr};
   /// Pointers to table objects matching tempfiles
-  TABLE **tables;
+  TABLE **tables{nullptr};
   /// Number of tables being deleted from
-  uint delete_table_count;
+  uint delete_table_count{0};
   /// Number of rows produced by the join
-  ha_rows found_rows;
+  ha_rows found_rows{0};
   /// Number of rows deleted
-  ha_rows deleted_rows;
+  ha_rows deleted_rows{0};
   /// Handler error status for the operation.
-  int error;
+  int delete_error{0};
   /// Map of all tables to delete rows from
-  table_map delete_table_map;
+  table_map delete_table_map{0};
   /// Map of tables to delete from immediately
-  table_map delete_immediate;
+  table_map delete_immediate{0};
   // Map of transactional tables to be deleted from
-  table_map transactional_table_map;
+  table_map transactional_table_map{0};
   /// Map of non-transactional tables to be deleted from
-  table_map non_transactional_table_map;
+  table_map non_transactional_table_map{0};
   /// True if the full delete operation is complete
-  bool delete_completed;
+  bool delete_completed{false};
   /// True if some actual delete operation against non-transactional table done
-  bool non_transactional_deleted;
+  bool non_transactional_deleted{false};
   /*
      error handling (rollback and binlogging) can happen in send_eof()
      so that afterward send_error() needs to find out that.
   */
-  bool error_handled;
+  bool error_handled{false};
 
-public:
-  Query_result_delete(THD *thd)
-  : Query_result_interceptor(thd),
-    tempfiles(NULL), tables(NULL),
-    delete_table_count(0), found_rows(0), deleted_rows(0), error(0),
-    delete_table_map(0), delete_immediate(0),
-    transactional_table_map(0), non_transactional_table_map(0),
-    delete_completed(false), non_transactional_deleted(false),
-    error_handled(false)
-  {}
-  ~Query_result_delete()
-  {}
+ public:
+  Query_result_delete() : Query_result_interceptor() {}
   bool need_explain_interceptor() const override { return true; }
-  bool prepare(List<Item> &list, SELECT_LEX_UNIT *u) override;
-  bool send_data(List<Item> &items) override;
-  void send_error(uint errcode, const char *err) override;
+  bool prepare(THD *thd, const mem_root_deque<Item *> &list,
+               SELECT_LEX_UNIT *u) override;
+  bool send_data(THD *thd, const mem_root_deque<Item *> &items) override;
+  void send_error(THD *thd, uint errcode, const char *err) override;
   bool optimize() override;
-  bool start_execution() override
-  { delete_completed= false; return false; }
-  int do_deletes();
-  int do_table_deletes(TABLE *table);
-  bool send_eof() override;
-  inline ha_rows num_deleted()
-  {
-    return deleted_rows;
+  bool start_execution(THD *) override {
+    delete_completed = false;
+    return false;
   }
-  void abort_result_set() override;
-  void cleanup() override;
+  int do_deletes(THD *thd);
+  int do_table_deletes(THD *thd, TABLE *table);
+  bool send_eof(THD *thd) override;
+  inline ha_rows num_deleted() { return deleted_rows; }
+  void abort_result_set(THD *thd) override;
+  void cleanup(THD *thd) override;
+  bool immediate_update(TABLE_LIST *t) const override;
 };
 
+class Sql_cmd_delete final : public Sql_cmd_dml {
+ public:
+  Sql_cmd_delete(bool multitable_arg, SQL_I_List<TABLE_LIST> *delete_tables_arg)
+      : multitable(multitable_arg), delete_tables(delete_tables_arg) {}
 
-class Sql_cmd_delete final : public Sql_cmd_dml
-{
-public:
-  Sql_cmd_delete(bool multitable_arg,
-                 SQL_I_List<TABLE_LIST> *delete_tables_arg)
-  : multitable(multitable_arg), delete_tables(delete_tables_arg)
-  {}
-
-  enum_sql_command sql_command_code() const override
-  { return lex->sql_command; }
+  enum_sql_command sql_command_code() const override {
+    return multitable ? SQLCOM_DELETE_MULTI : SQLCOM_DELETE;
+  }
 
   bool is_single_table_plan() const override { return !multitable; }
 
-protected:
+  bool accept(THD *thd, Select_lex_visitor *visitor) override;
+
+ protected:
   bool precheck(THD *thd) override;
+  bool check_privileges(THD *thd) override;
 
   bool prepare_inner(THD *thd) override;
 
   bool execute_inner(THD *thd) override;
 
-private:
+ private:
   bool delete_from_single_table(THD *thd);
 
   bool multitable;

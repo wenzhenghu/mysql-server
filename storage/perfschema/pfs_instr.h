@@ -1,17 +1,24 @@
-/* Copyright (c) 2008, 2017, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2008, 2020, Oracle and/or its affiliates. All rights reserved.
 
   This program is free software; you can redistribute it and/or modify
-  it under the terms of the GNU General Public License as published by
-  the Free Software Foundation; version 2 of the License.
+  it under the terms of the GNU General Public License, version 2.0,
+  as published by the Free Software Foundation.
+
+  This program is also distributed with certain software (including
+  but not limited to OpenSSL) that is licensed under separate terms,
+  as designated in a particular file or component or in included license
+  documentation.  The authors of MySQL hereby grant you an additional
+  permission to link the program and your derivative works with the
+  separately licensed software that they have included with MySQL.
 
   This program is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  GNU General Public License for more details.
+  GNU General Public License, version 2.0, for more details.
 
   You should have received a copy of the GNU General Public License
-  along with this program; if not, write to the Free Software Foundation,
-  51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
+  along with this program; if not, write to the Free Software
+  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 #ifndef PFS_INSTR_H
 #define PFS_INSTR_H
@@ -36,6 +43,7 @@ class THD;
 
 #include <sys/types.h>
 #include <time.h>
+#include <atomic>
 
 #include "my_inttypes.h"
 #include "my_io.h"
@@ -47,18 +55,19 @@ class THD;
 #include <arpa/inet.h>
 #endif
 #include "lf.h"
-#include "mdl.h"
 #include "my_compiler.h"
-#include "pfs_column_types.h"
-#include "pfs_con_slice.h"
-#include "pfs_events_stages.h"
-#include "pfs_events_statements.h"
-#include "pfs_events_transactions.h"
-#include "pfs_events_waits.h"
-#include "pfs_instr_class.h"
-#include "pfs_lock.h"
-#include "pfs_server.h"
-#include "pfs_stat.h"
+#include "my_hostname.h" /* HOSTNAME_LENGTH */
+#include "sql/mdl.h"
+#include "storage/perfschema/pfs_column_types.h"
+#include "storage/perfschema/pfs_con_slice.h"
+#include "storage/perfschema/pfs_events_stages.h"
+#include "storage/perfschema/pfs_events_statements.h"
+#include "storage/perfschema/pfs_events_transactions.h"
+#include "storage/perfschema/pfs_events_waits.h"
+#include "storage/perfschema/pfs_instr_class.h"
+#include "storage/perfschema/pfs_lock.h"
+#include "storage/perfschema/pfs_server.h"
+#include "storage/perfschema/pfs_stat.h"
 #include "violite.h" /* enum_vio_type */
 
 extern PFS_single_stat *thread_instr_class_waits_array_start;
@@ -75,8 +84,7 @@ struct PFS_user;
 struct PFS_account;
 
 /** Base structure for wait instruments. */
-struct PFS_instr
-{
+struct PFS_instr {
   /** Internal lock. */
   pfs_lock m_lock;
   /** Enabled flag. */
@@ -88,8 +96,14 @@ struct PFS_instr
 };
 
 /** Instrumented mutex implementation. @see PSI_mutex. */
-struct PFS_ALIGNED PFS_mutex : public PFS_instr
-{
+struct PFS_mutex : public PSI_mutex {
+  /** Internal lock. */
+  pfs_lock m_lock;
+  /** Timed flag. */
+  bool m_timed;
+  /** Container page. */
+  PFS_opaque_container_page *m_page;
+
   /** Mutex identity, typically a @c pthread_mutex_t. */
   const void *m_identity;
   /** Mutex class. */
@@ -98,16 +112,24 @@ struct PFS_ALIGNED PFS_mutex : public PFS_instr
   PFS_mutex_stat m_mutex_stat;
   /** Current owner. */
   PFS_thread *m_owner;
+#ifdef LATER_WL2333
   /**
     Time stamp of the last lock.
     This statistic is not exposed in user visible tables yet.
   */
   ulonglong m_last_locked;
+#endif /* LATER_WL2333 */
 };
 
 /** Instrumented rwlock implementation. @see PSI_rwlock. */
-struct PFS_ALIGNED PFS_rwlock : public PFS_instr
-{
+struct PFS_rwlock : public PSI_rwlock {
+  /** Internal lock. */
+  pfs_lock m_lock;
+  /** Timed flag. */
+  bool m_timed;
+  /** Container page. */
+  PFS_opaque_container_page *m_page;
+
   /** RWLock identity, typically a @c pthread_rwlock_t. */
   const void *m_identity;
   /** RWLock class. */
@@ -118,6 +140,7 @@ struct PFS_ALIGNED PFS_rwlock : public PFS_instr
   PFS_thread *m_writer;
   /** Current count of readers. */
   uint m_readers;
+#ifdef LATER_WL2333
   /**
     Time stamp of the last write.
     This statistic is not exposed in user visible tables yet.
@@ -128,11 +151,18 @@ struct PFS_ALIGNED PFS_rwlock : public PFS_instr
     This statistic is not exposed in user visible tables yet.
   */
   ulonglong m_last_read;
+#endif /* LATER_WL2333 */
 };
 
 /** Instrumented condition implementation. @see PSI_cond. */
-struct PFS_ALIGNED PFS_cond : public PFS_instr
-{
+struct PFS_cond : public PSI_cond {
+  /** Internal lock. */
+  pfs_lock m_lock;
+  /** Timed flag. */
+  bool m_timed;
+  /** Container page. */
+  PFS_opaque_container_page *m_page;
+
   /** Condition identity, typically a @c pthread_cond_t. */
   const void *m_identity;
   /** Condition class. */
@@ -142,13 +172,8 @@ struct PFS_ALIGNED PFS_cond : public PFS_instr
 };
 
 /** Instrumented File and FILE implementation. @see PSI_file. */
-struct PFS_ALIGNED PFS_file : public PFS_instr
-{
-  uint32
-  get_version()
-  {
-    return m_lock.get_version();
-  }
+struct PFS_ALIGNED PFS_file : public PFS_instr {
+  uint32 get_version() { return m_lock.get_version(); }
 
   /** File identity */
   const void *m_identity;
@@ -165,8 +190,7 @@ struct PFS_ALIGNED PFS_file : public PFS_instr
 };
 
 /** Instrumented table implementation. @see PSI_table. */
-struct PFS_ALIGNED PFS_table
-{
+struct PFS_ALIGNED PFS_table {
   /**
     True if table I/O instrumentation is enabled.
     This flag is computed.
@@ -194,22 +218,18 @@ struct PFS_ALIGNED PFS_table
   /** True if table lock statistics have been collected. */
   bool m_has_lock_stats;
 
-public:
+ public:
   /**
     Aggregate this table handle statistics to the parents.
     Only use this method for handles owned by the calling code.
     @sa sanitized_aggregate.
   */
-  void
-  aggregate(const TABLE_SHARE *server_share)
-  {
-    if (m_has_io_stats)
-    {
+  void aggregate(const TABLE_SHARE *server_share) {
+    if (m_has_io_stats) {
       safe_aggregate_io(server_share, &m_table_stat, m_share);
       m_has_io_stats = false;
     }
-    if (m_has_lock_stats)
-    {
+    if (m_has_lock_stats) {
       safe_aggregate_lock(&m_table_stat, m_share);
       m_has_lock_stats = false;
     }
@@ -255,7 +275,7 @@ public:
   /** Container page. */
   PFS_opaque_container_page *m_page;
 
-private:
+ private:
   static void safe_aggregate_io(const TABLE_SHARE *optional_server_share,
                                 PFS_table_stat *stat,
                                 PFS_table_share *safe_share);
@@ -264,20 +284,22 @@ private:
 };
 
 /** Instrumented socket implementation. @see PSI_socket. */
-struct PFS_ALIGNED PFS_socket : public PFS_instr
-{
-  uint32
-  get_version()
-  {
-    return m_lock.get_version();
-  }
+struct PFS_socket : public PSI_socket {
+  /** Internal lock. */
+  pfs_lock m_lock;
+  /** Timed flag. */
+  bool m_timed;
+  /** Container page. */
+  PFS_opaque_container_page *m_page;
+
+  uint32 get_version() { return m_lock.get_version(); }
 
   /** Socket identity, typically int */
   const void *m_identity;
   /** Owning thread, if applicable */
   PFS_thread *m_thread_owner;
   /** Socket file descriptor */
-  uint m_fd;
+  my_socket m_fd;
   /** Raw socket address */
   struct sockaddr_storage m_sock_addr;
   /** Length of address */
@@ -291,13 +313,8 @@ struct PFS_ALIGNED PFS_socket : public PFS_instr
 };
 
 /** Instrumented metadata lock implementation. @see PSI_metadata_lock. */
-struct PFS_ALIGNED PFS_metadata_lock : public PFS_instr
-{
-  uint32
-  get_version()
-  {
-    return m_lock.get_version();
-  }
+struct PFS_ALIGNED PFS_metadata_lock : public PFS_instr {
+  uint32 get_version() { return m_lock.get_version(); }
 
   /** Lock identity. */
   const void *m_identity;
@@ -353,8 +370,7 @@ extern size_t pfs_max_digest_length;
 extern size_t pfs_max_sqltext;
 
 /** Instrumented thread implementation. @see PSI_thread. */
-struct PFS_ALIGNED PFS_thread : PFS_connection_slice
-{
+struct PFS_ALIGNED PFS_thread : PFS_connection_slice {
   static PFS_thread *get_current_thread(void);
 
   /** Thread instrumentation flag. */
@@ -461,12 +477,15 @@ struct PFS_ALIGNED PFS_thread : PFS_connection_slice
   ulonglong m_thread_internal_id;
   /** Parent internal thread identifier. */
   ulonglong m_parent_thread_internal_id;
-  /** External (@code SHOW PROCESSLIST @endcode) thread identifier, not unique. */
+  /** External (@code SHOW PROCESSLIST @endcode) thread identifier, not unique.
+   */
   ulong m_processlist_id;
   /** External (Operating system) thread identifier, if any. */
   my_thread_os_id_t m_thread_os_id;
   /** Thread class. */
   PFS_thread_class *m_class;
+  /** True if a system thread. */
+  bool m_system_thread;
   /**
     Stack of events waits.
     This member holds the data for the table
@@ -580,6 +599,18 @@ struct PFS_ALIGNED PFS_thread : PFS_connection_slice
     Protected by @c m_stmt_lock.
   */
   uint m_dbname_length;
+  /**
+    Resource group name.
+    Protected by @c m_session_lock.
+  */
+  char m_groupname[NAME_LEN];
+  /**
+    Length of @c m_groupname.
+    Protected by @c m_session_lock.
+  */
+  uint m_groupname_length;
+  /** User-defined data. */
+  void *m_user_data;
   /** Current command. */
   int m_command;
   /** Connection type. */
@@ -620,6 +651,13 @@ struct PFS_ALIGNED PFS_thread : PFS_connection_slice
   PFS_user *m_user;
   PFS_account *m_account;
 
+  /** Remote (peer) port */
+  uint m_peer_port;
+  /** Raw socket address */
+  struct sockaddr_storage m_sock_addr;
+  /** Length of address */
+  socklen_t m_sock_addr_len;
+
   /** Reset session connect attributes */
   void reset_session_connect_attrs();
 
@@ -639,30 +677,61 @@ struct PFS_ALIGNED PFS_thread : PFS_connection_slice
   */
   uint m_session_connect_attrs_cs_number;
 
-  void carry_memory_stat_delta(PFS_memory_stat_delta *delta, uint index);
+  /** Reset all memory statistics. */
+  void rebase_memory_stats();
 
-  void
-  set_enabled(bool enabled)
-  {
-    m_enabled = enabled;
-  }
+  void carry_memory_stat_alloc_delta(PFS_memory_stat_alloc_delta *delta,
+                                     uint index);
+  void carry_memory_stat_free_delta(PFS_memory_stat_free_delta *delta,
+                                    uint index);
 
-  void
-  set_history(bool history)
-  {
+  void set_enabled(bool enabled) { m_enabled = enabled; }
+
+  void set_history(bool history) {
     m_history = history;
     set_history_derived_flags();
   }
 
   void set_history_derived_flags();
+
+  /**
+    Per thread memory aggregated statistics.
+    This member holds the data for the table
+    PERFORMANCE_SCHEMA.MEMORY_SUMMARY_BY_THREAD_BY_EVENT_NAME.
+    Immutable, safe to use without internal lock.
+  */
+  PFS_memory_safe_stat *m_instr_class_memory_stats;
+
+  void set_instr_class_memory_stats(PFS_memory_safe_stat *array) {
+    m_has_memory_stats = false;
+    m_instr_class_memory_stats = array;
+  }
+
+  const PFS_memory_safe_stat *read_instr_class_memory_stats() const {
+    if (!m_has_memory_stats) {
+      return nullptr;
+    }
+    return m_instr_class_memory_stats;
+  }
+
+  PFS_memory_safe_stat *write_instr_class_memory_stats() {
+    if (!m_has_memory_stats) {
+      rebase_memory_stats();
+      m_has_memory_stats = true;
+    }
+    return m_instr_class_memory_stats;
+  }
 };
 
-void carry_global_memory_stat_delta(PFS_memory_stat_delta *delta, uint index);
+void carry_global_memory_stat_alloc_delta(PFS_memory_stat_alloc_delta *delta,
+                                          uint index);
+void carry_global_memory_stat_free_delta(PFS_memory_stat_free_delta *delta,
+                                         uint index);
 
 extern PFS_stage_stat *global_instr_class_stages_array;
 extern PFS_statement_stat *global_instr_class_statements_array;
 extern PFS_histogram global_statements_histogram;
-extern PFS_memory_stat *global_instr_class_memory_array;
+extern std::atomic<PFS_memory_shared_stat *> global_instr_class_memory_array;
 
 PFS_mutex *sanitize_mutex(PFS_mutex *unsafe);
 PFS_rwlock *sanitize_rwlock(PFS_rwlock *unsafe);
@@ -683,38 +752,39 @@ void destroy_rwlock(PFS_rwlock *pfs);
 PFS_cond *create_cond(PFS_cond_class *klass, const void *identity);
 void destroy_cond(PFS_cond *pfs);
 
-PFS_thread *create_thread(PFS_thread_class *klass,
-                          const void *identity,
+PFS_thread *create_thread(PFS_thread_class *klass, const void *identity,
                           ulonglong processlist_id);
+
+PFS_thread *find_thread_by_processlist_id(ulonglong processlist_id);
+PFS_thread *find_thread_by_internal_id(ulonglong thread_id);
 
 void destroy_thread(PFS_thread *pfs);
 
-PFS_file *find_or_create_file(PFS_thread *thread,
-                              PFS_file_class *klass,
-                              const char *filename,
-                              uint len,
-                              bool create);
+PFS_file *find_or_create_file(PFS_thread *thread, PFS_file_class *klass,
+                              const char *filename, uint len, bool create);
 
+PFS_file *start_file_rename(PFS_thread *thread, const char *old_name);
+int end_file_rename(PFS_thread *thread, PFS_file *pfs, const char *new_name,
+                    int rename_result);
+
+PFS_file *find_file(PFS_thread *thread, PFS_file_class *klass,
+                    const char *filename, uint len);
 void release_file(PFS_file *pfs);
-void destroy_file(PFS_thread *thread, PFS_file *pfs);
-PFS_table *create_table(PFS_table_share *share,
-                        PFS_thread *opening_thread,
+void delete_file_name(PFS_thread *thread, PFS_file *pfs);
+void destroy_file(PFS_thread *thread, PFS_file *pfs, bool delete_name);
+PFS_table *create_table(PFS_table_share *share, PFS_thread *opening_thread,
                         const void *identity);
 void destroy_table(PFS_table *pfs);
 
-PFS_socket *create_socket(PFS_socket_class *socket_class,
-                          const my_socket *fd,
-                          const struct sockaddr *addr,
-                          socklen_t addr_len);
+PFS_socket *create_socket(PFS_socket_class *socket_class, const my_socket *fd,
+                          const struct sockaddr *addr, socklen_t addr_len);
 void destroy_socket(PFS_socket *pfs);
 
-PFS_metadata_lock *create_metadata_lock(void *identity,
-                                        const MDL_key *mdl_key,
+PFS_metadata_lock *create_metadata_lock(void *identity, const MDL_key *mdl_key,
                                         opaque_mdl_type mdl_type,
                                         opaque_mdl_duration mdl_duration,
                                         opaque_mdl_status mdl_status,
-                                        const char *src_file,
-                                        uint src_line);
+                                        const char *src_file, uint src_line);
 void destroy_metadata_lock(PFS_metadata_lock *pfs);
 
 /* For iterators and show status. */
@@ -768,48 +838,43 @@ void aggregate_all_errors(PFS_error_stat *from_array,
                           PFS_error_stat *to_array_1,
                           PFS_error_stat *to_array_2);
 
-void aggregate_all_memory(bool alive,
-                          PFS_memory_stat *from_array,
-                          PFS_memory_stat *to_array);
-void aggregate_all_memory(bool alive,
-                          PFS_memory_stat *from_array,
-                          PFS_memory_stat *to_array_1,
-                          PFS_memory_stat *to_array_2);
+void aggregate_all_memory_with_reassign(bool alive,
+                                        PFS_memory_safe_stat *from_array,
+                                        PFS_memory_shared_stat *to_array,
+                                        PFS_memory_shared_stat *global_array);
+void aggregate_all_memory_with_reassign(bool alive,
+                                        PFS_memory_safe_stat *from_array,
+                                        PFS_memory_shared_stat *to_array_1,
+                                        PFS_memory_shared_stat *to_array_2,
+                                        PFS_memory_shared_stat *global_array);
 
-void aggregate_thread(PFS_thread *thread,
-                      PFS_account *safe_account,
-                      PFS_user *safe_user,
-                      PFS_host *safe_host);
-void aggregate_thread_waits(PFS_thread *thread,
-                            PFS_account *safe_account,
-                            PFS_user *safe_user,
-                            PFS_host *safe_host);
-void aggregate_thread_stages(PFS_thread *thread,
-                             PFS_account *safe_account,
-                             PFS_user *safe_user,
-                             PFS_host *safe_host);
-void aggregate_thread_statements(PFS_thread *thread,
-                                 PFS_account *safe_account,
-                                 PFS_user *safe_user,
-                                 PFS_host *safe_host);
+void aggregate_all_memory(bool alive, PFS_memory_safe_stat *from_array,
+                          PFS_memory_shared_stat *to_array);
+void aggregate_all_memory(bool alive, PFS_memory_shared_stat *from_array,
+                          PFS_memory_shared_stat *to_array);
+void aggregate_all_memory(bool alive, PFS_memory_shared_stat *from_array,
+                          PFS_memory_shared_stat *to_array_1,
+                          PFS_memory_shared_stat *to_array_2);
+
+void aggregate_thread(PFS_thread *thread, PFS_account *safe_account,
+                      PFS_user *safe_user, PFS_host *safe_host);
+void aggregate_thread_waits(PFS_thread *thread, PFS_account *safe_account,
+                            PFS_user *safe_user, PFS_host *safe_host);
+void aggregate_thread_stages(PFS_thread *thread, PFS_account *safe_account,
+                             PFS_user *safe_user, PFS_host *safe_host);
+void aggregate_thread_statements(PFS_thread *thread, PFS_account *safe_account,
+                                 PFS_user *safe_user, PFS_host *safe_host);
 void aggregate_thread_transactions(PFS_thread *thread,
                                    PFS_account *safe_account,
-                                   PFS_user *safe_user,
-                                   PFS_host *safe_host);
-void aggregate_thread_errors(PFS_thread *thread,
-                             PFS_account *safe_account,
-                             PFS_user *safe_user,
-                             PFS_host *safe_host);
-void aggregate_thread_memory(bool alive,
-                             PFS_thread *thread,
-                             PFS_account *safe_account,
-                             PFS_user *safe_user,
+                                   PFS_user *safe_user, PFS_host *safe_host);
+void aggregate_thread_errors(PFS_thread *thread, PFS_account *safe_account,
+                             PFS_user *safe_user, PFS_host *safe_host);
+void aggregate_thread_memory(bool alive, PFS_thread *thread,
+                             PFS_account *safe_account, PFS_user *safe_user,
                              PFS_host *safe_host);
 
-void aggregate_thread_status(PFS_thread *thread,
-                             PFS_account *safe_account,
-                             PFS_user *safe_user,
-                             PFS_host *safe_host);
+void aggregate_thread_status(PFS_thread *thread, PFS_account *safe_account,
+                             PFS_user *safe_user, PFS_host *safe_host);
 
 void clear_thread_account(PFS_thread *thread);
 void set_thread_account(PFS_thread *thread);
@@ -832,6 +897,10 @@ void update_metadata_derived_flags();
 void update_thread_derived_flags();
 /** Update derived flags for all instruments. */
 void update_instruments_derived_flags();
+
+/** Clear source file pointers for all statements, stages, waits and
+ * transactions. */
+void reset_source_file_pointers();
 
 extern LF_HASH filename_hash;
 

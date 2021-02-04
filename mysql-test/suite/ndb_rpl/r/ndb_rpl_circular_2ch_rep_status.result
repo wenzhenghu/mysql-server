@@ -19,12 +19,12 @@ Master(1)
 select variable_name, variable_value from performance_schema.global_status
 where variable_name='Ndb_slave_max_replicated_epoch';
 variable_name	variable_value
-NDB_SLAVE_MAX_REPLICATED_EPOCH	0
+Ndb_slave_max_replicated_epoch	0
 Master1(3)
 select variable_name, variable_value from performance_schema.global_status
 where variable_name='Ndb_slave_max_replicated_epoch';
 variable_name	variable_value
-NDB_SLAVE_MAX_REPLICATED_EPOCH	0
+Ndb_slave_max_replicated_epoch	0
 Make a change originating at Cluster A
 Master(1)
 use test;
@@ -46,7 +46,7 @@ Non-slave server on Cluster A will have no value for Max Replicated Epoch
 select variable_name, variable_value from performance_schema.global_status
 where variable_name='Ndb_slave_max_replicated_epoch';
 variable_name	variable_value
-NDB_SLAVE_MAX_REPLICATED_EPOCH	0
+Ndb_slave_max_replicated_epoch	0
 Slave server on Cluster A has current value for Max Replicated Epoch
 Master1 (3)
 Expect count 1
@@ -92,7 +92,7 @@ Show that Cluster A Slave server (old master) has no Max replicated epoch before
 select variable_name, variable_value from performance_schema.global_status
 where variable_name='Ndb_slave_max_replicated_epoch';
 variable_name	variable_value
-NDB_SLAVE_MAX_REPLICATED_EPOCH	0
+Ndb_slave_max_replicated_epoch	0
 Master1 (3)
 Cluster A Master server (old slave) has old Max replicated epoch
 select
@@ -137,6 +137,8 @@ variable_name='Ndb_slave_max_replicated_epoch'
 variable_value = epoch;
 @result:=count(1)
 1
+Warnings:
+Warning	1287	Setting user variables within expressions is deprecated and will be removed in a future release. Consider alternatives: 'SET variable=expression, ...', or 'SELECT expression(s) INTO variables(s)'.
 Now make a new Cluster A change and see that the Max Replicated Epoch advances
 once it has propagated
 Master1 (3)
@@ -173,9 +175,9 @@ local_server_with_max_epoch
 Done
 drop table t1;
 include/rpl_stop_slaves.inc
-CHANGE MASTER TO IGNORE_SERVER_IDS= ();
-CHANGE MASTER TO IGNORE_SERVER_IDS= ();
-CHANGE MASTER TO IGNORE_SERVER_IDS= ();
-CHANGE MASTER TO IGNORE_SERVER_IDS= ();
+CHANGE REPLICATION SOURCE TO IGNORE_SERVER_IDS= ();
+CHANGE REPLICATION SOURCE TO IGNORE_SERVER_IDS= ();
+CHANGE REPLICATION SOURCE TO IGNORE_SERVER_IDS= ();
+CHANGE REPLICATION SOURCE TO IGNORE_SERVER_IDS= ();
 include/rpl_start_slaves.inc
 include/rpl_end.inc

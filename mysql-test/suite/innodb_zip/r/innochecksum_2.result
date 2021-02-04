@@ -19,7 +19,7 @@ INSERT INTO t1 SELECT * from t1;
 [2]:# Run the innochecksum when file isn't provided.
 # It will print the innochecksum usage similar to --help option.
 innochecksum Ver #.#.#
-Copyright (c) YEAR, YEAR , Oracle and/or its affiliates. All rights reserved.
+Copyright (c) YEAR, YEAR , Oracle and/or its affiliates.
 
 Oracle is a registered trademark of Oracle Corporation and/or its
 affiliates. Other names may be trademarks of their respective
@@ -66,7 +66,8 @@ log                               (No default value)
 Number of pages:#
 Number of pages:#
 [4]:# Print the version of innochecksum and exit
-innochecksum Ver #.#.## Restart the DB server
+innochecksum Ver #.#.#
+# Restart the DB server
 # restart
 DROP TABLE t1;
 [5]:# Check the innochecksum for compressed table t1 with different key_block_size

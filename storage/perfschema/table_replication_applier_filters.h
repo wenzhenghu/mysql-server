@@ -1,19 +1,25 @@
 /*
-  Copyright (c) 2016, 2017, Oracle and/or its affiliates. All rights reserved.
+  Copyright (c) 2016, 2020, Oracle and/or its affiliates.
 
   This program is free software; you can redistribute it and/or modify
-  it under the terms of the GNU General Public License as published by
-  the Free Software Foundation; version 2 of the License.
+  it under the terms of the GNU General Public License, version 2.0,
+  as published by the Free Software Foundation.
+
+  This program is also distributed with certain software (including
+  but not limited to OpenSSL) that is licensed under separate terms,
+  as designated in a particular file or component or in included license
+  documentation.  The authors of MySQL hereby grant you an additional
+  permission to link the program and your derivative works with the
+  separately licensed software that they have included with MySQL.
 
   This program is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  GNU General Public License for more details.
+  GNU General Public License, version 2.0, for more details.
 
   You should have received a copy of the GNU General Public License
   along with this program; if not, write to the Free Software
   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
-
 
 #ifndef TABLE_REPLICATION_APPLIER_FILTERS_H
 #define TABLE_REPLICATION_APPLIER_FILTERS_H
@@ -25,14 +31,18 @@
 
 #include <sys/types.h>
 
-#include "my_io.h"
+#include "my_base.h"
+#include "my_inttypes.h"
 #include "mysql_com.h"
-#include "pfs_column_types.h"
-#include "pfs_engine_table.h"
-#include "rpl_info.h" /* CHANNEL_NAME_LENGTH*/
-#include "rpl_mi.h"
-#include "rpl_msr.h"
-#include "table_helper.h"
+#include "sql/rpl_filter.h"
+#include "sql/rpl_info.h" /* CHANNEL_NAME_LENGTH*/
+#include "sql_string.h"
+#include "storage/perfschema/pfs_engine_table.h"
+
+class Field;
+class Plugin_table;
+struct TABLE;
+struct THR_LOCK;
 
 /** A row in the table */
 struct st_row_applier_filters {
@@ -73,30 +83,32 @@ struct st_row_applier_filters {
 };
 
 /** Table PERFORMANCE_SCHEMA.replication_applier_filters */
-class table_replication_applier_filters: public PFS_engine_table
-{
-private:
+class table_replication_applier_filters : public PFS_engine_table {
+  typedef PFS_simple_index pos_t;
+
+ private:
   /**
     Make a row by an object of Rpl_pfs_filter.
 
     @param rpl_pfs_filter a pointer to a Rpl_pfs_filter object.
   */
-  void make_row(Rpl_pfs_filter* rpl_pfs_filter);
+  void make_row(Rpl_pfs_filter *rpl_pfs_filter);
 
   /** Table share lock. */
   static THR_LOCK m_table_lock;
-  /** Fields definition. */
-  static TABLE_FIELD_DEF m_field_def;
+  /** Table definition. */
+  static Plugin_table m_table_def;
+
   /** Current row */
   st_row_applier_filters m_row;
   /** True is the current row exists. */
   bool m_row_exists;
   /** Current position. */
-  PFS_simple_index m_pos;
+  pos_t m_pos;
   /** Next position. */
-  PFS_simple_index m_next_pos;
+  pos_t m_next_pos;
 
-protected:
+ protected:
   /**
     Read the current row values.
     @param table            Table handle
@@ -106,19 +118,17 @@ protected:
 
     @retval 0 if HAVE_REPLICATION is defined, else HA_ERR_RECORD_DELETED.
   */
-  virtual int read_row_values(TABLE *table,
-                              unsigned char *buf,
-                              Field **fields,
-                              bool read_all);
+  int read_row_values(TABLE *table, unsigned char *buf, Field **fields,
+                      bool read_all) override;
 
   table_replication_applier_filters();
 
-public:
-  ~table_replication_applier_filters();
+ public:
+  ~table_replication_applier_filters() override;
 
   /** Table share. */
   static PFS_engine_table_share m_share;
-  static PFS_engine_table* create();
+  static PFS_engine_table *create(PFS_engine_table_share *);
   /**
     Get the table count.
 
@@ -132,15 +142,14 @@ public:
       0    Did not reach the end of the table.
       HA_ERR_END_OF_FILE    reached the end of the table.
   */
-  virtual int rnd_next();
+  int rnd_next() override;
   /**
     Fetch a row by position.
 
     @param pos position to fetch
   */
-  virtual int rnd_pos(const void *pos);
-  virtual void reset_position(void);
+  int rnd_pos(const void *pos) override;
+  void reset_position(void) override;
 };
 
-/** @} */
 #endif

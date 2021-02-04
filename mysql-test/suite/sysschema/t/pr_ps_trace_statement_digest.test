@@ -8,27 +8,16 @@
 #                                                                           #
 #############################################################################
 
--- source include/not_embedded.inc
 # The ps_trace_statement_digest does not work with prepared statements
 # So disable this test with --ps-protocol
 -- source include/no_protocol.inc
 
-########################################
-##### WL#7554 Force schema `test` to character set latin1
-##### This test should be migrated to utf8mb4
---disable_query_log
-let $testdbcs385=`select default_character_set_name from information_schema.schemata where schema_name='test'`;
-alter schema default character set latin1;
-use test;
---enable_query_log
-########################################
-
 use test;
 
 # Get the thread id of this thread
-# Store it in a user variable as otherwise repeated calls to sys.ps_thread_id()
+# Store it in a user variable as otherwise repeated calls to ps_current_thread_id()
 # will keep changing performance_schema.events_statements_history
-SET @threadid = sys.ps_thread_id(NULL);
+SET @threadid = ps_current_thread_id();
 
 # Create a table
 CREATE TABLE t1 (id INT PRIMARY KEY, val int);
@@ -74,9 +63,3 @@ SET @threadid      = NULL,
     @digest.select = NULL,
     @digest.show   = NULL;
 
-########################################
-##### WL#7554 set schema `test` back to what it was
---disable_query_log
---eval alter schema test default character set $testdbcs385;
---enable_query_log
-########################################

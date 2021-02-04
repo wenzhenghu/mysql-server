@@ -1,14 +1,21 @@
 /*
-   Copyright (c) 2010, 2015, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2010, 2020, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -21,7 +28,7 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-
+import java.lang.reflect.InvocationTargetException;
 import java.net.URL;
 
 import java.util.ArrayList;
@@ -117,7 +124,7 @@ public class ClusterJHelper {
                 bufferedReader = new BufferedReader(inputStreamReader);
                 factoryName = bufferedReader.readLine();
                 Class<T> serviceClass = (Class<T>)Class.forName(factoryName, true, loader);
-                T service = serviceClass.newInstance();
+                T service = serviceClass.getConstructor().newInstance();
                 if (service != null) {
                     result.add(service);
                 }
@@ -129,6 +136,10 @@ public class ClusterJHelper {
                 errorMessages.append(ex.toString());
             } catch (IllegalAccessException ex) {
                 errorMessages.append(ex.toString());
+            } catch (InvocationTargetException e) {
+                errorMessages.append(e.toString());
+            } catch (NoSuchMethodException e) {
+                errorMessages.append(e.toString());
             } finally {
                 try {
                     if (inputStream != null) {
@@ -187,7 +198,7 @@ public class ClusterJHelper {
                    throw new ClassCastException(cls.getName() + " " + implementationClassName);
                 }
                 serviceClass = (Class<T>)clazz;
-                T service = serviceClass.newInstance();
+                T service = serviceClass.getConstructor().newInstance();
                 return service;
             } catch (ClassNotFoundException e) {
                 throw new ClusterJFatalUserException(implementationClassName, e);
@@ -196,6 +207,10 @@ public class ClusterJHelper {
             } catch (InstantiationException e) {
                 throw new ClusterJFatalUserException(implementationClassName, e);
             } catch (IllegalAccessException e) {
+                throw new ClusterJFatalUserException(implementationClassName, e);
+            } catch (InvocationTargetException e) {
+                throw new ClusterJFatalUserException(implementationClassName, e);
+            } catch (NoSuchMethodException e) {
                 throw new ClusterJFatalUserException(implementationClassName, e);
             }
         }
@@ -210,7 +225,6 @@ public class ClusterJHelper {
      * @param implementationClassName
      * @return the implementation instance for a service
      */
-    @SuppressWarnings("unchecked") // (Class<T>)clazz
     public static <T> T getServiceInstance(Class<T> cls, String implementationClassName) {
         return getServiceInstance(cls, implementationClassName, CLUSTERJ_HELPER_CLASS_LOADER);
     }

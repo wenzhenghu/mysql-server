@@ -1,14 +1,21 @@
 /*
-   Copyright (c) 2003, 2016, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2003, 2020, Oracle and/or its affiliates.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -183,13 +190,110 @@ DbUtil::execREAD_CONFIG_REQ(Signal* signal)
     m_ctx.m_config.getOwnConfigIterator();
   ndbrequire(p != 0);
 
-  c_pagePool.setSize(10);
-  c_preparePool.setSize(1);            // one parallel prepare at a time
-  c_preparedOperationPool.setSize(6);  // three hardcoded, one for setval, two for test
-  c_operationPool.setSize(64);         // 64 parallel operations
-  c_transactionPool.setSize(32);       // 16 parallel transactions
-  c_attrMappingPool.setSize(100);
-  c_dataBufPool.setSize(6000);	       // 6000*11*4 = 264K > 8k+8k*16 = 256k
+  {
+    /* ** Dimensioning inputs : */
+    Uint32 maxUIBuildBatchSize = 64;
+    ndb_mgm_get_int_parameter(p, CFG_DB_UI_BUILD_MAX_BATCHSIZE,
+                              &maxUIBuildBatchSize);
+    
+    Uint32 maxFKBuildBatchSize = 64;
+    ndb_mgm_get_int_parameter(p, CFG_DB_FK_BUILD_MAX_BATCHSIZE,
+                              &maxFKBuildBatchSize);
+    
+    Uint32 maxReorgBuildBatchSize = 64;
+    ndb_mgm_get_int_parameter(p, CFG_DB_REORG_BUILD_MAX_BATCHSIZE,
+                              &maxReorgBuildBatchSize);
+    
+    /* Based on existing setting, probably excessive */
+    const Uint32 MaxNonSchemaBuildOps = 48;
+    const Uint32 MaxPreparedOps = 6;  //  three hardcoded, one for setval, two for test
+    const Uint32 NumConcurrentPrepares = 1;  /* One parallel prepare */
+    
+    const Uint32 SparePages = 5;             /* Arbitrary */    
+    const Uint32 PagesPerPreparingOp = 5;    /* Arbitrary */
+    const Uint32 PagesPerTransaction = 0;    /* Not used currently */
+    
+    /**
+     * Calculations:
+     * Normally these operations cannot happen in parallel. But the DICT framework
+     * has no specific block against that they occur in parallel, we will use the
+     * the maximum of the 3 types + the non-schema as maximum concurrent ops.
+     */
+    Uint32 max = MAX(maxUIBuildBatchSize, maxFKBuildBatchSize);
+    max = MAX(max, maxReorgBuildBatchSize);
+    const Uint32 MaxConcurrentOps = max + MaxNonSchemaBuildOps;
+
+    /* Some support for multiple ops per trans, but unused? */ 
+    const Uint32 MaxConcurrentTrans = MaxConcurrentOps;
+
+    const Uint32 DataBuffSegmentWords = 11; // TODO get programmatically
+    
+    /* Need attribute mappings for prepared ops, and not always limited to a key */
+    const Uint32 MaxAttributeMappings = MaxPreparedOps * MAX_ATTRIBUTES_IN_TABLE;
+    
+    /**
+     * Assume either Key + write Data, or Key only, with space for result set 
+     *
+     * Otherwise also need another full tuple size worth
+     */
+    const Uint32 DataBuffWordsPerOp = 
+      MAX_TUPLE_SIZE_IN_WORDS + 
+      MAX_KEY_SIZE_IN_WORDS;
+
+    /**
+     * Enough for all the ops to have 1 key + 1 full size tuple, rounded up to 
+     * whole buffers
+     */
+    const Uint32 numDataBuffers = 
+      ((MaxConcurrentOps * 
+        (DataBuffWordsPerOp + 
+         2* DataBuffSegmentWords)) + 1) /
+      DataBuffSegmentWords;
+    
+    const Uint32 numPages = 
+      SparePages + 
+      (NumConcurrentPrepares * PagesPerPreparingOp) +
+      (MaxConcurrentTrans * PagesPerTransaction);
+    
+    if (0)
+    {
+      ndbout_c("Inputs : ");
+      ndbout_c("  MaxUIBuildBatchSize : %u",
+               maxUIBuildBatchSize);
+      ndbout_c("  MaxFKBuildBatchSize : %u",
+               maxFKBuildBatchSize);
+      ndbout_c("  MaxReorgBuildBatchSize : %u",
+               maxReorgBuildBatchSize);
+      ndbout_c("  MaxPreparedOps : %u", MaxPreparedOps);
+      ndbout_c("  MaxNonSchemaBuildOps : %u", MaxNonSchemaBuildOps);
+      ndbout_c("  NumConcurrentPrepares : %u", NumConcurrentPrepares);
+      ndbout_c("  SparePages : %u", SparePages);
+      ndbout_c("  PagesPerPreparingOp : %u", PagesPerPreparingOp);
+      ndbout_c("  PagesPerTransaction : %u", PagesPerTransaction);
+      ndbout_c("  MAX_ATTRIBUTES_IN_TABLE : %u", MAX_ATTRIBUTES_IN_TABLE);
+      ndbout_c("  MAX_TUPLE_SIZE_IN_WORDS : %u", MAX_TUPLE_SIZE_IN_WORDS);
+      ndbout_c("  MAX_KEY_SIZE_IN_WORDS : %u", MAX_KEY_SIZE_IN_WORDS);
+      ndbout_c("Outputs : ");
+      ndbout_c("  MaxConcurrentOps : %u", MaxConcurrentOps);
+      ndbout_c("  MaxConcurrentTrans : %u", MaxConcurrentTrans);
+      ndbout_c("  MaxAttributeMappings : %u", MaxAttributeMappings);
+      ndbout_c("  DataBuffWordsPerOp : %u", DataBuffWordsPerOp);
+      ndbout_c("  numDataBuffers : %u", numDataBuffers);
+      ndbout_c("  numPages : %u", numPages);
+    }
+      
+
+    /* ** Settings */
+    
+    c_pagePool.setSize(numPages);
+    c_preparePool.setSize(NumConcurrentPrepares);
+    c_preparedOperationPool.setSize(MaxPreparedOps);
+    c_operationPool.setSize(MaxConcurrentOps);
+    c_transactionPool.setSize(MaxConcurrentTrans);
+    c_attrMappingPool.setSize(MaxAttributeMappings);
+    c_dataBufPool.setSize(numDataBuffers);
+  }
+
   {
     Prepare_sllist tmp(c_preparePool);
     PreparePtr ptr;
@@ -363,13 +467,29 @@ DbUtil::execCONTINUEB(Signal* signal){
   jamEntry();
   //const Uint32 Tdata0 = signal->theData[0];
 
-  ndbrequire(0);
+  ndbabort();
 }
 
 void
 DbUtil::execNODE_FAILREP(Signal* signal){
   jamEntry();
-  const NodeFailRep * rep = (NodeFailRep*)signal->getDataPtr();
+  NodeFailRep * rep = (NodeFailRep*)signal->getDataPtr();
+  if(signal->getLength() == NodeFailRep::SignalLength)
+  {
+    ndbrequire(signal->getNoOfSections() == 1);
+    ndbrequire(ndbd_send_node_bitmask_in_section(
+        getNodeInfo(refToNode(signal->getSendersBlockRef())).m_version));
+    SegmentedSectionPtr ptr;
+    SectionHandle handle(this, signal);
+    handle.getSection(ptr, 0);
+    memset(rep->theNodes, 0, sizeof(rep->theNodes));
+    copy(rep->theNodes, ptr);
+    releaseSections(handle);
+  }
+  else
+  {
+    memset(rep->theNodes + NdbNodeBitmask48::Size, 0, _NDB_NBM_DIFF_BYTES);
+  }
   NdbNodeBitmask failed; 
   failed.assign(NdbNodeBitmask::Size, rep->theNodes);
 
@@ -604,7 +724,7 @@ DbUtil::execDUMP_STATE_ORD(Signal* signal){
 	     << "216 : PREPARE_REQ UPDATE SYSTAB_0 SYSKEY_0 NEXTID using id" << endl
 	     << "217 : PREPARE_REQ READ   SYSTAB_0 SYSKEY_0 using id" << endl
 	     << "220 : EXECUTE_REQ <PrepId> <Len> <Val1> <Val2a> <Val2b>" <<endl
-	     << "299 : Crash system (using ndbrequire(0))" 
+	     << "299 : Crash system (using ndbabort())" 
 	     << endl
 	     << "Ex. \"dump 220 3 5 1 0 17 \" prints Prepare record no 2." 
 	     << endl;
@@ -783,44 +903,51 @@ void DbUtil::execDBINFO_SCANREQ(Signal *signal)
         c_pagePool.getSize(),
         c_pagePool.getEntrySize(),
         c_pagePool.getUsedHi(),
-        { 0,0,0,0 }},
+        { 0,0,0,0 },
+        0},
       { "Prepare",
         c_preparePool.getUsed(),
         c_preparePool.getSize(),
         c_preparePool.getEntrySize(),
         c_preparePool.getUsedHi(),
-        { 0,0,0,0 }},
+        { 0,0,0,0 },
+        0},
       { "Prepared Operation",
         c_preparedOperationPool.getUsed(),
         c_preparedOperationPool.getSize(),
         c_preparedOperationPool.getEntrySize(),
         c_preparedOperationPool.getUsedHi(),
-        { 0,0,0,0 }},
+        { 0,0,0,0 },
+        0},
       { "Operation",
         c_operationPool.getUsed(),
         c_operationPool.getSize(),
         c_operationPool.getEntrySize(),
         c_operationPool.getUsedHi(),
-        { 0,0,0,0 }},
+        { 0,0,0,0 },
+        0},
       { "Transaction",
         c_transactionPool.getUsed(),
         c_transactionPool.getSize(),
         c_transactionPool.getEntrySize(),
         c_transactionPool.getUsedHi(),
-        { 0,0,0,0 }},
+        { 0,0,0,0 },
+        0},
       { "Attribute Mapping",
         c_attrMappingPool.getUsed(),
         c_attrMappingPool.getSize(),
         c_attrMappingPool.getEntrySize(),
         c_attrMappingPool.getUsedHi(),
-        { 0,0,0,0 }},
+        { 0,0,0,0 },
+        0},
       { "Data Buffer",
         c_dataBufPool.getUsed(),
         c_dataBufPool.getSize(),
         c_dataBufPool.getEntrySize(),
         c_dataBufPool.getUsedHi(),
-        { 0,0,0,0 }},
-      { NULL, 0,0,0,0, { 0,0,0,0 }}
+        { 0,0,0,0 },
+        0},
+      { NULL, 0,0,0,0, { 0,0,0,0 }, 0}
     };
 
     const size_t num_config_params =
@@ -841,6 +968,8 @@ void DbUtil::execDBINFO_SCANREQ(Signal *signal)
       row.write_uint64(pools[pool].entry_size);
       for (size_t i = 0; i < num_config_params; i++)
         row.write_uint32(pools[pool].config_params[i]);
+      row.write_uint32(GET_RG(pools[pool].record_type));
+      row.write_uint32(GET_TID(pools[pool].record_type));
       ndbinfo_send_row(signal, req, row, rl);
       pool++;
       if (rl.need_break(req))
@@ -1050,11 +1179,12 @@ DbUtil::execUTIL_PREPARE_REQ(Signal* signal)
   // Release long signal sections
   releaseSections(handle);
   // Check table properties with DICT
-  SimplePropertiesSectionReader reader(ptr, getSectionSegmentPool());
+  SimplePropertiesLinearReader reader(&prepPtr.p->preparePages.getPtr(0)->data[0],
+                                      prepPtr.p->prepDataLen);
   prepPtr.p->clientRef = senderRef;
   prepPtr.p->clientData = senderData;
   prepPtr.p->schemaTransId = schemaTransId;
-  // Release long signal sections
+  // Read the properties
   readPrepareProps(signal, &reader, prepPtr);
 }
 
@@ -1195,7 +1325,7 @@ DbUtil::execGET_TABINFOREF(Signal* signal){
   case GetTabInfoRef::TableNotDefined:
     ndbout << "      Msg:  Table not defined" << endl;
     break;
-  case GetTabInfoRef::TableNameToLong:
+  case GetTabInfoRef::TableNameTooLong:
     ndbout << "      Msg:  Table node too long" << endl;
     break;
   default:
@@ -1370,8 +1500,7 @@ DbUtil::prepareOperation(Signal* signal,
     SimpleProperties::UnpackStatus unpackStatus;
     unpackStatus = SimpleProperties::unpack(dictInfoReader, &tableDesc, 
 					    DictTabInfo::TableMapping, 
-					    DictTabInfo::TableMappingSize, 
-					    true, true);
+					    DictTabInfo::TableMappingSize);
     ndbrequire(unpackStatus == SimpleProperties::Break);
     
     /************************
@@ -1399,8 +1528,7 @@ DbUtil::prepareOperation(Signal* signal,
       }
       unpackStatus = SimpleProperties::unpack(dictInfoReader, &attrDesc, 
 					      DictTabInfo::AttributeMapping, 
-					      DictTabInfo::AttributeMappingSize,
-					      true, true);
+					      DictTabInfo::AttributeMappingSize);
       ndbrequire(unpackStatus == SimpleProperties::Break);
       //attrDesc.print(stdout);
       
@@ -1823,7 +1951,7 @@ DbUtil::execUTIL_SEQUENCE_REQ(Signal* signal){
     break;
   }
   default:
-    ndbrequire(false);
+    ndbabort();
     prepOp = 0; // remove warning
   }
   
@@ -1969,8 +2097,10 @@ DbUtil::reportSequence(Signal* signal, const Transaction * transP){
       break;
     }
     case UtilSequenceReq::SetVal:
-      ok = true;
+      jam();
+      // Fall through
     case UtilSequenceReq::Create:
+      jam();
       ok = true;
       ret->sequenceValue[0] = 0;
       ret->sequenceValue[1] = 0;
@@ -2083,6 +2213,7 @@ DbUtil::execUTIL_EXECUTE_REQ(Signal* signal)
 
 #if 0 //def EVENT_DEBUG
   // Debugging
+  printf("DbUtil::c_dataBufPool.used = %u\n", c_dataBufPool.getUsed());
   printf("DbUtil::execUTIL_EXECUTEL_REQ: Headers (%u): ", headerPtr.sz);
   Uint32 word;
   while(headerReader.getWord(&word))
@@ -2090,10 +2221,12 @@ DbUtil::execUTIL_EXECUTE_REQ(Signal* signal)
   printf("\n");
   printf("DbUtil::execUTIL_EXECUTEL_REQ: Data (%u): ", dataPtr.sz);
   headerReader.reset();
+#if 0
   while(dataReader.getWord(&word))
     printf("H'%.8x ", word);
-  printf("\n");
   dataReader.reset();
+#endif
+  printf("\n");
 #endif
   
 //  Uint32 totalDataLen = headerPtr.sz + dataPtr.sz;
@@ -2135,7 +2268,7 @@ DbUtil::execUTIL_EXECUTE_REQ(Signal* signal)
 
 #if 0 //def EVENT_DEBUG
     if (TcKeyReq::getOperationType(prepOpPtr.p->tckey.requestInfo) ==
-	TcKeyReq::Read) {
+	UtilPrepareReq::Read) {
       if(prepOpPtr.p->pkBitmask.get(header.getAttributeId()))
 	printf("PrimaryKey\n");
     }
@@ -2249,7 +2382,7 @@ DbUtil::runOperation(Signal* signal, TransactionPtr & transPtr,
   
 #if 0 //def EVENT_DEBUG
   if (TcKeyReq::getOperationType(pop->tckey.requestInfo) ==
-      TcKeyReq::Read) {
+      UtilPrepareReq::Read) {
     printf("TcKeyReq::Read runOperation\n");
   }
 #endif
@@ -2284,9 +2417,9 @@ DbUtil::runOperation(Signal* signal, TransactionPtr & transPtr,
 #if 0 //def EVENT_DEBUG
   // Debugging
   printf("DbUtil::runOperation: KEYINFO\n");
-  op->keyInfo.print(stdout);
+  op->keyInfo.print_header(stdout);
   printf("DbUtil::runOperation: ATTRINFO\n");
-  op->attrInfo.print(stdout);
+  op->attrInfo.print_header(stdout);
 #endif
   
   Uint32 attrLen = pop->attrInfo.getSize() + op->attrInfo.getSize();
@@ -2386,7 +2519,8 @@ DbUtil::sendAttrInfo(Signal* signal,
       attrDst[i] = * ait.data;
     }
 #if 0 //def EVENT_DEBUG
-    printf("DbUtil::sendAttrInfo: sendSignal(DBTC_REF, GSN_ATTRINFO, signal, %d , JBB)\n", AttrInfo::HeaderLength + i);
+    printf("DbUtil::sendAttrInfo: sendSignal(DBTC_REF, GSN_ATTRINFO,"
+           " signal, %d , JBB)\n", AttrInfo::HeaderLength + i);
 #endif
     sendSignal(tcRef, GSN_ATTRINFO, signal,
 	       AttrInfo::HeaderLength + i, JBB);
@@ -2733,8 +2867,7 @@ DbUtil::finishTransaction(Signal* signal, TransactionPtr transPtr){
     } 
     break;
   default:
-    ndbrequire(0);
-    break;
+    ndbabort();
   }
   releaseTransaction(transPtr);
 }
@@ -2811,6 +2944,7 @@ DbUtil::execUTIL_UNLOCK_REQ(Signal* signal)
   switch(res){
   case UtilUnlockRef::OK:
     jam();
+    // Fall through
   case UtilUnlockRef::NotLockOwner: {
     jam();
     UtilUnlockConf * conf = (UtilUnlockConf*)signal->getDataPtrSend();
@@ -2823,6 +2957,7 @@ DbUtil::execUTIL_UNLOCK_REQ(Signal* signal)
   }
   case UtilUnlockRef::NotInLockQueue:
     jam();
+    // Fall through
   default:
     jam();
     ndbassert(false);

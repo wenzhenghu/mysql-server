@@ -1,75 +1,71 @@
-/* Copyright (c) 2014, 2017, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2014, 2020, Oracle and/or its affiliates.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software Foundation,
-   51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 #ifndef DD__VIEW_INCLUDED
 #define DD__VIEW_INCLUDED
 
-
-#include "dd/types/abstract_table.h"       // dd::Abstract_table
+#include "sql/dd/types/abstract_table.h"  // dd::Abstract_table
 
 namespace dd {
 
 ///////////////////////////////////////////////////////////////////////////
 
-class Object_type;
 class View_impl;
 class View_table;
 class View_routine;
 
 ///////////////////////////////////////////////////////////////////////////
 
-class View : virtual public Abstract_table
-{
-public:
-  static const Object_type &TYPE();
-  typedef Collection<View_table*> View_tables;
-  typedef Collection<View_routine*> View_routines;
+class View : virtual public Abstract_table {
+ public:
+  typedef Collection<View_table *> View_tables;
+  typedef Collection<View_routine *> View_routines;
   typedef View_impl Impl;
 
-public:
-  enum enum_check_option // VIEW_CHECK_NONE, VIEW_CHECK_LOCAL, VIEW_CHECK_CASCADED
-  {
-    CO_NONE= 1,
+ public:
+  enum enum_check_option  // VIEW_CHECK_NONE, VIEW_CHECK_LOCAL,
+                          // VIEW_CHECK_CASCADED
+  { CO_NONE = 1,
     CO_LOCAL,
-    CO_CASCADED
-  };
+    CO_CASCADED };
 
-  enum enum_algorithm // VIEW_ALGORITHM_UNDEFINED, VIEW_ALGORITHM_TMPTABLE, VIEW_ALGORITHM_MERGE
-  {
-    VA_UNDEFINED= 1,
+  enum enum_algorithm  // VIEW_ALGORITHM_UNDEFINED, VIEW_ALGORITHM_TMPTABLE,
+                       // VIEW_ALGORITHM_MERGE
+  { VA_UNDEFINED = 1,
     VA_TEMPORARY_TABLE,
-    VA_MERGE
-  };
+    VA_MERGE };
 
-  enum enum_security_type
-  {
-    ST_DEFAULT= 1,
-    ST_INVOKER,
-    ST_DEFINER
-  };
+  enum enum_security_type { ST_DEFAULT = 1, ST_INVOKER, ST_DEFINER };
 
-public:
-  virtual ~View()
-  { };
+ public:
+  ~View() override {}
 
   /////////////////////////////////////////////////////////////////////////
   // regular/system view flag.
   /////////////////////////////////////////////////////////////////////////
 
-  /* non-virtual */ bool is_system_view() const
-  { return type() == enum_table_type::SYSTEM_VIEW; }
+  /* non-virtual */ bool is_system_view() const {
+    return type() == enum_table_type::SYSTEM_VIEW;
+  }
 
   virtual void set_system_view(bool system_view) = 0;
 
@@ -81,7 +77,8 @@ public:
   virtual void set_client_collation_id(Object_id client_collation_id) = 0;
 
   virtual Object_id connection_collation_id() const = 0;
-  virtual void set_connection_collation_id(Object_id connection_collation_id) = 0;
+  virtual void set_connection_collation_id(
+      Object_id connection_collation_id) = 0;
 
   /////////////////////////////////////////////////////////////////////////
   // definition/utf8.
@@ -161,7 +158,7 @@ public:
 
     @return pointer to dynamically allocated copy
   */
-  virtual View *clone() const = 0;
+  View *clone() const override = 0;
 
   /**
     Clear View columns, View_tables and View_routines collections.
@@ -171,6 +168,6 @@ public:
 
 ///////////////////////////////////////////////////////////////////////////
 
-}
+}  // namespace dd
 
-#endif // DD__VIEW_INCLUDED
+#endif  // DD__VIEW_INCLUDED

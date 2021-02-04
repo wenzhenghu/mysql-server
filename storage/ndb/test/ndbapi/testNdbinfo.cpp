@@ -1,14 +1,21 @@
 /*
-   Copyright (c) 2009, 2015, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2009, 2020, Oracle and/or its affiliates.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -147,7 +154,12 @@ int runScanAll(NDBT_Context* ctx, NDBT_Step* step)
     }
     ndbout << "table("<<tableId<<"): " << table->getName() << endl;
 
-    int last_rows;
+    int last_rows = 0;
+    bool rows_may_increase1 =
+      (strstr(table->getName(), "cpustat_") != nullptr);
+    bool rows_may_increase2 =
+      (strstr(table->getName(), "cpudata_") != nullptr);
+    bool rows_may_increase = (rows_may_increase1 || rows_may_increase2);
     for (int l = 0; l < ctx->getNumLoops(); l++)
     {
       if (ctx->isTestStopped())
@@ -159,11 +171,17 @@ int runScanAll(NDBT_Context* ctx, NDBT_Step* step)
         ctx->stopTest();
         return NDBT_FAILED;
       }
-      // Check that the number of rows is same as last round on same table
+      // Check if the number of rows is as expected:
+      // Expected scenario 1: Same number of rows as last round (or)
+      // Expected scenario 2: Same or increased number of rows for tables which
+      //                      might be still getting filled.
       if (l > 0 &&
-          last_rows != rows)
+          (rows != last_rows &&
+           !(rows_may_increase && rows > last_rows)))
       {
-        g_err << "Got different number of rows this round, expected: "
+        g_err << "Got different number of rows this round, table: "
+          << table->getName() << ", expected: "
+          << ((rows_may_increase)?"equal to or more than ":"")
           << last_rows << ", got: " << rows << endl;
         ndbinfo.closeTable(table);
         ctx->stopTest();
@@ -178,19 +196,6 @@ int runScanAll(NDBT_Context* ctx, NDBT_Step* step)
   // Should never come here
   require(false);
   return NDBT_FAILED;
-}
-
-
-int runScanAllUntilStopped(NDBT_Context* ctx, NDBT_Step* step){
-  int i = 0;
-  while (ctx->isTestStopped() == false) {
-    g_info << i << ": ";
-    if (runScanAll(ctx,  step) != NDBT_OK){
-      return NDBT_FAILED;
-    }
-    i++;
-  }
-  return NDBT_OK;
 }
 
 
@@ -308,6 +313,11 @@ int runRatelimit(NDBT_Context* ctx, NDBT_Step* step)
     };
 
     int lastRows = 0;
+    bool rows_may_increase1 =
+      (strstr(table->getName(), "cpustat_") != nullptr);
+    bool rows_may_increase2 =
+      (strstr(table->getName(), "cpudata_") != nullptr);
+    bool rows_may_increase = (rows_may_increase1 || rows_may_increase2);
     for (int l = 0; l < (int)(sizeof(limits)/sizeof(limits[0])); l++)
     {
 
@@ -345,16 +355,20 @@ int runRatelimit(NDBT_Context* ctx, NDBT_Step* step)
       ndbinfo.releaseScanOperation(scanOp);
 
       ndbout_c("[%u,%u] rows: %d", maxRows, maxBytes, row);
-      if (lastRows != 0)
+      // Check if the number of rows is as expected:
+      // Expected scenario 1: Same number of rows as last round (or)
+      // Expected scenario 2: Same or increased number of rows for tables which
+      //                      might be still getting filled.
+      if (lastRows != 0 &&
+          (row != lastRows &&
+           !(rows_may_increase && row > lastRows)))
       {
-        // Check that the number of rows is same as last round on same table
-        if (lastRows != row)
-        {
-          g_err << "Got different number of rows this round, expected: "
-                << lastRows << ", got: " << row << endl;
-          ndbinfo.closeTable(table);
-          return NDBT_FAILED;
-        }
+        g_err << "Got different number of rows this round, table: "
+          << table->getName() << ", expected: "
+          << ((rows_may_increase)?"equal to or more than ":"")
+          << lastRows << ", got: " << row << endl;
+        ndbinfo.closeTable(table);
+        return NDBT_FAILED;
       }
       lastRows = row;
     }
@@ -547,13 +561,16 @@ TESTCASE("Ndbinfo10",
 }
 TESTCASE("ScanAll",
          "Scan all colums of all table known to NdbInfo"
-         "check that number of rows returned are constant"){
+         "check that number of rows returned are as expected."
+         "Either they should be same across multiple iterations or"
+         "should increasing if in case the table is still getting filled."){
   STEPS(runScanAll, 1);
 }
 TESTCASE("ScanAll10",
          "Scan all columns of all table known to NdbInfo from "
-         "10 parallel threads, check that number of rows returned "
-         "are constant"){
+         "10 parallel threads, check that number of rows returned are as"
+         "expected. Either they should be same across multiple iterations or"
+         "should increasing if in case the table is still getting filled."){
   STEPS(runScanAll, 10);
 }
 TESTCASE("ScanStop",
@@ -569,7 +586,7 @@ TESTCASE("TestTable",
           "of rows which will depend on how many TUP blocks are configured"){
   STEP(runTestTable);
 }
-NDBT_TESTSUITE_END(testNdbinfo);
+NDBT_TESTSUITE_END(testNdbinfo)
 
 
 int main(int argc, const char** argv){

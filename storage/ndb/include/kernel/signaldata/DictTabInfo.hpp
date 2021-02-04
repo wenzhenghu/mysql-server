@@ -1,14 +1,21 @@
 /*
-   Copyright (c) 2003, 2016, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2003, 2019, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -24,6 +31,7 @@
 #include <ndb_limits.h>
 #include <NdbSqlUtil.hpp>
 #include <ndb_global.h>
+#include "decimal.h"
 
 #define JAM_FILE_ID 87
 
@@ -39,10 +47,6 @@
 #define DECIMAL_NOT_SPECIFIED 31
 #endif
 
-C_MODE_START
-extern int decimal_bin_size(int, int);
-C_MODE_END
-
 inline int my_decimal_get_binary_size(uint precision, uint scale)
 {
   return decimal_bin_size((int)precision, (int)scale);
@@ -50,21 +54,22 @@ inline int my_decimal_get_binary_size(uint precision, uint scale)
 
 #endif
 
-#define DTIMAP(x, y, z) \
-  { DictTabInfo::y, (unsigned) my_offsetof(x, z), SimpleProperties::Uint32Value, 0, UINT_MAX32, 0 }
+#define DTI_MAP_INT(x, y, z) \
+  { DictTabInfo::y, (unsigned) my_offsetof(x, z), SimpleProperties::Uint32Value, 0, 0 }
 
-#define DTIMAP2(x, y, z, u, v) \
-  { DictTabInfo::y, (unsigned) my_offsetof(x, z), SimpleProperties::Uint32Value, u, v, 0 }
+#define DTI_MAP_STR(x, y, z, len) \
+  { DictTabInfo::y, (unsigned) my_offsetof(x, z), SimpleProperties::StringValue, len, 0 }
 
-#define DTIMAPS(x, y, z, u, v) \
-  { DictTabInfo::y, (unsigned) my_offsetof(x, z), SimpleProperties::StringValue, u, v, 0 }
+#define DTI_MAP_BIN(x, y, z, len, off) \
+  { DictTabInfo::y, (unsigned) my_offsetof(x, z), SimpleProperties::BinaryValue, \
+      len, (unsigned) my_offsetof(x, off) }
 
-#define DTIMAPB(x, y, z, u, v, l) \
-  { DictTabInfo::y, (unsigned) my_offsetof(x, z), SimpleProperties::BinaryValue, u, v, \
-      (unsigned) my_offsetof(x, l) }
+#define DTI_MAP_BIN_EXTERNAL(y, len) \
+  { DictTabInfo::y, 0, SimpleProperties::BinaryValue, len, \
+    SimpleProperties::SP2StructMapping::ExternalData }
 
 #define DTIBREAK(x) \
-  { DictTabInfo::x, 0, SimpleProperties::InvalidValue, 0, 0, 0 }
+  { DictTabInfo::x, 0, SimpleProperties::InvalidValue, 0, 0 }
 
 class DictTabInfo {
   /**
@@ -121,9 +126,9 @@ public:
     CustomTriggerId    = 25,
     FrmLen             = 26,
     FrmData            = 27,
-
     TableTemporaryFlag = 28,  //Default not Temporary
     ForceVarPartFlag   = 29,
+    MysqlDictMetadata  = 30,
 
     PartitionBalance  = 127,
     FragmentCount      = 128, // No of fragments in table (!fragment replicas)
@@ -333,7 +338,7 @@ public:
     StateBuilding = 2,
     StateDropping = 3,
     StateOnline = 4,
-    StateBackup = 5,
+    ObsoleteStateBackup = 5,
     StateBroken = 9
   };
 
@@ -386,8 +391,6 @@ public:
       We need to replace FRM, Fragment Data, Tablespace Data and in
       very particular RangeListData with dynamic arrays
     */
-    Uint32 FrmLen;
-    char   FrmData[MAX_FRM_DATA_SIZE];
     Uint32 PartitionBalance;
     Uint32 FragmentCount;
     Uint32 ReplicaDataLen;
@@ -709,21 +712,18 @@ public:
   };
 };
 
-#define DFGIMAP(x, y, z) \
-  { DictFilegroupInfo::y, (unsigned) my_offsetof(x, z), SimpleProperties::Uint32Value, 0, UINT_MAX32, 0 }
+#define DFGI_MAP_INT(x, y, z) \
+  { DictFilegroupInfo::y, (unsigned) my_offsetof(x, z), SimpleProperties::Uint32Value, 0, 0 }
 
-#define DFGIMAP2(x, y, z, u, v) \
-  { DictFilegroupInfo::y, (unsigned) my_offsetof(x, z), SimpleProperties::Uint32Value, u, v, 0 }
+#define DFGI_MAP_STR(x, y, z, len) \
+  { DictFilegroupInfo::y, (unsigned) my_offsetof(x, z), SimpleProperties::StringValue, len, 0 }
 
-#define DFGIMAPS(x, y, z, u, v) \
-  { DictFilegroupInfo::y, (unsigned) my_offsetof(x, z), SimpleProperties::StringValue, u, v, 0 }
-
-#define DFGIMAPB(x, y, z, u, v, l) \
-  { DictFilegroupInfo::y, (unsigned) my_offsetof(x, z), SimpleProperties::BinaryValue, u, v, \
-      (unsigned) my_offsetof(x, l) }
+#define DFGI_MAP_BIN(x, y, z, len, off) \
+  { DictFilegroupInfo::y, (unsigned) my_offsetof(x, z), SimpleProperties::BinaryValue, \
+      len, (unsigned) my_offsetof(x, off) }
 
 #define DFGIBREAK(x) \
-  { DictFilegroupInfo::x, 0, SimpleProperties::InvalidValue, 0, 0, 0 }
+  { DictFilegroupInfo::x, 0, SimpleProperties::InvalidValue, 0, 0 }
 
 struct DictFilegroupInfo {
   enum KeyValues {
@@ -830,21 +830,18 @@ struct DictFilegroupInfo {
   static const SimpleProperties::SP2StructMapping FileMapping[];
 };
 
-#define DHMIMAP(x, y, z) \
-  { DictHashMapInfo::y, (unsigned) my_offsetof(x, z), SimpleProperties::Uint32Value, 0, UINT_MAX32, 0 }
+#define DHMI_MAP_INT(x, y, z) \
+  { DictHashMapInfo::y, (unsigned) my_offsetof(x, z), SimpleProperties::Uint32Value, 0, 0 }
 
-#define DHMIMAP2(x, y, z, u, v) \
-  { DictHashMapInfo::y, (unsigned) my_offsetof(x, z), SimpleProperties::Uint32Value, u, v, 0 }
+#define DHMI_MAP_STR(x, y, z, len) \
+  { DictHashMapInfo::y, (unsigned) my_offsetof(x, z), SimpleProperties::StringValue, len, 0 }
 
-#define DHMIMAPS(x, y, z, u, v) \
-  { DictHashMapInfo::y, (unsigned) my_offsetof(x, z), SimpleProperties::StringValue, u, v, 0 }
-
-#define DHMIMAPB(x, y, z, u, v, l) \
-  { DictHashMapInfo::y, (unsigned) my_offsetof(x, z), SimpleProperties::BinaryValue, u, v, \
-      (unsigned) my_offsetof(x, l) }
+#define DHMI_MAP_BIN(x, y, z, len, off) \
+  { DictHashMapInfo::y, (unsigned) my_offsetof(x, z), SimpleProperties::BinaryValue, \
+      len, (unsigned) my_offsetof(x, off) }
 
 #define DHMIBREAK(x) \
-  { DictHashMapInfo::x, 0, SimpleProperties::InvalidValue, 0, 0, 0 }
+  { DictHashMapInfo::x, 0, SimpleProperties::InvalidValue, 0, 0 }
 
 struct DictHashMapInfo {
   enum KeyValues {
@@ -932,21 +929,18 @@ ndbout_print(const DictForeignKeyInfo::ForeignKey& fk, char* buf, size_t sz);
 class NdbOut&
 operator<<(class NdbOut& out, const DictForeignKeyInfo::ForeignKey& fk);
 
-#define DFKIMAP(x, y, z) \
-  { DictForeignKeyInfo::y, (unsigned) my_offsetof(x, z), SimpleProperties::Uint32Value, 0, UINT_MAX32, 0 }
+#define DFKI_MAP_INT(x, y, z) \
+  { DictForeignKeyInfo::y, (unsigned) my_offsetof(x, z), SimpleProperties::Uint32Value, 0, 0 }
 
-#define DFKIMAP2(x, y, z, u, v) \
-  { DictForeignKeyInfo::y, (unsigned) my_offsetof(x, z), SimpleProperties::Uint32Value, u, v, 0 }
+#define DFKI_MAP_STR(x, y, z, len) \
+  { DictForeignKeyInfo::y, (unsigned) my_offsetof(x, z), SimpleProperties::StringValue, 0, 0 }
 
-#define DFKIMAPS(x, y, z, u, v) \
-  { DictForeignKeyInfo::y, (unsigned) my_offsetof(x, z), SimpleProperties::StringValue, u, v, 0 }
-
-#define DFKIMAPB(x, y, z, u, v, l) \
-  { DictForeignKeyInfo::y, (unsigned) my_offsetof(x, z), SimpleProperties::BinaryValue, u, v, \
-      (unsigned) my_offsetof(x, l) }
+#define DFKI_MAP_BIN(x, y, z, len, off) \
+  { DictForeignKeyInfo::y, (unsigned) my_offsetof(x, z), SimpleProperties::BinaryValue, \
+      len, (unsigned) my_offsetof(x, off) }
 
 #define DFKIBREAK(x) \
-  { DictForeignKeyInfo::x, 0, SimpleProperties::InvalidValue, 0, 0, 0 }
+  { DictForeignKeyInfo::x, 0, SimpleProperties::InvalidValue, 0, 0 }
 
 #undef JAM_FILE_ID
 

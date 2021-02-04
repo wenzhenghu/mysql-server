@@ -12,15 +12,6 @@
 --source include/have_binlog_format_mixed.inc
 --source include/linux.inc
 
-########################################
-##### WL#7554 Force schema `test` to character set latin1
-##### This test should be migrated to utf8mb4
---disable_query_log
-let $testdbcs81=`select default_character_set_name from information_schema.schemata where schema_name='test'`;
-alter schema test default character set latin1;
---enable_query_log
-########################################
-
 #
 # Crash-safe testing is difficult on other than Linux.
 # TODO: Open it back at XA-commit/rollback crash-safe bug/FR fixing.
@@ -51,7 +42,8 @@ XA PREPARE 'xid_partly_rolled_back';
 # roll back.
 --exec echo "wait" > $MYSQLTEST_VARDIR/tmp/mysqld.1.expect
 SET @@session.debug="+d,crash_after_xa_rollback";
---error 2013 # CR_SERVER_LOST
+# CR_SERVER_LOST
+--error 2013
 XA ROLLBACK 'xid_partly_rolled_back';
 
 #
@@ -108,10 +100,3 @@ DROP TABLE t1;
 --source include/sync_slave_sql_with_master.inc
 
 --source include/rpl_end.inc
-
-########################################
-##### WL#7554 set schema `test` back to what it was
---disable_query_log
---eval alter schema test default character set $testdbcs81;
---enable_query_log
-########################################

@@ -1,17 +1,24 @@
-/* Copyright (c) 2008, 2014, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2008, 2020, Oracle and/or its affiliates.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA */
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 #ifndef NDB_LOCAL_PROXY_HPP
 #define NDB_LOCAL_PROXY_HPP
@@ -55,7 +62,7 @@
 class LocalProxy : public SimulatedBlock {
 public:
   LocalProxy(BlockNumber blockNumber, Block_context& ctx);
-  virtual ~LocalProxy();
+  ~LocalProxy() override;
   BLOCK_DEFINES(LocalProxy);
 
 protected:
@@ -67,7 +74,7 @@ protected:
   Uint32 c_anyWorkerCounter;
 
   virtual SimulatedBlock* newWorker(Uint32 instanceNo) = 0;
-  virtual void loadWorkers();
+  void loadWorkers() override;
 
   // get worker block by index (not by instance)
 
@@ -221,7 +228,7 @@ protected:
     new (ssptr) Ss;
     ssptr->m_ssId = ssId;
     sp.m_usage++;
-    D("ssSeize()" << V(sp.m_usage) << hex << V(ssId) << " " << Ss::name());
+    //D("ssSeize()" << V(sp.m_usage) << hex << V(ssId) << " " << Ss::name());
     return *ssptr;
   }
 
@@ -241,7 +248,7 @@ protected:
     new (ssptr) Ss;
     ssptr->m_ssId = ssId;
     sp.m_usage++;
-    D("ssSeize" << V(sp.m_usage) << hex << V(ssId) << " " << Ss::name());
+    //D("ssSeize" << V(sp.m_usage) << hex << V(ssId) << " " << Ss::name());
     return *ssptr;
   }
 
@@ -277,7 +284,7 @@ protected:
     SsPool<Ss>& sp = Ss::pool(this);
     ndbrequire(sp.m_usage != 0);
     ndbrequire(ssId != 0);
-    D("ssRelease" << V(sp.m_usage) << hex << V(ssId) << " " << Ss::name());
+    //D("ssRelease" << V(sp.m_usage) << hex << V(ssId) << " " << Ss::name());
     Ss* ssptr = ssSearch<Ss>(ssId);
     ndbrequire(ssptr != 0);
     ssptr->m_ssId = 0;
@@ -553,7 +560,7 @@ protected:
       m_sendREQ = &LocalProxy::sendDROP_TRIG_IMPL_REQ;
       m_sendCONF = &LocalProxy::sendDROP_TRIG_IMPL_CONF;
     }
-    enum { poolSize = 21 };
+    enum { poolSize = NDB_MAX_PROXY_DROP_TRIG_IMPL_REQ };
     static SsPool<Ss_DROP_TRIG_IMPL_REQ>& pool(LocalProxy* proxy) {
       return proxy->c_ss_DROP_TRIG_IMPL_REQ;
     }

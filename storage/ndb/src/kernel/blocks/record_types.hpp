@@ -1,14 +1,21 @@
 /*
-   Copyright (c) 2006, 2016, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2006, 2019, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -26,12 +33,9 @@
  */
 
 /**
- * Operations for dd
- *    PGMAN_PAGE_REQUEST
- *    LGMAN_LOG_WAITER
- *    DBTUP_PAGE_REQUEST
+ * Transaction memory == "operation records" needed to access/modify data in DB
  */
-#define RG_DISK_OPERATIONS      1
+#define RG_TRANSACTION_MEMORY   1
 
 /**
  * Records for dd
@@ -75,7 +79,7 @@
 #define RG_SCHEMA_TRANS_MEMORY  9
 
 /**
- * 
+ *
  */
 #define RG_RESERVED             0
 #define RG_COUNT                10
@@ -83,9 +87,42 @@
 /**
  * Record types
  */
-#define RT_PGMAN_PAGE_REQUEST      MAKE_TID( 1, RG_DISK_OPERATIONS)
-#define RT_LGMAN_LOG_WAITER        MAKE_TID( 2, RG_DISK_OPERATIONS)
-#define RT_DBTUP_PAGE_REQUEST      MAKE_TID( 3, RG_DISK_OPERATIONS)
+#define RT_NONE                    MAKE_TID( 0, 0)
+#define RT_FREE                    MAKE_TID( 1, 0)
+
+#define RT_PGMAN_PAGE_REQUEST      MAKE_TID( 1, RG_TRANSACTION_MEMORY)
+#define RT_LGMAN_LOG_WAITER        MAKE_TID( 2, RG_TRANSACTION_MEMORY)
+#define RT_DBTUP_PAGE_REQUEST      MAKE_TID( 3, RG_TRANSACTION_MEMORY)
+#define RT_DBTUP_COPY_PAGE         MAKE_TID( 4, RG_TRANSACTION_MEMORY)
+#define RT_NDBFS_BUILD_INDEX_PAGE  MAKE_TID( 5, RG_TRANSACTION_MEMORY)
+#define RT_NDBFS_INIT_FILE_PAGE    MAKE_TID( 6, RG_TRANSACTION_MEMORY)
+#define RT_SUMA_EVENT_BUFFER       MAKE_TID( 7, RG_TRANSACTION_MEMORY)
+#define RT_SUMA_TRIGGER_BUFFER     MAKE_TID( 8, RG_TRANSACTION_MEMORY)
+#define RT_DBTC_FRAG_LOCATION      MAKE_TID( 9, RG_TRANSACTION_MEMORY)
+#define RT_DBTC_SCAN_FRAGMENT      MAKE_TID(10, RG_TRANSACTION_MEMORY)
+#define RT_DBTC_SCAN_RECORD        MAKE_TID(11, RG_TRANSACTION_MEMORY)
+#define RT_DBTC_CONNECT_RECORD     MAKE_TID(12, RG_TRANSACTION_MEMORY)
+#define RT_DBTC_COMMIT_ACK_MARKER  MAKE_TID(13, RG_TRANSACTION_MEMORY)
+#define RT_DBTC_INDEX_OPERATION    MAKE_TID(14, RG_TRANSACTION_MEMORY)
+#define RT_DBTC_API_CONNECT_RECORD MAKE_TID(15, RG_TRANSACTION_MEMORY)
+#define RT_DBTC_API_CONNECT_TIMERS MAKE_TID(16, RG_TRANSACTION_MEMORY)
+#define RT_DBTC_CACHE_RECORD       MAKE_TID(17, RG_TRANSACTION_MEMORY)
+#define RT_DBTC_GCP_RECORD         MAKE_TID(18, RG_TRANSACTION_MEMORY)
+#define RT_DBTC_FIRED_TRIGGER_DATA MAKE_TID(19, RG_TRANSACTION_MEMORY)
+#define RT_DBTC_ATTRIBUTE_BUFFER   MAKE_TID(20, RG_TRANSACTION_MEMORY)
+#define RT_DBTC_COMMIT_ACK_MARKER_BUFFER MAKE_TID(21, RG_TRANSACTION_MEMORY)
+#define RT_DBLQH_TC_CONNECT        MAKE_TID(22, RG_TRANSACTION_MEMORY)
+#define RT_DBLQH_COMMIT_ACK_MARKER MAKE_TID(23, RG_TRANSACTION_MEMORY)
+#define RT_DBLQH_SCAN_RECORD       MAKE_TID(24, RG_TRANSACTION_MEMORY)
+#define RT_DBTUP_OPERATION         MAKE_TID(25, RG_TRANSACTION_MEMORY)
+#define RT_DBTUP_STORED_PROCEDURE  MAKE_TID(26, RG_TRANSACTION_MEMORY)
+#define RT_DBTUP_SCAN_OPERATION    MAKE_TID(27, RG_TRANSACTION_MEMORY)
+#define RT_DBTUP_SCAN_LOCK         MAKE_TID(28, RG_TRANSACTION_MEMORY)
+#define RT_DBACC_SCAN              MAKE_TID(29, RG_TRANSACTION_MEMORY)
+#define RT_DBACC_OPERATION         MAKE_TID(30, RG_TRANSACTION_MEMORY)
+#define RT_DBTUX_SCAN_OPERATION    MAKE_TID(31, RG_TRANSACTION_MEMORY)
+#define RT_DBTUX_SCAN_LOCK         MAKE_TID(32, RG_TRANSACTION_MEMORY)
+#define RT_DBTUX_SCAN_BOUND        MAKE_TID(33, RG_TRANSACTION_MEMORY)
 
 #define RT_DBTUP_EXTENT_INFO       MAKE_TID( 1, RG_DISK_RECORDS)
 #define RT_DBDICT_FILE             MAKE_TID( 2, RG_DISK_RECORDS)
@@ -95,10 +132,12 @@
 #define RT_TSMAN_FILE              MAKE_TID( 6, RG_DISK_RECORDS)
 #define RT_TSMAN_FILEGROUP         MAKE_TID( 7, RG_DISK_RECORDS)
 #define RT_PGMAN_FILE              MAKE_TID( 8, RG_DISK_RECORDS)
+#define RT_DBTUP_UNDO              MAKE_TID( 9, RG_DISK_RECORDS)
 
 #define RT_DBTUP_PAGE              MAKE_TID( 1, RG_DATAMEM)
 #define RT_DBTUP_PAGE_MAP          MAKE_TID( 2, RG_DATAMEM)
 #define RT_DBACC_DIRECTORY         MAKE_TID( 3, RG_DATAMEM)
+#define RT_DBACC_PAGE              MAKE_TID( 4, RG_DATAMEM)
 
 #define RT_JOB_BUFFER              MAKE_TID( 1, RG_JOBBUFFER)
 

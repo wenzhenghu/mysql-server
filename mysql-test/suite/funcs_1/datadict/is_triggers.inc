@@ -17,7 +17,6 @@
 #                   Create this script based on older scripts and new code.
 # Last Change:
 # 2008-06-11 mleich Move t/is_triggers.test to this file and
-#                   create variants for embedded/non embedded server.
 #
 
 let $is_table = TRIGGERS;
@@ -76,12 +75,17 @@ eval SHOW COLUMNS FROM information_schema.$is_table;
 # Note: Retrieval of information within information_schema.columns about
 #       information_schema.tables is in is_columns_is.test.
 
-# Show that several columns are always NULL.
+# Note: Do not use mtr --sorted_result:
+# the result set contains the trigger body (sql statements),
+# which itself contains several lines.
+# This confuses --sorted_result
+
 --replace_column 17 #
 SELECT * FROM information_schema.triggers
 WHERE trigger_catalog IS NOT NULL OR event_object_catalog IS NOT NULL
    OR action_condition IS NOT NULL OR action_reference_old_table IS NOT NULL
-   OR action_reference_new_table IS NOT NULL;
+   OR action_reference_new_table IS NOT NULL
+   ORDER BY TRIGGER_CATALOG, TRIGGER_SCHEMA, TRIGGER_NAME;
 
 
 --echo ##################################################################################
@@ -245,9 +249,7 @@ let $my_error_message =
 ##### The previous statement must fail ######
 # Server type  | expected error name      | expected error message
 # --------------------------------------------------------------------------------------------------------------------
-# not embedded | ER_DBACCESS_DENIED_ERROR | ERROR 42000: Access denied for user 'root'@'localhost' to database 'information_schema'
-# embedded     | ER_NON_UPDATABLE_TABLE   | ERROR HY000: The target table triggers of the UPDATE is not updatable
-#              | or similar               |              or similar
+# MySQL | ER_DBACCESS_DENIED_ERROR | ERROR 42000: Access denied for user 'root'@'localhost' to database 'information_schema'
 ;
 --disable_abort_on_error
 UPDATE information_schema.triggers SET trigger_schema = 'test'

@@ -1,14 +1,21 @@
 /*
-   Copyright (c) 2003, 2016, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2003, 2020, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -19,6 +26,7 @@
 #include <ndb_global.h>
 #include <kernel_types.h>
 
+#include "m_ctype.h"
 #include "API.hpp"
 #include <NdbOut.hpp>
 
@@ -168,7 +176,7 @@ NdbEventOperationImpl::init(NdbEventImpl& evnt)
 
   m_eventId = m_eventImpl->m_eventId;
 
-  m_oid= m_ndb->theImpl->theNdbObjectIdMap.map(this);
+  m_oid= m_ndb->theImpl->mapRecipient(this);
 
   m_state= EO_CREATED;
 
@@ -191,14 +199,14 @@ NdbEventOperationImpl::~NdbEventOperationImpl()
   DBUG_ENTER("NdbEventOperationImpl::~NdbEventOperationImpl");
   m_magic_number= 0;
 
-#ifndef NDEBUG
-  m_state = (NdbEventOperation::State)0xDead;
-#endif
-
   if (m_oid == ~(Uint32)0)
     DBUG_VOID_RETURN;
 
   stop();
+
+#ifndef NDEBUG
+  m_state = (NdbEventOperation::State)0xDead;
+#endif
   
   if (theMainOp == NULL)
   {
@@ -211,7 +219,7 @@ NdbEventOperationImpl::~NdbEventOperationImpl()
     }
   }
 
-  m_ndb->theImpl->theNdbObjectIdMap.unmap(m_oid, this);
+  m_ndb->theImpl->unmapRecipient(m_oid, this);
   DBUG_PRINT("exit",("this: %p/%p oid: %u main: %p",
              this, m_facade, m_oid, theMainOp));
 
@@ -859,11 +867,20 @@ NdbEventOperationImpl::execSUB_TABLE_DATA(const NdbApiSignal * signal,
   const SubTableData * const sdata=
     CAST_CONSTPTR(SubTableData, signal->getDataPtr());
 
-  if(signal->isFirstFragment()){
+  if (signal->isFirstFragment())
+  {
+    /*
+      Only one buffer for fragmented signal assembly.
+      Buffer must be empty for first fragment.
+     */
+    require(m_buffer.empty());
     m_fragmentId = signal->getFragmentId();
     m_buffer.grow(4 * sdata->totalLen);
-  } else {
-    if(m_fragmentId != signal->getFragmentId()){
+  }
+  else
+  {
+    if (m_fragmentId != signal->getFragmentId())
+    {
       abort();
     }
   }
@@ -1416,9 +1433,7 @@ NdbEventBuffer::~NdbEventBuffer()
     const Uint32 unmap_sz = mem_block->alloced_size();
     m_total_alloc -= unmap_sz;
     m_mem_block_head = mem_block->m_next;
-#ifndef NDEBUG
-    memset(mem_block, 0x11, unmap_sz);
-#endif
+    mem_block->destruct();
 
 #if defined(USE_MMAP)
     require(my_munmap(mem_block, unmap_sz) == 0);
@@ -1432,9 +1447,7 @@ NdbEventBuffer::~NdbEventBuffer()
     m_total_alloc -= unmap_sz;
     m_mem_block_free = mem_block->m_next;
     m_mem_block_free_sz -= mem_block->get_size();
-#ifndef NDEBUG
-    memset(mem_block, 0x11, unmap_sz);
-#endif
+    mem_block->destruct();
 
 #if defined(USE_MMAP)
     require(my_munmap(mem_block, unmap_sz) == 0);
@@ -1843,19 +1856,21 @@ NdbEventBuffer::isConsistentGCI(Uint64 gci)
 }
 
 NdbEventOperationImpl*
-NdbEventBuffer::getGCIEventOperations(Uint32* iter, Uint32* event_types)
+NdbEventBuffer::getEpochEventOperations(Uint32* iter, Uint32* event_types, Uint32* cumulative_any_value)
 {
-  DBUG_ENTER("NdbEventBuffer::getGCIEventOperations");
+  DBUG_ENTER("NdbEventBuffer::getEpochEventOperations");
   EpochData *epoch = m_event_queue.first_epoch();
   if (*iter < epoch->m_gci_op_count)
   {
     Gci_op g = epoch->m_gci_op_list[(*iter)++];
     if (event_types != NULL)
       *event_types = g.event_types;
-    DBUG_PRINT("info", ("gci: %u  g.op: 0x%lx  g.event_types: 0x%lx 0x%x %s",
+    if (cumulative_any_value != NULL)
+      *cumulative_any_value = g.cumulative_any_value;
+    DBUG_PRINT("info", ("gci: %u  g.op: 0x%lx  g.event_types: 0x%lx g.cumulative_any_value: 0x%lx 0x%x %s",
                         (unsigned)epoch->m_gci.getGCI(), (long) g.op,
-                        (long) g.event_types, m_ndb->getReference(),
-                        m_ndb->getNdbObjectName()));
+                        (long) g.event_types, (long) g.cumulative_any_value,
+                        m_ndb->getReference(), m_ndb->getNdbObjectName()));
     DBUG_RETURN(g.op);
   }
   DBUG_RETURN(NULL);
@@ -2667,7 +2682,7 @@ NdbEventBuffer::complete_outof_order_gcis()
 void
 NdbEventBuffer::insert_event(NdbEventOperationImpl* impl,
                              SubTableData &data,
-                             LinearSectionPtr *ptr,
+                             const LinearSectionPtr *ptr,
                              Uint32 &oid_ref)
 {
   DBUG_PRINT("info", ("gci{hi/lo}: %u/%u 0x%x %s",
@@ -2841,7 +2856,17 @@ NdbEventBuffer::handle_change_nodegroup(const SubGcpCompleteRep* rep)
     {
       assert(array[pos] > gci);
       Gci_container* tmp = find_bucket(array[pos]);
+      if ((tmp->m_state & Gci_container::GC_CHANGE_CNT) != 0)
+      {
+        ndbout_c("Bucket with gci %u/%u is not marked as GC_CHANGE_CNT",
+                 Uint32(tmp->m_gci >> 32), Uint32(tmp->m_gci));
+      }
       assert((tmp->m_state & Gci_container::GC_CHANGE_CNT) == 0);
+      if ((tmp->m_state & Gci_container::GC_CHANGE_CNT) != 0)
+      {
+        ndbout_c("Bucket with gci %u/%u is not marked as GC_COMPLETE",
+                 Uint32(tmp->m_gci >> 32), Uint32(tmp->m_gci));
+      }
       assert((tmp->m_state & Gci_container::GC_COMPLETE) == 0);
       assert(tmp->m_gcp_complete_rep_count >= cnt);
       tmp->m_gcp_complete_rep_count -= cnt;
@@ -3109,7 +3134,7 @@ int
 NdbEventBuffer::insertDataL(NdbEventOperationImpl *op,
 			    const SubTableData * const sdata, 
                             Uint32 len,
-			    LinearSectionPtr ptr[3])
+                            const LinearSectionPtr ptr[3])
 {
   DBUG_ENTER_EVENT("NdbEventBuffer::insertDataL");
   const Uint32 ri = sdata->requestInfo;
@@ -3188,6 +3213,7 @@ NdbEventBuffer::insertDataL(NdbEventOperationImpl *op,
        * Already completed GCI...
        *   Possible in case of resend during NF handling
        */
+      DBUG_EXECUTE_IF("ndb_crash_on_drop_SUB_TABLE_DATA", DBUG_SUICIDE(););
       DBUG_RETURN_EVENT(0);
     }
     
@@ -3275,12 +3301,14 @@ NdbEventBuffer::insertDataL(NdbEventOperationImpl *op,
         // since the flags represent multiple ops on multiple PKs
         // XXX fix by doing merge at end of epoch (extra mem cost)
         {
-          Gci_op g = { op, (1U << operation) };
+          Uint32 any_value = sdata->anyValue;
+          Gci_op g = { op, (1U << operation), any_value };
           bucket->add_gci_op(g);
         }
         {
+          Uint32 any_value = data->sdata->anyValue;
           Gci_op g = { op, 
-                       (1U << SubTableData::getOperation(data->sdata->requestInfo))};
+                       (1U << SubTableData::getOperation(data->sdata->requestInfo)), any_value};
           bucket->add_gci_op(g);
         }
       }
@@ -3313,6 +3341,7 @@ NdbEventBuffer::crashMemAllocError(const char *error_text)
 	  m_ndb->getNdbObjectName());
   g_eventLogger->error("Ndb Event Buffer : %s", error_text);
   g_eventLogger->error("Ndb Event Buffer : Fatal error.");
+abort();
   exit(-1);
 }
 
@@ -3331,7 +3360,7 @@ NdbEventBuffer::alloc_data()
 // meta EventBufData. Takes sizes from given ptr and sets up data->ptr
 int
 NdbEventBuffer::alloc_mem(EventBufData* data,
-                          LinearSectionPtr ptr[3])
+                          const LinearSectionPtr ptr[3])
 {
   DBUG_ENTER("NdbEventBuffer::alloc_mem");
   DBUG_PRINT("info", ("ptr sz %u + %u + %u 0x%x %s",
@@ -3381,7 +3410,6 @@ NdbEventBuffer::alloc(Uint32 sz)
     mem_block = expand_memory_blocks();
     assert(mem_block != NULL); //Will crashMemAllocError if failed.
 
-    reportStatus();
     memptr = mem_block->alloc(sz);
     if (unlikely(memptr == NULL))
     {
@@ -3562,9 +3590,7 @@ void NdbEventBuffer::remove_consumed_memory(MonotonicEpoch consumed_epoch)  //Ne
       const Uint32 alloced_sz = mem_block->alloced_size();
       assert(m_total_alloc >= alloced_sz);
       m_total_alloc -= alloced_sz;
-#ifndef NDEBUG
-      memset(mem_block, 0x11, alloced_sz);
-#endif
+      mem_block->destruct();
 
 #if defined(USE_MMAP)
       require(my_munmap(mem_block, alloced_sz) == 0);
@@ -3577,7 +3603,7 @@ void NdbEventBuffer::remove_consumed_memory(MonotonicEpoch consumed_epoch)  //Ne
 
 int 
 NdbEventBuffer::copy_data(const SubTableData * const sdata, Uint32 len,
-                          LinearSectionPtr ptr[3],
+                          const LinearSectionPtr ptr[3],
                           EventBufData* data)
 {
   DBUG_ENTER_EVENT("NdbEventBuffer::copy_data");
@@ -3597,9 +3623,12 @@ NdbEventBuffer::copy_data(const SubTableData * const sdata, Uint32 len,
     data->sdata->transId2 = ~Uint32(0);
   }
 
-  int i;
-  for (i = 0; i <= 2; i++)
-    memcpy(data->ptr[i].p, ptr[i].p, ptr[i].sz << 2);
+  for (int i = 0; i <= 2; i++) {
+    if (ptr[i].sz > 0) {
+      memcpy(data->ptr[i].p, ptr[i].p, ptr[i].sz << 2);
+    }
+  }
+
   DBUG_RETURN_EVENT(0);
 }
 
@@ -3665,7 +3694,7 @@ copy_attr(AttributeHeader ah,
 
 int 
 NdbEventBuffer::merge_data(const SubTableData * const sdata, Uint32 len,
-                           LinearSectionPtr ptr2[3],
+                           const LinearSectionPtr ptr2[3],
                            EventBufData* data)
 {
   DBUG_ENTER_EVENT("NdbEventBuffer::merge_data");
@@ -4039,7 +4068,8 @@ void
 Gci_container::append_data(EventBufData *data)
 {
   Gci_op g = {data->m_event_op,
-              1U << SubTableData::getOperation(data->sdata->requestInfo)};
+              1U << SubTableData::getOperation(data->sdata->requestInfo),
+              data->sdata->anyValue};
   add_gci_op(g);
 
   data->m_next = NULL;
@@ -4055,7 +4085,7 @@ void
 Gci_container::add_gci_op(Gci_op g)
 {
   DBUG_ENTER_EVENT("Gci_container::add_gci_op");
-  DBUG_PRINT_EVENT("info", ("p.op: %p  g.event_types: %x", g.op, g.event_types));
+  DBUG_PRINT_EVENT("info", ("p.op: %p  g.event_types: %x g.cumulative_any_value: %x", g.op, g.event_types, g.cumulative_any_value));
   assert(g.op != NULL && g.op->theMainOp == NULL); // as in nextEvent
   Uint32 i;
   for (i = 0; i < m_gci_op_count; i++) {
@@ -4064,6 +4094,7 @@ Gci_container::add_gci_op(Gci_op g)
   }
   if (i < m_gci_op_count) {
     m_gci_op_list[i].event_types |= g.event_types;
+    m_gci_op_list[i].cumulative_any_value &= g.cumulative_any_value;
   } else {
     if (m_gci_op_count == m_gci_op_alloc) {
       Uint32 n = 1 + 2 * m_gci_op_alloc;
@@ -4276,10 +4307,17 @@ NdbEventBuffer::reportStatus(ReportReason reason)
   if (reason != NO_REPORT)
     goto send_report;
 
-  if (m_free_thresh)
+  /* Exclude LOW/ENOUGH_FREE_EVENTBUFFER reporting if
+   * m_free_thresh is not configured or
+   * event buffer has unlimited memory available
+   */
+  if (m_free_thresh && m_max_alloc > 0)
   {
-    const Uint64 free_data_sz = get_free_data_sz();
-    if (100*free_data_sz < m_min_free_thresh*(Uint64)m_total_alloc &&
+    Uint32 free_data_sz = 0;
+    if (m_max_alloc > get_used_data_sz())
+      free_data_sz = m_max_alloc - get_used_data_sz();
+
+    if (100*free_data_sz < m_min_free_thresh*(Uint64)m_max_alloc &&
         m_total_alloc > 1024*1024)
     {
       /* report less free buffer than m_free_thresh,
@@ -4291,7 +4329,7 @@ NdbEventBuffer::reportStatus(ReportReason reason)
       goto send_report;
     }
   
-    if (100*free_data_sz > m_max_free_thresh*(Uint64)m_total_alloc &&
+    if (100*free_data_sz > m_max_free_thresh*(Uint64)m_max_alloc &&
         m_total_alloc > 1024*1024)
     {
       /* report more free than 2 * m_free_thresh
@@ -4306,7 +4344,7 @@ NdbEventBuffer::reportStatus(ReportReason reason)
 
   if (m_gci_slip_thresh &&
       (m_buffered_epochs >= m_gci_slip_thresh) &&
-      NdbTick_Elapsed(m_last_log_time, NdbTick_getCurrentTicks()).milliSec() >= 1000)
+      NdbTick_Elapsed(m_last_log_time, NdbTick_getCurrentTicks()).milliSec() >= 10000)
   {
     m_last_log_time = NdbTick_getCurrentTicks();
     reason = BUFFERED_EPOCHS_OVER_THRESHOLD;
@@ -4431,7 +4469,7 @@ EpochDataList::count_event_data() const
 // could optimize the all-fixed case
 Uint32
 EventBufData_hash::getpkhash(NdbEventOperationImpl* op,
-                             LinearSectionPtr ptr[3])
+                             const LinearSectionPtr ptr[3])
 {
   DBUG_ENTER_EVENT("EventBufData_hash::getpkhash");
   DBUG_DUMP_EVENT("ah", (char*)ptr[0].p, ptr[0].sz << 2);
@@ -4447,8 +4485,8 @@ EventBufData_hash::getpkhash(NdbEventOperationImpl* op,
   const uchar* dptr = (uchar*)ptr[1].p;
 
   // hash registers
-  ulong nr1 = 0;
-  ulong nr2 = 0;
+  uint64 nr1 = 0;
+  uint64 nr2 = 0;
   while (nkey-- != 0)
   {
     AttributeHeader ah(*hptr++);
@@ -4465,6 +4503,9 @@ EventBufData_hash::getpkhash(NdbEventOperationImpl* op,
 
     CHARSET_INFO* cs = col->m_cs ? col->m_cs : &my_charset_bin;
     (*cs->coll->hash_sort)(cs, dptr + lb, len, &nr1, &nr2);
+    // TODO: Do we need hash stability here?
+    nr1 = static_cast<ulong>(nr1);
+    nr2 = static_cast<ulong>(nr2);
     dptr += ((bytesize + 3) / 4) * 4;
   }
   DBUG_PRINT_EVENT("info", ("hash result=%08x", nr1));
@@ -4473,8 +4514,8 @@ EventBufData_hash::getpkhash(NdbEventOperationImpl* op,
 
 bool
 EventBufData_hash::getpkequal(NdbEventOperationImpl* op,
-                              LinearSectionPtr ptr1[3],
-                              LinearSectionPtr ptr2[3])
+                              const LinearSectionPtr ptr1[3],
+                              const LinearSectionPtr ptr2[3])
 {
   DBUG_ENTER_EVENT("EventBufData_hash::getpkequal");
   DBUG_DUMP_EVENT("ah1", (char*)ptr1[0].p, ptr1[0].sz << 2);
@@ -4532,7 +4573,7 @@ EventBufData_hash::getpkequal(NdbEventOperationImpl* op,
 void
 EventBufData_hash::search(Pos& hpos,
                           NdbEventOperationImpl* op,
-                          LinearSectionPtr ptr[3])
+                          const LinearSectionPtr ptr[3])
 {
   DBUG_ENTER_EVENT("EventBufData_hash::search");
   Uint32 pkhash = getpkhash(op, ptr);

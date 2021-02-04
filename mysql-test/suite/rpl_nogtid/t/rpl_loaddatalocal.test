@@ -7,6 +7,7 @@
 # - the loaded file's first line was not written entirely to the
 # master's binlog (1st char was absent)
 --source include/not_group_replication_plugin.inc
+source include/set_privilege_checks_user_as_system_user.inc;
 source include/master-slave.inc;
 
 create table t1(a int);
@@ -144,7 +145,7 @@ eval LOAD DATA/*!10000 LOCAL */INFILE '$MYSQLD_DATADIR/bug43746.sql' INTO/* empt
 --replace_result $MYSQLD_DATADIR MYSQLD_DATADIR
 eval LOAD/*!99999 special comments that do not expand */DATA/*!99999 code from the future */LOCAL INFILE '$MYSQLD_DATADIR/bug43746.sql'/*!99999 have flux capacitor */INTO/*!99999 will travel */TABLE t1;
 
-SET sql_mode='PIPES_AS_CONCAT,ANSI_QUOTES,NO_KEY_OPTIONS,NO_TABLE_OPTIONS,NO_FIELD_OPTIONS,STRICT_TRANS_TABLES,STRICT_ALL_TABLES,TRADITIONAL,NO_AUTO_CREATE_USER';
+SET sql_mode='PIPES_AS_CONCAT,ANSI_QUOTES,STRICT_TRANS_TABLES,STRICT_ALL_TABLES,TRADITIONAL';
 
 --replace_result $MYSQLD_DATADIR MYSQLD_DATADIR
 eval LOAD DATA LOCAL INFILE '$MYSQLD_DATADIR/bug43746.sql' INTO TABLE t1;

@@ -1,13 +1,25 @@
-/* Copyright (c) 2006, 2016, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2006, 2019, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
+
+   Without limiting anything contained in the foregoing, this file,
+   which is part of C Driver for MySQL (Connector/C), is also subject to the
+   Universal FOSS Exception, version 1.0, a copy of which can be found at
+   http://oss.oracle.com/licenses/universal-foss-exception.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -39,157 +51,162 @@
 #include <string.h>
 #include <sys/types.h>
 
+#include <algorithm>
+
 #include "lf.h"
-#include "my_atomic.h"
 #include "my_compiler.h"
 #include "my_inttypes.h"
 #include "my_macros.h"
 #include "my_sys.h"
 #include "mysql/service_mysql_alloc.h"
-#include "mysys_priv.h"
+#include "mysys/mysys_priv.h"
 
-void lf_dynarray_init(LF_DYNARRAY *array, uint element_size)
-{
-  memset(array, 0, sizeof(*array));
-  array->size_of_element= element_size;
+void lf_dynarray_init(LF_DYNARRAY *array, uint element_size) {
+  std::fill(begin(array->level), end(array->level), nullptr);
+  array->size_of_element = element_size;
 }
 
-static void recursive_free(void **alloc, int level)
-{
-  if (!alloc)
+static void recursive_free(std::atomic<void *> *alloc, int level) {
+  if (!alloc) {
     return;
-
-  if (level)
-  {
-    int i;
-    for (i= 0; i < LF_DYNARRAY_LEVEL_LENGTH; i++)
-      recursive_free(static_cast<void**>(alloc[i]), level-1);
-    my_free(alloc);
   }
-  else
+
+  if (level) {
+    int i;
+    for (i = 0; i < LF_DYNARRAY_LEVEL_LENGTH; i++)
+      recursive_free(static_cast<std::atomic<void *> *>(alloc[i].load()),
+                     level - 1);
+    my_free(alloc);
+  } else {
     my_free(alloc[-1]);
+  }
 }
 
-void lf_dynarray_destroy(LF_DYNARRAY *array)
-{
+void lf_dynarray_destroy(LF_DYNARRAY *array) {
   int i;
-  for (i= 0; i < LF_DYNARRAY_LEVELS; i++)
-    recursive_free(static_cast<void**>(array->level[i]), i);
+  for (i = 0; i < LF_DYNARRAY_LEVELS; i++)
+    recursive_free(static_cast<std::atomic<void *> *>(array->level[i].load()),
+                   i);
 }
 
-static const ulong dynarray_idxes_in_prev_levels[LF_DYNARRAY_LEVELS]=
-{
-  0, /* +1 here to to avoid -1's below */
-  LF_DYNARRAY_LEVEL_LENGTH,
-  LF_DYNARRAY_LEVEL_LENGTH * LF_DYNARRAY_LEVEL_LENGTH +
+static const ulong dynarray_idxes_in_prev_levels[LF_DYNARRAY_LEVELS] = {
+    0, /* +1 here to to avoid -1's below */
     LF_DYNARRAY_LEVEL_LENGTH,
-  LF_DYNARRAY_LEVEL_LENGTH * LF_DYNARRAY_LEVEL_LENGTH *
-    LF_DYNARRAY_LEVEL_LENGTH + LF_DYNARRAY_LEVEL_LENGTH *
-    LF_DYNARRAY_LEVEL_LENGTH + LF_DYNARRAY_LEVEL_LENGTH
-};
+    LF_DYNARRAY_LEVEL_LENGTH *LF_DYNARRAY_LEVEL_LENGTH +
+        LF_DYNARRAY_LEVEL_LENGTH,
+    LF_DYNARRAY_LEVEL_LENGTH *LF_DYNARRAY_LEVEL_LENGTH
+            *LF_DYNARRAY_LEVEL_LENGTH +
+        LF_DYNARRAY_LEVEL_LENGTH *LF_DYNARRAY_LEVEL_LENGTH +
+        LF_DYNARRAY_LEVEL_LENGTH};
 
-static const ulong dynarray_idxes_in_prev_level[LF_DYNARRAY_LEVELS]=
-{
-  0, /* +1 here to to avoid -1's below */
-  LF_DYNARRAY_LEVEL_LENGTH,
-  LF_DYNARRAY_LEVEL_LENGTH * LF_DYNARRAY_LEVEL_LENGTH,
-  LF_DYNARRAY_LEVEL_LENGTH * LF_DYNARRAY_LEVEL_LENGTH *
+static const ulong dynarray_idxes_in_prev_level[LF_DYNARRAY_LEVELS] = {
+    0, /* +1 here to to avoid -1's below */
     LF_DYNARRAY_LEVEL_LENGTH,
+    LF_DYNARRAY_LEVEL_LENGTH *LF_DYNARRAY_LEVEL_LENGTH,
+    LF_DYNARRAY_LEVEL_LENGTH *LF_DYNARRAY_LEVEL_LENGTH
+        *LF_DYNARRAY_LEVEL_LENGTH,
 };
 
 /*
   Returns a valid lvalue pointer to the element number 'idx'.
   Allocates memory if necessary.
 */
-void *lf_dynarray_lvalue(LF_DYNARRAY *array, uint idx)
-{
-  void * ptr, * volatile * ptr_ptr= 0;
+void *lf_dynarray_lvalue(LF_DYNARRAY *array, uint idx) {
+  void *ptr;
   int i;
 
-  for (i= LF_DYNARRAY_LEVELS-1; idx < dynarray_idxes_in_prev_levels[i]; i--)
+  for (i = LF_DYNARRAY_LEVELS - 1; idx < dynarray_idxes_in_prev_levels[i]; i--)
     /* no-op */;
-  ptr_ptr= &array->level[i];
-  idx-= dynarray_idxes_in_prev_levels[i];
-  for (; i > 0; i--)
-  {
-    if (!(ptr= *ptr_ptr))
-    {
-      void *alloc= my_malloc(key_memory_lf_dynarray,
-                             LF_DYNARRAY_LEVEL_LENGTH * sizeof(void *),
-                             MYF(MY_WME|MY_ZEROFILL));
-      if (unlikely(!alloc))
-        return(NULL);
-      if (my_atomic_casptr(ptr_ptr, &ptr, alloc))
-        ptr= alloc;
-      else
+  std::atomic<void *> *ptr_ptr = &array->level[i];
+  idx -= dynarray_idxes_in_prev_levels[i];
+  for (; i > 0; i--) {
+    if (!(ptr = *ptr_ptr)) {
+      void *alloc = my_malloc(key_memory_lf_dynarray,
+                              LF_DYNARRAY_LEVEL_LENGTH * sizeof(void *),
+                              MYF(MY_WME | MY_ZEROFILL));
+      if (unlikely(!alloc)) {
+        return (nullptr);
+      }
+      if (atomic_compare_exchange_strong(ptr_ptr, &ptr, alloc)) {
+        ptr = alloc;
+      } else {
         my_free(alloc);
+      }
     }
-    ptr_ptr= ((void **)ptr) + idx / dynarray_idxes_in_prev_level[i];
-    idx%= dynarray_idxes_in_prev_level[i];
+    ptr_ptr =
+        ((std::atomic<void *> *)ptr) + idx / dynarray_idxes_in_prev_level[i];
+    idx %= dynarray_idxes_in_prev_level[i];
   }
-  if (!(ptr= *ptr_ptr))
-  {
+  if (!(ptr = *ptr_ptr)) {
     uchar *alloc, *data;
-    alloc= static_cast<uchar*>(my_malloc(key_memory_lf_dynarray,
-                                         LF_DYNARRAY_LEVEL_LENGTH *
-                                         array->size_of_element +
-                                         MY_MAX(array->size_of_element,
-                                                sizeof(void *)),
-                                         MYF(MY_WME|MY_ZEROFILL)));
-    if (unlikely(!alloc))
-      return(NULL);
-    /* reserve the space for free() address */
-    data= alloc + sizeof(void *);
-    { /* alignment */
-      intptr mod= ((intptr)data) % array->size_of_element;
-      if (mod)
-        data+= array->size_of_element - mod;
+    alloc = static_cast<uchar *>(
+        my_malloc(key_memory_lf_dynarray,
+                  LF_DYNARRAY_LEVEL_LENGTH * array->size_of_element +
+                      std::max<uint>(array->size_of_element, sizeof(void *)),
+                  MYF(MY_WME | MY_ZEROFILL)));
+    if (unlikely(!alloc)) {
+      return (nullptr);
     }
-    ((void **)data)[-1]= alloc; /* free() will need the original pointer */
-    if (my_atomic_casptr(ptr_ptr, &ptr, data))
-      ptr= data;
-    else
+    /* reserve the space for free() address */
+    data = alloc + sizeof(void *);
+    {
+      /* alignment */
+      intptr mod = ((intptr)data) % array->size_of_element;
+      if (mod) {
+        data += array->size_of_element - mod;
+      }
+    }
+    ((void **)data)[-1] = alloc; /* free() will need the original pointer */
+    if (atomic_compare_exchange_strong(ptr_ptr, &ptr,
+                                       static_cast<void *>(data))) {
+      ptr = data;
+    } else {
       my_free(alloc);
+    }
   }
-  return ((uchar*)ptr) + array->size_of_element * idx;
+  return ((uchar *)ptr) + array->size_of_element * idx;
 }
 
 /*
   Returns a pointer to the element number 'idx'
   or NULL if an element does not exists
 */
-void *lf_dynarray_value(LF_DYNARRAY *array, uint idx)
-{
-  void * ptr, * volatile * ptr_ptr= 0;
+void *lf_dynarray_value(LF_DYNARRAY *array, uint idx) {
+  void *ptr;
   int i;
 
-  for (i= LF_DYNARRAY_LEVELS-1; idx < dynarray_idxes_in_prev_levels[i]; i--)
+  for (i = LF_DYNARRAY_LEVELS - 1; idx < dynarray_idxes_in_prev_levels[i]; i--)
     /* no-op */;
-  ptr_ptr= &array->level[i];
-  idx-= dynarray_idxes_in_prev_levels[i];
-  for (; i > 0; i--)
-  {
-    if (!(ptr= *ptr_ptr))
-      return(NULL);
-    ptr_ptr= ((void **)ptr) + idx / dynarray_idxes_in_prev_level[i];
+  std::atomic<void *> *ptr_ptr = &array->level[i];
+  idx -= dynarray_idxes_in_prev_levels[i];
+  for (; i > 0; i--) {
+    if (!(ptr = *ptr_ptr)) {
+      return (nullptr);
+    }
+    ptr_ptr =
+        ((std::atomic<void *> *)ptr) + idx / dynarray_idxes_in_prev_level[i];
     idx %= dynarray_idxes_in_prev_level[i];
   }
-  if (!(ptr= *ptr_ptr))
-    return(NULL);
-  return ((uchar*)ptr) + array->size_of_element * idx;
+  if (!(ptr = *ptr_ptr)) {
+    return (nullptr);
+  }
+  return ((uchar *)ptr) + array->size_of_element * idx;
 }
 
 static int recursive_iterate(LF_DYNARRAY *array, void *ptr, int level,
-                             lf_dynarray_func func, void *arg)
-{
+                             lf_dynarray_func func, void *arg) {
   int res, i;
-  if (!ptr)
+  if (!ptr) {
     return 0;
-  if (!level)
+  }
+  if (!level) {
     return func(ptr, arg);
-  for (i= 0; i < LF_DYNARRAY_LEVEL_LENGTH; i++)
-    if ((res= recursive_iterate(array, ((void **)ptr)[i], level-1, func, arg)))
+  }
+  for (i = 0; i < LF_DYNARRAY_LEVEL_LENGTH; i++)
+    if ((res = recursive_iterate(array, ((void **)ptr)[i], level - 1, func,
+                                 arg))) {
       return res;
+    }
   return 0;
 }
 
@@ -206,12 +223,11 @@ static int recursive_iterate(LF_DYNARRAY *array, void *ptr, int level,
   NOTE
     if func() returns non-zero, the scan is aborted
 */
-int lf_dynarray_iterate(LF_DYNARRAY *array, lf_dynarray_func func, void *arg)
-{
+int lf_dynarray_iterate(LF_DYNARRAY *array, lf_dynarray_func func, void *arg) {
   int i, res;
-  for (i= 0; i < LF_DYNARRAY_LEVELS; i++)
-    if ((res= recursive_iterate(array, array->level[i], i, func, arg)))
+  for (i = 0; i < LF_DYNARRAY_LEVELS; i++)
+    if ((res = recursive_iterate(array, array->level[i], i, func, arg))) {
       return res;
+    }
   return 0;
 }
-

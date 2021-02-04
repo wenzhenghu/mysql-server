@@ -1,13 +1,20 @@
-/* Copyright (c) 2010, 2017, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2010, 2020, Oracle and/or its affiliates.
 
   This program is free software; you can redistribute it and/or modify
-  it under the terms of the GNU General Public License as published by
-  the Free Software Foundation; version 2 of the License.
+  it under the terms of the GNU General Public License, version 2.0,
+  as published by the Free Software Foundation.
+
+  This program is also distributed with certain software (including
+  but not limited to OpenSSL) that is licensed under separate terms,
+  as designated in a particular file or component or in included license
+  documentation.  The authors of MySQL hereby grant you an additional
+  permission to link the program and your derivative works with the
+  separately licensed software that they have included with MySQL.
 
   This program is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  GNU General Public License for more details.
+  GNU General Public License, version 2.0, for more details.
 
   You should have received a copy of the GNU General Public License
   along with this program; if not, write to the Free Software
@@ -23,36 +30,36 @@
 
 #include <sys/types.h>
 
+#include "my_base.h"
 #include "my_inttypes.h"
-#include "pfs_column_types.h"
-#include "pfs_engine_table.h"
-#include "pfs_instr.h"
-#include "pfs_instr_class.h"
-#include "table_helper.h"
+#include "storage/perfschema/pfs_engine_table.h"
+#include "storage/perfschema/table_helper.h"
+
+class Field;
+class Plugin_table;
+struct PFS_thread;
+struct PFS_transaction_class;
+struct TABLE;
+struct THR_LOCK;
 
 /**
   @addtogroup performance_schema_tables
   @{
 */
 
-class PFS_index_ets_by_thread_by_event_name : public PFS_engine_index
-{
-public:
+class PFS_index_ets_by_thread_by_event_name : public PFS_engine_index {
+ public:
   PFS_index_ets_by_thread_by_event_name()
-    : PFS_engine_index(&m_key_1, &m_key_2),
-      m_key_1("THREAD_ID"),
-      m_key_2("EVENT_NAME")
-  {
-  }
+      : PFS_engine_index(&m_key_1, &m_key_2),
+        m_key_1("THREAD_ID"),
+        m_key_2("EVENT_NAME") {}
 
-  ~PFS_index_ets_by_thread_by_event_name()
-  {
-  }
+  ~PFS_index_ets_by_thread_by_event_name() override {}
 
   bool match(PFS_thread *pfs);
   bool match(PFS_transaction_class *klass);
 
-private:
+ private:
   PFS_key_thread_id m_key_1;
   PFS_key_event_name m_key_2;
 };
@@ -61,8 +68,7 @@ private:
   A row of table
   PERFORMANCE_SCHEMA.EVENTS_TRANSACTIONS_SUMMARY_BY_THREAD_BY_EVENT_NAME.
 */
-struct row_ets_by_thread_by_event_name
-{
+struct row_ets_by_thread_by_event_name {
   /** Column THREAD_ID. */
   ulonglong m_thread_internal_id;
   /** Column EVENT_NAME. */
@@ -82,74 +88,58 @@ struct row_ets_by_thread_by_event_name
   Index 2 on transaction class (1 based).
 */
 struct pos_ets_by_thread_by_event_name : public PFS_double_index,
-                                         public PFS_instrument_view_constants
-{
-  pos_ets_by_thread_by_event_name() : PFS_double_index(0, 1)
-  {
-  }
+                                         public PFS_instrument_view_constants {
+  pos_ets_by_thread_by_event_name() : PFS_double_index(0, 1) {}
 
-  inline void
-  reset(void)
-  {
+  inline void reset(void) {
     m_index_1 = 0;
     m_index_2 = 1;
   }
 
-  inline void
-  next_thread(void)
-  {
+  inline void next_thread(void) {
     m_index_1++;
     m_index_2 = 1;
   }
 
-  inline void
-  next_transaction(void)
-  {
-    m_index_2++;
-  }
+  inline void next_transaction(void) { m_index_2++; }
 };
 
 /** Table
  * PERFORMANCE_SCHEMA.EVENTS_TRANSACTIONS_SUMMARY_BY_THREAD_BY_EVENT_NAME. */
-class table_ets_by_thread_by_event_name : public PFS_engine_table
-{
-public:
+class table_ets_by_thread_by_event_name : public PFS_engine_table {
+ public:
   /** Table share */
   static PFS_engine_table_share m_share;
-  static PFS_engine_table *create();
+  static PFS_engine_table *create(PFS_engine_table_share *);
   static int delete_all_rows();
   static ha_rows get_row_count();
 
-  virtual void reset_position(void);
+  void reset_position(void) override;
 
-  virtual int rnd_init(bool scan);
-  virtual int rnd_next();
-  virtual int rnd_pos(const void *pos);
+  int rnd_init(bool scan) override;
+  int rnd_next() override;
+  int rnd_pos(const void *pos) override;
 
-  virtual int index_init(uint idx, bool sorted);
-  virtual int index_next();
+  int index_init(uint idx, bool sorted) override;
+  int index_next() override;
 
-protected:
-  virtual int read_row_values(TABLE *table,
-                              unsigned char *buf,
-                              Field **fields,
-                              bool read_all);
+ protected:
+  int read_row_values(TABLE *table, unsigned char *buf, Field **fields,
+                      bool read_all) override;
 
   table_ets_by_thread_by_event_name();
 
-public:
-  ~table_ets_by_thread_by_event_name()
-  {
-  }
+ public:
+  ~table_ets_by_thread_by_event_name() override {}
 
-protected:
+ protected:
   int make_row(PFS_thread *thread, PFS_transaction_class *klass);
 
-private:
+ private:
   /** Table share lock. */
   static THR_LOCK m_table_lock;
-  /** Fields definition. */
-  static TABLE_FIELD_DEF m_field_def;
+  /** Table definition. */
+  static Plugin_table m_table_def;
 
   /** Current row. */
   row_ets_by_thread_by_event_name m_row;

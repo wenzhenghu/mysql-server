@@ -12,6 +12,7 @@
 --source include/not_sparc_debug.inc
 --source include/not_ndb_default.inc
 --source include/not_group_replication_plugin.inc
+--source include/set_privilege_checks_user_as_system_user.inc
 --source include/master-slave.inc
 
 # Since this test generates row-based events in the binary log, the
@@ -33,11 +34,11 @@ use mysqltest1;
 set @my_binlog_format= @@global.binlog_format;
 
 #  play with switching
-set session binlog_format=mixed;
+set session binlog_format='mixed';
 show session variables like "binlog_format%";
-set session binlog_format=statement;
+set session binlog_format='statement';
 show session variables like "binlog_format%";
-set session binlog_format=row;
+set session binlog_format='row';
 show session variables like "binlog_format%";
 
 set global binlog_format=DEFAULT;
@@ -46,7 +47,7 @@ set global binlog_format=MIXED;
 show global variables like "binlog_format%";
 set global binlog_format=STATEMENT;
 show global variables like "binlog_format%";
-set global binlog_format=ROW;
+set global binlog_format='ROW';
 show global variables like "binlog_format%";
 show session variables like "binlog_format%";
 select @@global.binlog_format, @@session.binlog_format;
@@ -70,7 +71,7 @@ insert into t1 select "yesterday_5_";
 # verify that temp tables prevent a switch to SBR
 create temporary table tmp(a char(100));
 insert into tmp values("see_6_");
---error ER_TEMP_TABLE_PREVENTS_SWITCH_OUT_OF_RBR
+--error ER_TEMP_TABLE_PREVENTS_SWITCH_SESSION_BINLOG_FORMAT
 set binlog_format=statement;
 insert into t1 select * from tmp;
 drop temporary table tmp;
@@ -173,13 +174,13 @@ begin
 insert into t1 values(concat("emergency_28_",UUID()));
 insert into t1 values("work_29_");
 insert into t1 values(concat("for_30_",UUID()));
-set session binlog_format=row; # accepted for stored procs
+set session binlog_format='row'; # accepted for stored procs
 insert into t1 values("more work_31_");
 set session binlog_format=mixed;
 end|
 create function foo3() returns bigint unsigned
 begin
-  set session binlog_format=row; # rejected for stored funcs
+  set session binlog_format='row'; # rejected for stored funcs
   insert into t1 values("alarm");
   return 100;
 end|
@@ -326,7 +327,7 @@ connection master;
 let $you_want_to_test_UDF=0;
 if ($you_want_to_test_UDF)
 {
-  CREATE FUNCTION metaphon RETURNS STRING SONAME 'udf_example.so';
+  CREATE FUNCTION metaphon RETURNS STRING SONAME '$UDF_EXAMPLE_LIB';
   prepare stmt1 from 'insert into t1 select metaphon(?)';
   set @string="emergency_133_";
   insert into t1 values("work_134_");
@@ -523,7 +524,7 @@ DROP TABLE IF EXISTS t11;
 SET SESSION BINLOG_FORMAT=STATEMENT;
 CREATE TABLE t11 (song VARCHAR(255));
 LOCK TABLES t11 WRITE;
-SET SESSION BINLOG_FORMAT=ROW;
+SET SESSION BINLOG_FORMAT='ROW';
 INSERT INTO t11 VALUES('Several Species of Small Furry Animals Gathered Together in a Cave and Grooving With a Pict');
 SET SESSION BINLOG_FORMAT=STATEMENT;
 INSERT INTO t11 VALUES('Careful With That Axe, Eugene');
@@ -623,4 +624,9 @@ drop database mysqltest1;
 connection master;
 # Restore binlog format setting
 set global binlog_format =@my_binlog_format;
+
+# Cleanup
+--remove_file $MYSQLTEST_VARDIR/tmp/rpl_switch_stm_row_mixed_slave.sql
+--remove_file $MYSQLTEST_VARDIR/tmp/rpl_switch_stm_row_mixed_master.sql
 --source include/rpl_end.inc
+

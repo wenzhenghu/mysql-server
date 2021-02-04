@@ -1,13 +1,20 @@
-/* Copyright (c) 2015, 2017, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2015, 2020, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -18,20 +25,20 @@
 
 #include <string.h>
 
-#include "auth_acls.h"
-#include "auth_common.h"
-#include "current_thd.h"
+#include "lex_string.h"
 #include "my_inttypes.h"
+#include "mysql/components/services/bits/psi_bits.h"
 #include "mysql/mysql_lex_string.h"
-#include "mysql/psi/psi_base.h"
-#include "mysql/service_locking.h"
 #include "mysql/service_security_context.h"
-#include "sql_class.h"
-#include "sql_plugin.h"
-#include "sql_security_ctx.h"
-#include "sql_thd_internal_api.h"  // create_thd
+#include "sql/auth/auth_acls.h"
+#include "sql/auth/auth_common.h"
+#include "sql/auth/sql_security_ctx.h"
+#include "sql/current_thd.h"
+#include "sql/protocol_classic.h"
+#include "sql/sql_class.h"
+#include "sql/sql_thd_internal_api.h"  // create_thd
 
-#define MY_SVC_TRUE  1
+#define MY_SVC_TRUE 1
 #define MY_SVC_FALSE 0
 
 /**
@@ -45,20 +52,16 @@
   @sa security_context_service_st
 */
 my_svc_bool thd_get_security_context(MYSQL_THD _thd,
-                                     MYSQL_SECURITY_CONTEXT *out_ctx)
-{
-  THD *thd= dynamic_cast<THD *>(_thd);
+                                     MYSQL_SECURITY_CONTEXT *out_ctx) {
+  THD *thd = dynamic_cast<THD *>(_thd);
 
-  try
-  {
+  try {
     if (out_ctx)
-      *out_ctx= thd->security_context();
+      *out_ctx = thd->security_context();
     else
       return MY_SVC_TRUE;
     return MY_SVC_FALSE;
-  }
-  catch (...)
-  {
+  } catch (...) {
     return MY_SVC_FALSE;
   }
 }
@@ -74,17 +77,17 @@ my_svc_bool thd_get_security_context(MYSQL_THD _thd,
   @sa security_context_service_st
 */
 my_svc_bool thd_set_security_context(MYSQL_THD _thd,
-                                     MYSQL_SECURITY_CONTEXT in_ctx)
-{
-  THD *thd= dynamic_cast<THD *>(_thd);
-  try
-  {
-    if (in_ctx)
+                                     MYSQL_SECURITY_CONTEXT in_ctx) {
+  THD *thd = dynamic_cast<THD *>(_thd);
+  try {
+    if (in_ctx) {
       thd->set_security_context(in_ctx);
+      in_ctx->set_thd(thd);
+      // Turn ON the flag in THD iff the user is granted SYSTEM_USER privilege
+      set_system_user_flag(thd);
+    }
     return MY_SVC_FALSE;
-  }
-  catch (...)
-  {
+  } catch (...) {
     return MY_SVC_TRUE;
   }
 }
@@ -99,16 +102,11 @@ my_svc_bool thd_set_security_context(MYSQL_THD _thd,
 
   @sa security_context_service_st
 */
-my_svc_bool security_context_create(MYSQL_SECURITY_CONTEXT *out_ctx)
-{
-  try
-  {
-    if (out_ctx)
-      *out_ctx= new Security_context();
+my_svc_bool security_context_create(MYSQL_SECURITY_CONTEXT *out_ctx) {
+  try {
+    if (out_ctx) *out_ctx = new Security_context();
     return MY_SVC_FALSE;
-  }
-  catch (...)
-  {
+  } catch (...) {
     return MY_SVC_TRUE;
   }
 }
@@ -122,15 +120,11 @@ my_svc_bool security_context_create(MYSQL_SECURITY_CONTEXT *out_ctx)
 
   @sa security_context_service_st
 */
-my_svc_bool security_context_destroy(MYSQL_SECURITY_CONTEXT ctx)
-{
-  try
-  {
+my_svc_bool security_context_destroy(MYSQL_SECURITY_CONTEXT ctx) {
+  try {
     delete ctx;
     return MY_SVC_FALSE;
-  }
-  catch (...)
-  {
+  } catch (...) {
     return MY_SVC_TRUE;
   }
 }
@@ -146,21 +140,15 @@ my_svc_bool security_context_destroy(MYSQL_SECURITY_CONTEXT ctx)
   @sa security_context_service_st
 */
 my_svc_bool security_context_copy(MYSQL_SECURITY_CONTEXT in_ctx,
-                                  MYSQL_SECURITY_CONTEXT *out_ctx)
-{
-  try
-  {
-    if (out_ctx)
-    {
-      *out_ctx= new Security_context();
-      if (in_ctx)
-        **out_ctx= *in_ctx;
+                                  MYSQL_SECURITY_CONTEXT *out_ctx) {
+  try {
+    if (out_ctx) {
+      *out_ctx = new Security_context();
+      if (in_ctx) **out_ctx = *in_ctx;
     }
 
     return MY_SVC_FALSE;
-  }
-  catch (...)
-  {
+  } catch (...) {
     return MY_SVC_TRUE;
   }
 }
@@ -184,25 +172,27 @@ my_svc_bool security_context_copy(MYSQL_SECURITY_CONTEXT in_ctx,
 */
 my_svc_bool security_context_lookup(MYSQL_SECURITY_CONTEXT ctx,
                                     const char *user, const char *host,
-                                    const char *ip, const char *db)
-{
-  THD *tmp_thd= NULL;
+                                    const char *ip, const char *db) {
+  THD *tmp_thd = nullptr;
   bool retval;
-  if (current_thd == NULL)
-  {
-    tmp_thd= create_thd(false, true, false, PSI_NOT_INSTRUMENTED);
-    if (!tmp_thd)
-      return TRUE;
+  if (current_thd == nullptr) {
+    tmp_thd = create_thd(false, true, false, PSI_NOT_INSTRUMENTED);
+    if (!tmp_thd) return true;
   }
 
-  retval= acl_getroot(tmp_thd ? tmp_thd : current_thd, ctx, (char *) user,
-                      (char *) host, (char *) ip, db) ?
-                      TRUE : FALSE;
+  retval = acl_getroot(tmp_thd ? tmp_thd : current_thd, ctx, user, host, ip, db)
+               ? true
+               : false;
+  /*
+    If it is not a new security context then update the
+    system_user flag in its referenced THD.
+  */
+  THD *sctx_thd = ctx->get_thd();
+  if (sctx_thd) set_system_user_flag(sctx_thd);
 
-  if (tmp_thd)
-  {
+  if (tmp_thd) {
     destroy_thd(tmp_thd);
-    tmp_thd= NULL;
+    tmp_thd = nullptr;
   }
   return retval;
 }
@@ -211,16 +201,22 @@ my_svc_bool security_context_lookup(MYSQL_SECURITY_CONTEXT ctx,
   Reads a named security context attribute and retuns its value.
   Currently defined names are:
 
-  - user        MYSQL_LEX_CSTRING *  login user (a.k.a. the user's part of USER())
-  - host        MYSQL_LEX_CSTRING *  login host (a.k.a. the host's part of USER())
+  - user        MYSQL_LEX_CSTRING *  login user (a.k.a. the user's part of
+  USER())
+  - host        MYSQL_LEX_CSTRING *  login host (a.k.a. the host's part of
+  USER())
   - ip          MYSQL_LEX_CSTRING *  login client ip
   - host_or_ip  MYSQL_LEX_CSTRING *  host, if present, ip if not.
-  - priv_user   MYSQL_LEX_CSTRING *  authenticated user (a.k.a. the user's part of CURRENT_USER())
-  - priv_host   MYSQL_LEX_CSTRING *  authenticated host (a.k.a. the host's part of CURRENT_USER())
+  - priv_user   MYSQL_LEX_CSTRING *  authenticated user (a.k.a. the user's part
+  of CURRENT_USER())
+  - priv_host   MYSQL_LEX_CSTRING *  authenticated host (a.k.a. the host's part
+  of CURRENT_USER())
   - proxy_user  MYSQL_LEX_CSTRING *  the proxy user used in authenticating
 
-  - privilege_super   my_svc_bool *  1 if the user account has supper privilege, 0 otherwise
-  - privilege_execute my_svc_bool *  1 if the user account has execute privilege, 0 otherwise
+  - privilege_super   my_svc_bool *  1 if the user account has supper privilege,
+  0 otherwise
+  - privilege_execute my_svc_bool *  1 if the user account has execute
+  privilege, 0 otherwise
 
   @param[in]  ctx   The handle of the security context to read from
   @param[in]  name  The option name to read
@@ -232,61 +228,36 @@ my_svc_bool security_context_lookup(MYSQL_SECURITY_CONTEXT ctx,
 
 */
 my_svc_bool security_context_get_option(MYSQL_SECURITY_CONTEXT ctx,
-                                        const char *name, void *inout_pvalue)
-{
-  try
-  {
-    if (inout_pvalue)
-    {
-      if (!strcmp(name, "user"))
-      {
-        *((MYSQL_LEX_CSTRING *)inout_pvalue)= ctx->user();
-      }
-      else if (!strcmp(name, "host"))
-      {
-        *((MYSQL_LEX_CSTRING *) inout_pvalue)= ctx->host();
-      }
-      else if (!strcmp(name, "ip"))
-      {
-        *((MYSQL_LEX_CSTRING *) inout_pvalue)= ctx->ip();
-      }
-      else if (!strcmp(name, "host_or_ip"))
-      {
-        *((MYSQL_LEX_CSTRING *) inout_pvalue)= ctx->host_or_ip();
-      }
-      else if (!strcmp(name, "priv_user"))
-      {
-        *((MYSQL_LEX_CSTRING *) inout_pvalue)= ctx->priv_user();
-      }
-      else if (!strcmp(name, "priv_host"))
-      {
-        *((MYSQL_LEX_CSTRING *) inout_pvalue)= ctx->priv_host();
-      }
-      else if (!strcmp(name, "proxy_user"))
-      {
-        *((MYSQL_LEX_CSTRING *) inout_pvalue)= ctx->proxy_user();
-      }
-      else if (!strcmp(name, "external_user"))
-      {
-        *((MYSQL_LEX_CSTRING *) inout_pvalue)= ctx->external_user();
-      }
-      else if (!strcmp(name, "privilege_super"))
-      {
-        bool checked= ctx->check_access(SUPER_ACL);
-        *((my_svc_bool *) inout_pvalue)= checked ? MY_SVC_TRUE : MY_SVC_FALSE;
-      }
-      else if (!strcmp(name, "privilege_execute"))
-      {
-        bool checked= ctx->check_access(EXECUTE_ACL);
-        *((my_svc_bool *) inout_pvalue)= checked ? MY_SVC_TRUE : MY_SVC_FALSE;
-      }
-      else
+                                        const char *name, void *inout_pvalue) {
+  try {
+    if (inout_pvalue) {
+      if (!strcmp(name, "user")) {
+        *((MYSQL_LEX_CSTRING *)inout_pvalue) = ctx->user();
+      } else if (!strcmp(name, "host")) {
+        *((MYSQL_LEX_CSTRING *)inout_pvalue) = ctx->host();
+      } else if (!strcmp(name, "ip")) {
+        *((MYSQL_LEX_CSTRING *)inout_pvalue) = ctx->ip();
+      } else if (!strcmp(name, "host_or_ip")) {
+        *((MYSQL_LEX_CSTRING *)inout_pvalue) = ctx->host_or_ip();
+      } else if (!strcmp(name, "priv_user")) {
+        *((MYSQL_LEX_CSTRING *)inout_pvalue) = ctx->priv_user();
+      } else if (!strcmp(name, "priv_host")) {
+        *((MYSQL_LEX_CSTRING *)inout_pvalue) = ctx->priv_host();
+      } else if (!strcmp(name, "proxy_user")) {
+        *((MYSQL_LEX_CSTRING *)inout_pvalue) = ctx->proxy_user();
+      } else if (!strcmp(name, "external_user")) {
+        *((MYSQL_LEX_CSTRING *)inout_pvalue) = ctx->external_user();
+      } else if (!strcmp(name, "privilege_super")) {
+        bool checked = ctx->check_access(SUPER_ACL);
+        *((my_svc_bool *)inout_pvalue) = checked ? MY_SVC_TRUE : MY_SVC_FALSE;
+      } else if (!strcmp(name, "privilege_execute")) {
+        bool checked = ctx->check_access(EXECUTE_ACL);
+        *((my_svc_bool *)inout_pvalue) = checked ? MY_SVC_TRUE : MY_SVC_FALSE;
+      } else
         return MY_SVC_TRUE; /* invalid option */
     }
     return MY_SVC_FALSE;
-  }
-  catch (...)
-  {
+  } catch (...) {
     return MY_SVC_TRUE;
   }
 }
@@ -295,15 +266,21 @@ my_svc_bool security_context_get_option(MYSQL_SECURITY_CONTEXT ctx,
   Sets a value for a named security context attribute
   Currently defined names are:
 
-  - user        MYSQL_LEX_CSTRING *  login user (a.k.a. the user's part of USER())
-  - host        MYSQL_LEX_CSTRING *  login host (a.k.a. the host's part of USER())
+  - user        MYSQL_LEX_CSTRING *  login user (a.k.a. the user's part of
+  USER())
+  - host        MYSQL_LEX_CSTRING *  login host (a.k.a. the host's part of
+  USER())
   - ip          MYSQL_LEX_CSTRING *  login client ip
-  - priv_user   MYSQL_LEX_CSTRING *  authenticated user (a.k.a. the user's part of CURRENT_USER())
-  - priv_host   MYSQL_LEX_CSTRING *  authenticated host (a.k.a. the host's part of CURRENT_USER())
+  - priv_user   MYSQL_LEX_CSTRING *  authenticated user (a.k.a. the user's part
+  of CURRENT_USER())
+  - priv_host   MYSQL_LEX_CSTRING *  authenticated host (a.k.a. the host's part
+  of CURRENT_USER())
   - proxy_user  MYSQL_LEX_CSTRING *  the proxy user used in authenticating
 
-  - privilege_super   my_svc_bool *  1 if the user account has supper privilege, 0 otherwise
-  - privilege_execute my_svc_bool *  1 if the user account has execute privilege, 0 otherwise
+  - privilege_super   my_svc_bool *  1 if the user account has supper privilege,
+  0 otherwise
+  - privilege_execute my_svc_bool *  1 if the user account has execute
+  privilege, 0 otherwise
 
   @param[in]  ctx   The handle of the security context to set into
   @param[in]  name  The option name to set
@@ -314,63 +291,43 @@ my_svc_bool security_context_get_option(MYSQL_SECURITY_CONTEXT ctx,
   @sa security_context_service_st
 */
 my_svc_bool security_context_set_option(MYSQL_SECURITY_CONTEXT ctx,
-                                        const char *name, void *pvalue)
-{
-  try
-  {
-    if (!strcmp(name, "user"))
-    {
-      LEX_CSTRING *value= (LEX_CSTRING *) pvalue;
+                                        const char *name, void *pvalue) {
+  try {
+    if (!strcmp(name, "user")) {
+      LEX_CSTRING *value = (LEX_CSTRING *)pvalue;
       ctx->assign_user(value->str, value->length);
-    }
-    else if (!strcmp(name, "host"))
-    {
-      LEX_CSTRING *value= (LEX_CSTRING *) pvalue;
+    } else if (!strcmp(name, "host")) {
+      LEX_CSTRING *value = (LEX_CSTRING *)pvalue;
       ctx->assign_host(value->str, value->length);
-    }
-    else if (!strcmp(name, "ip"))
-    {
-      LEX_CSTRING *value= (LEX_CSTRING *) pvalue;
+    } else if (!strcmp(name, "ip")) {
+      LEX_CSTRING *value = (LEX_CSTRING *)pvalue;
       ctx->assign_ip(value->str, value->length);
-    }
-    else if (!strcmp(name, "priv_user"))
-    {
-      LEX_CSTRING *value= (LEX_CSTRING *) pvalue;
+    } else if (!strcmp(name, "priv_user")) {
+      LEX_CSTRING *value = (LEX_CSTRING *)pvalue;
       ctx->assign_priv_user(value->str, value->length);
-    }
-    else if (!strcmp(name, "priv_host"))
-    {
-      LEX_CSTRING *value= (LEX_CSTRING *) pvalue;
+    } else if (!strcmp(name, "priv_host")) {
+      LEX_CSTRING *value = (LEX_CSTRING *)pvalue;
       ctx->assign_priv_host(value->str, value->length);
-    }
-    else if (!strcmp(name, "proxy_user"))
-    {
-      LEX_CSTRING *value= (LEX_CSTRING *) pvalue;
+    } else if (!strcmp(name, "proxy_user")) {
+      LEX_CSTRING *value = (LEX_CSTRING *)pvalue;
       ctx->assign_proxy_user(value->str, value->length);
-    }
-    else if (!strcmp(name, "privilege_super"))
-    {
-      my_svc_bool value= *(my_svc_bool *) pvalue;
+    } else if (!strcmp(name, "privilege_super")) {
+      my_svc_bool value = *(my_svc_bool *)pvalue;
       if (value)
         ctx->set_master_access(ctx->master_access() | (SUPER_ACL));
       else
         ctx->set_master_access(ctx->master_access() & ~(SUPER_ACL));
 
-    }
-    else if (!strcmp(name, "privilege_execute"))
-    {
-      my_svc_bool value= *(my_svc_bool *) pvalue;
+    } else if (!strcmp(name, "privilege_execute")) {
+      my_svc_bool value = *(my_svc_bool *)pvalue;
       if (value)
         ctx->set_master_access(ctx->master_access() | (EXECUTE_ACL));
       else
         ctx->set_master_access(ctx->master_access() & ~(EXECUTE_ACL));
-    }
-    else
+    } else
       return MY_SVC_TRUE; /* invalid option */
     return MY_SVC_FALSE;
-  }
-  catch (...)
-  {
+  } catch (...) {
     return MY_SVC_TRUE;
   }
 }

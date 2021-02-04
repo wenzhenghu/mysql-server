@@ -1,14 +1,21 @@
 /*
-   Copyright (c) 2005, 2016, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2005, 2017, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -238,8 +245,16 @@ struct File_formats
     };
 
     enum Undo_type {
+      /**
+       * We have replaced UNDO_LCP and UNDO_LCP_FIRST by UNDO_LOCAL_LCP
+       * and UNDO_LOCAL_LCP_FIRST. We keep the old ones to be able to
+       * restore old versions. When reading UNDO_LCP and UNDO_LCP_FIRST
+       * we will always assume that local LCP id is 0.
+       */
       UNDO_LCP_FIRST  = 1 // First LCP record with specific lcp id
       ,UNDO_LCP = 2       // LCP Start
+      ,UNDO_LOCAL_LCP = 10 // LCP start with local LCP id
+      ,UNDO_LOCAL_LCP_FIRST = 11 // First LCP start with local LCP id
       
       /**
        * TUP Undo record
@@ -251,6 +266,9 @@ struct File_formats
       ,UNDO_TUP_DROP   = 7
       ,UNDO_TUP_ALLOC_EXTENT = 8
       ,UNDO_TUP_FREE_EXTENT  = 9
+      ,UNDO_TUP_FIRST_UPDATE_PART = 12
+      ,UNDO_TUP_UPDATE_PART = 13
+      ,UNDO_TUP_FREE_PART = 14
       
       ,UNDO_END        = 0x7FFF 
       ,UNDO_NEXT_LSN   = 0x8000

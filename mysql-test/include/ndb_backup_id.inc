@@ -1,14 +1,12 @@
 # there is no neat way to find the backupid, this is a hack to find it...
 --let $dump_file= $MYSQLTEST_VARDIR/tmp/select_all.txt
---exec $NDB_SELECT_ALL --no-defaults -d sys --delimiter=, SYSTAB_0 > $dump_file
+--exec $NDB_SELECT_ALL -d sys --delimiter=, SYSTAB_0 > $dump_file
 
 CREATE TEMPORARY TABLE test.backup_info(
   a BIGINT,
   b BIGINT
 ) ENGINE = HEAP;
 
-# needed for embedded
---chmod 0777 $dump_file
 --disable_warnings
 --replace_result $dump_file DUMP_FILE
 eval LOAD DATA INFILE '$dump_file' IGNORE INTO TABLE test.backup_info

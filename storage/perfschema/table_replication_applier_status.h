@@ -1,14 +1,21 @@
 /*
-   Copyright (c) 2013, 2017, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2013, 2020, Oracle and/or its affiliates.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -24,15 +31,16 @@
 
 #include <sys/types.h>
 
-#include "mysql_com.h"
-#include "pfs_column_types.h"
-#include "pfs_engine_table.h"
-#include "rpl_info.h" /*CHANNEL_NAME_LENGTH*/
-#include "rpl_mi.h"
-#include "rpl_msr.h"
-#include "table_helper.h"
+#include "my_base.h"
+#include "sql/rpl_info.h" /*CHANNEL_NAME_LENGTH*/
+#include "storage/perfschema/pfs_engine_table.h"
+#include "storage/perfschema/table_helper.h"
 
+class Field;
 class Master_info;
+class Plugin_table;
+struct TABLE;
+struct THR_LOCK;
 
 /**
   @addtogroup performance_schema_tables
@@ -42,16 +50,11 @@ class Master_info;
 #ifndef ENUM_RPL_YES_NO
 #define ENUM_RPL_YES_NO
 /** enum values for Service_State field*/
-enum enum_rpl_yes_no
-{
-  PS_RPL_YES = 1,
-  PS_RPL_NO
-};
+enum enum_rpl_yes_no { PS_RPL_YES = 1, PS_RPL_NO };
 #endif
 
 /** A row in the table. */
-struct st_row_applier_status
-{
+struct st_row_applier_status {
   char channel_name[CHANNEL_NAME_LENGTH];
   uint channel_name_length;
   enum_rpl_yes_no service_state;
@@ -60,42 +63,39 @@ struct st_row_applier_status
   ulong count_transactions_retries;
 };
 
-class PFS_index_rpl_applier_status : public PFS_engine_index
-{
-public:
+class PFS_index_rpl_applier_status : public PFS_engine_index {
+ public:
   PFS_index_rpl_applier_status()
-    : PFS_engine_index(&m_key), m_key("CHANNEL_NAME")
-  {
-  }
+      : PFS_engine_index(&m_key), m_key("CHANNEL_NAME") {}
 
-  ~PFS_index_rpl_applier_status()
-  {
-  }
+  ~PFS_index_rpl_applier_status() override {}
 
   virtual bool match(Master_info *mi);
 
-private:
+ private:
   PFS_key_name m_key;
 };
 
 /** Table PERFORMANCE_SCHEMA.replication_applier_status */
-class table_replication_applier_status : public PFS_engine_table
-{
-private:
+class table_replication_applier_status : public PFS_engine_table {
+  typedef PFS_simple_index pos_t;
+
+ private:
   int make_row(Master_info *mi);
 
   /** Table share lock. */
   static THR_LOCK m_table_lock;
-  /** Fields definition. */
-  static TABLE_FIELD_DEF m_field_def;
+  /** Table definition. */
+  static Plugin_table m_table_def;
+
   /** Current row */
   st_row_applier_status m_row;
   /** Current position. */
-  PFS_simple_index m_pos;
+  pos_t m_pos;
   /** Next position. */
-  PFS_simple_index m_next_pos;
+  pos_t m_next_pos;
 
-protected:
+ protected:
   /**
     Read the current row values.
     @param table            Table handle
@@ -104,30 +104,28 @@ protected:
     @param read_all         true if all columns are read.
   */
 
-  virtual int read_row_values(TABLE *table,
-                              unsigned char *buf,
-                              Field **fields,
-                              bool read_all);
+  int read_row_values(TABLE *table, unsigned char *buf, Field **fields,
+                      bool read_all) override;
 
   table_replication_applier_status();
 
-public:
-  ~table_replication_applier_status();
+ public:
+  ~table_replication_applier_status() override;
 
   /** Table share. */
   static PFS_engine_table_share m_share;
-  static PFS_engine_table *create();
+  static PFS_engine_table *create(PFS_engine_table_share *);
   static ha_rows get_row_count();
 
-  virtual void reset_position(void);
+  void reset_position(void) override;
 
-  virtual int rnd_next();
-  virtual int rnd_pos(const void *pos);
+  int rnd_next() override;
+  int rnd_pos(const void *pos) override;
 
-  virtual int index_init(uint idx, bool sorted);
-  virtual int index_next();
+  int index_init(uint idx, bool sorted) override;
+  int index_next() override;
 
-private:
+ private:
   PFS_index_rpl_applier_status *m_opened_index;
 };
 

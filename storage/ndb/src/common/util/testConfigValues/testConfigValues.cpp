@@ -1,15 +1,21 @@
 /*
-   Copyright (C) 2004-2006 MySQL AB
-    All rights reserved. Use is subject to license terms.
+   Copyright (c) 2004, 2019, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -31,15 +37,15 @@ void print(Uint32 i, ConfigValues::ConstIterator & cf){
   ndbout_c("---");
   for(Uint32 j = 2; j<=7; j++){
     switch(cf.getTypeOf(j)){
-    case ConfigValues::IntType:
+    case ConfigSection::IntTypeId:
       ndbout_c("Node %d : CFG(%d) : %d", 
 	       i, j, cf.get(j, 999));
       break;
-    case ConfigValues::Int64Type:
+    case ConfigSection::Int64TypeId:
       ndbout_c("Node %d : CFG(%d) : %lld (64)", 
 	       i, j, cf.get64(j, 999));
       break;
-    case ConfigValues::StringType:
+    case ConfigSection::StringTypeId:
       ndbout_c("Node %d : CFG(%d) : %s",
 	       i, j, cf.get(j, "<NOT FOUND>"));
       break;
@@ -77,8 +83,9 @@ int
 main(void){
 
   {
-    ConfigValuesFactory cvf(10, 20);
-    cvf.openSection(1, 0);
+    ConfigValuesFactory cvf();
+    cvf.begin();
+    cvf.createSection(CONFIG_SECTION_SYSTEM, 0);
     cvf.put(2, 12);
     cvf.put64(3, 13);
     cvf.put(4, 14);
@@ -87,7 +94,7 @@ main(void){
     cvf.put(7, "Kent");
     cvf.closeSection();
 
-    cvf.openSection(1, 1);
+    cvf.createSection(CONFIG_SECTION_NODE, DATA_NODE_TYPE);
     cvf.put(2, 22);
     cvf.put64(3, 23);
     cvf.put(4, 24);
@@ -95,15 +102,13 @@ main(void){
     cvf.put(6, "Kalle");
     cvf.put(7, "Anka");
     cvf.closeSection();
+    cvf.commit();
   
     ndbout_c("-- print --");
     print(* cvf.m_cfg);
 
     cvf.shrink();
     ndbout_c("shrink\n-- print --");
-    print(* cvf.m_cfg);
-    cvf.expand(10, 10);
-    ndbout_c("expand\n-- print --");
     print(* cvf.m_cfg);
 
     ndbout_c("packed size: %d", cvf.m_cfg->getPackedSize());
@@ -113,11 +118,10 @@ main(void){
     ConfigValues * cfg2 = ConfigValuesFactory::extractCurrentSection(iter);
     print(99, * cfg2);
   
-    cvf.shrink();
     ndbout_c("packed size: %d", cfg2->getPackedSize());
 
     UtilBuffer buf;
-    Uint32 l1 = cvf.m_cfg->pack(buf);
+    Uint32 l1 = cvf.m_cfg->pack_v1(buf);
     Uint32 l2 = cvf.m_cfg->getPackedSize();
     require(l1 == l2);
   

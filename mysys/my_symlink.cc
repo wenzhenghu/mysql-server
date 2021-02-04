@@ -1,13 +1,25 @@
-/* Copyright (c) 2001, 2016, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2001, 2019, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
+
+   Without limiting anything contained in the foregoing, this file,
+   which is part of C Driver for MySQL (Connector/C), is also subject to the
+   Universal FOSS Exception, version 1.0, a copy of which can be found at
+   http://oss.oracle.com/licenses/universal-foss-exception.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -27,7 +39,9 @@
 #endif
 
 #include "m_string.h"
+#include "map_helpers.h"
 #include "my_dbug.h"
+#include "my_dir.h"
 #include "my_inttypes.h"
 #include "my_io.h"
 #include "my_sys.h"
@@ -47,139 +61,129 @@
    -1  on error.
 */
 
-int my_readlink(char *to, const char *filename, myf MyFlags)
-{
+int my_readlink(char *to, const char *filename, myf MyFlags) {
 #ifdef _WIN32
-  my_stpcpy(to,filename);
+  my_stpcpy(to, filename);
   return 1;
 #else
-  int result=0;
+  int result = 0;
   int length;
-  DBUG_ENTER("my_readlink");
+  DBUG_TRACE;
 
-  if ((length=readlink(filename, to, FN_REFLEN-1)) < 0)
-  {
+  if ((length = readlink(filename, to, FN_REFLEN - 1)) < 0) {
     /* Don't give an error if this wasn't a symlink */
     set_my_errno(errno);
-    if (my_errno() == EINVAL)
-    {
-      result= 1;
-      my_stpcpy(to,filename);
-    }
-    else
-    {
-      if (MyFlags & MY_WME)
-      {
-        char errbuf[MYSYS_STRERROR_SIZE];
-        my_error(EE_CANT_READLINK, MYF(0), filename,
-                 errno, my_strerror(errbuf, sizeof(errbuf), errno));
+    if (my_errno() == EINVAL) {
+      result = 1;
+      my_stpcpy(to, filename);
+    } else {
+      if (MyFlags & MY_WME) {
+        MyOsError(errno, EE_CANT_READLINK, MYF(0), filename);
       }
-      result= -1;
+      result = -1;
     }
-  }
-  else
-    to[length]=0;
-  DBUG_PRINT("exit" ,("result: %d", result));
-  DBUG_RETURN(result);
+  } else
+    to[length] = 0;
+  DBUG_PRINT("exit", ("result: %d", result));
+  return result;
 #endif /* !_WIN32 */
 }
-
 
 /* Create a symbolic link */
 
 #ifndef _WIN32
-int my_symlink(const char *content, const char *linkname, myf MyFlags)
-{
+int my_symlink(const char *content, const char *linkname, myf MyFlags) {
   int result;
-  DBUG_ENTER("my_symlink");
-  DBUG_PRINT("enter",("content: %s  linkname: %s", content, linkname));
+  DBUG_TRACE;
+  DBUG_PRINT("enter", ("content: %s  linkname: %s", content, linkname));
 
-  result= 0;
-  if (symlink(content, linkname))
-  {
-    result= -1;
+  result = 0;
+  if (symlink(content, linkname)) {
+    result = -1;
     set_my_errno(errno);
-    if (MyFlags & MY_WME)
-    {
-      char errbuf[MYSYS_STRERROR_SIZE];
-      my_error(EE_CANT_SYMLINK, MYF(0), linkname, content,
-               errno, my_strerror(errbuf, sizeof(errbuf), errno));
+    if (MyFlags & MY_WME) {
+      MyOsError(errno, EE_CANT_SYMLINK, MYF(0), linkname, content);
     }
   }
-  else if ((MyFlags & MY_SYNC_DIR) && my_sync_dir_by_file(linkname, MyFlags))
-    result= -1;
-  DBUG_RETURN(result);
+  return result;
 }
 #endif /* !_WIN32 */
 
-
-int my_is_symlink(const char *filename)
-{
+int my_is_symlink(const char *filename, ST_FILE_ID *file_id) {
 #ifndef _WIN32
   struct stat stat_buff;
-  return !lstat(filename, &stat_buff) && S_ISLNK(stat_buff.st_mode);
+  int result = !lstat(filename, &stat_buff) && S_ISLNK(stat_buff.st_mode);
+  if (file_id && !result) {
+    file_id->st_dev = stat_buff.st_dev;
+    file_id->st_ino = stat_buff.st_ino;
+  }
+  return result;
+
 #else
   DWORD dwAttr = GetFileAttributes(filename);
   return (dwAttr != INVALID_FILE_ATTRIBUTES) &&
-    (dwAttr & FILE_ATTRIBUTE_REPARSE_POINT);
+         (dwAttr & FILE_ATTRIBUTE_REPARSE_POINT);
 #endif
 }
-
 
 /*
   Resolve all symbolic links in path
   'to' may be equal to 'filename'
 */
 
-int my_realpath(char *to, const char *filename, myf MyFlags)
-{
+int my_realpath(char *to, const char *filename, myf MyFlags) {
 #ifndef _WIN32
-  int result=0;
-  char buff[PATH_MAX];
-  char *ptr;
-  DBUG_ENTER("my_realpath");
+  int result = 0;
+  DBUG_TRACE;
 
-  DBUG_PRINT("info",("executing realpath"));
-  if ((ptr=realpath(filename,buff)))
-      strmake(to,ptr,FN_REFLEN-1);
-  else
-  {
+  DBUG_PRINT("info", ("executing realpath"));
+  unique_ptr_free<char> ptr(realpath(filename, nullptr));
+  if (ptr) {
+    strmake(to, ptr.get(), FN_REFLEN - 1);
+  } else {
     /*
       Realpath didn't work;  Use my_load_path() which is a poor substitute
       original name but will at least be able to resolve paths that starts
       with '.'.
     */
-    DBUG_PRINT("error",("realpath failed with errno: %d", errno));
+    DBUG_PRINT("error", ("realpath failed with errno: %d", errno));
     set_my_errno(errno);
-    if (MyFlags & MY_WME)
-    {
-      char errbuf[MYSYS_STRERROR_SIZE];
-      my_error(EE_REALPATH, MYF(0), filename,
-               my_errno(), my_strerror(errbuf, sizeof(errbuf), my_errno()));
+    if (MyFlags & MY_WME) {
+      MyOsError(my_errno(), EE_REALPATH, MYF(0), filename);
     }
     my_load_path(to, filename, NullS);
-    result= -1;
+    result = -1;
   }
-  DBUG_RETURN(result);
+  return result;
 #else
-  int ret= GetFullPathName(filename,FN_REFLEN, to, NULL);
-  if (ret == 0 || ret > FN_REFLEN)
-  {
+  int ret = GetFullPathName(filename, FN_REFLEN, to, NULL);
+  if (ret == 0 || ret > FN_REFLEN) {
     set_my_errno((ret > FN_REFLEN) ? ENAMETOOLONG : GetLastError());
-    if (MyFlags & MY_WME)
-    {
-      char errbuf[MYSYS_STRERROR_SIZE];
-      my_error(EE_REALPATH, MYF(0), filename,
-               my_errno(), my_strerror(errbuf, sizeof(errbuf), my_errno()));
+    if (MyFlags & MY_WME) {
+      MyOsError(my_errno(), EE_REALPATH, MYF(0), filename);
     }
-    /* 
-      GetFullPathName didn't work : use my_load_path() which is a poor 
-      substitute original name but will at least be able to resolve 
+    /*
+      GetFullPathName didn't work : use my_load_path() which is a poor
+      substitute original name but will at least be able to resolve
       paths that starts with '.'.
-    */  
+    */
     my_load_path(to, filename, NullS);
     return -1;
   }
   return 0;
 #endif
+}
+
+/**
+  Return non-zero if the file descriptor and a previously lstat-ed file
+  identified by file_id point to the same file.
+*/
+int my_is_same_file(File file, const ST_FILE_ID *file_id) {
+  MY_STAT stat_buf;
+  if (my_fstat(file, &stat_buf) == -1) {
+    set_my_errno(errno);
+    return 0;
+  }
+  return (stat_buf.st_dev == file_id->st_dev) &&
+         (stat_buf.st_ino == file_id->st_ino);
 }

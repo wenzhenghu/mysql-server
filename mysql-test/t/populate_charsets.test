@@ -5,8 +5,6 @@
 --echo # collations are deleted if they are not present in the
 --echo # character sets dir when restarting.
 
---source include/not_embedded.inc
-
 --echo #
 --echo # New character sets dir:
 --replace_result $MYSQL_TEST_DIR MYSQL_TEST_DIR
@@ -41,3 +39,7 @@ SHOW COLLATION LIKE 'utf8_phone_ci';
 --echo # Create a table using the deleted collation, expected to fail:
 --error ER_UNKNOWN_COLLATION
 CREATE TABLE t1 (pk INTEGER) COLLATE utf8_phone_ci;
+
+# restore default values
+--let $restart_parameters = restart:
+--source include/restart_mysqld.inc

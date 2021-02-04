@@ -1,13 +1,20 @@
-/* Copyright (c) 2013, 2017, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2013, 2020, Oracle and/or its affiliates. All rights reserved.
 
   This program is free software; you can redistribute it and/or modify
-  it under the terms of the GNU General Public License as published by
-  the Free Software Foundation; version 2 of the License.
+  it under the terms of the GNU General Public License, version 2.0,
+  as published by the Free Software Foundation.
+
+  This program is also distributed with certain software (including
+  but not limited to OpenSSL) that is licensed under separate terms,
+  as designated in a particular file or component or in included license
+  documentation.  The authors of MySQL hereby grant you an additional
+  permission to link the program and your derivative works with the
+  separately licensed software that they have included with MySQL.
 
   This program is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  GNU General Public License for more details.
+  GNU General Public License, version 2.0, for more details.
 
   You should have received a copy of the GNU General Public License
   along with this program; if not, write to the Free Software
@@ -22,13 +29,19 @@
 */
 
 #include <sys/types.h>
+#include <atomic>
 
 #include "my_inttypes.h"
-#include "mysql/plugin.h" /* MYSQL_XIDDATASIZE */
-#include "pfs_column_types.h"
-#include "pfs_events.h"
-#include "pfs_global.h"
-#include "rpl_gtid.h"
+#include "sql/rpl_gtid.h"
+#include "storage/perfschema/pfs_column_types.h"
+#include "storage/perfschema/pfs_events.h"
+#include "storage/perfschema/pfs_global.h"
+
+// Define XIDDATASIZE manually here to avoid pulling in all of mysql/plugin.h
+// (which is big) just for MYSQL_XIDDATASIZE; this file is included from a lot
+// of places. We have a static_assert in the .cc file to check that they are
+// in sync. See sql/xa.h, which does the same thing.
+#define XIDDATASIZE 128
 
 struct PFS_thread;
 struct PFS_account;
@@ -47,8 +60,7 @@ struct PFS_host;
   @see XID in sql/handler.h
   @see MYSQL_XID in mysql/plugin.h
 */
-struct PSI_xid
-{
+struct PSI_xid {
   /** Format identifier. */
   long formatID;
   /** GTRID length, value 1-64. */
@@ -56,20 +68,11 @@ struct PSI_xid
   /** BQUAL length, value 1-64. */
   long bqual_length;
   /** XID raw data, not \0-terminated */
-  char data[MYSQL_XIDDATASIZE];
+  char data[XIDDATASIZE];
 
-  PSI_xid()
-  {
-    null();
-  }
-  bool
-  is_null()
-  {
-    return formatID == -1;
-  }
-  void
-  null()
-  {
+  PSI_xid() { null(); }
+  bool is_null() { return formatID == -1; }
+  void null() {
     formatID = -1;
     gtrid_length = 0;
     bqual_length = 0;
@@ -78,8 +81,7 @@ struct PSI_xid
 typedef struct PSI_xid PSI_xid;
 
 /** A transaction record. */
-struct PFS_events_transactions : public PFS_events
-{
+struct PFS_events_transactions : public PFS_events {
   /** Source identifier, mapped from internal format. */
   rpl_sid m_sid;
   /** InnoDB transaction ID. */
@@ -113,19 +115,19 @@ bool xid_printable(PSI_xid *xid, size_t offset, size_t length);
 void insert_events_transactions_history(PFS_thread *thread,
                                         PFS_events_transactions *transaction);
 void insert_events_transactions_history_long(
-  PFS_events_transactions *transaction);
+    PFS_events_transactions *transaction);
 
 extern bool flag_events_transactions_current;
 extern bool flag_events_transactions_history;
 extern bool flag_events_transactions_history_long;
 
 extern bool events_transactions_history_long_full;
-extern PFS_cacheline_uint32 events_transactions_history_long_index;
+extern PFS_cacheline_atomic_uint32 events_transactions_history_long_index;
 extern PFS_events_transactions *events_transactions_history_long_array;
 extern ulong events_transactions_history_long_size;
 
 int init_events_transactions_history_long(
-  uint events_transactions_history_long_sizing);
+    uint events_transactions_history_long_sizing);
 void cleanup_events_transactions_history_long();
 
 void reset_events_transactions_current();

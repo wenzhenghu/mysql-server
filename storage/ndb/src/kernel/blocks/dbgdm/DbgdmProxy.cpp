@@ -1,18 +1,25 @@
 /*
-  Copyright (c) 2000, 2013, Oracle and/or its affiliates. All rights reserved.
+  Copyright (c) 2000, 2019, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
 */
 
 #include "DbgdmProxy.hpp"
@@ -63,6 +70,7 @@ DbgdmProxy::~DbgdmProxy()
 void
 DbgdmProxy::execTC_SCHVERREQ(Signal* signal)
 {
+  jam();
   Ss_TC_SCHVERREQ& ss = ssSeize<Ss_TC_SCHVERREQ>(1);
 
   const TcSchVerReq* req = (const TcSchVerReq*)signal->getDataPtr();
@@ -74,6 +82,7 @@ DbgdmProxy::execTC_SCHVERREQ(Signal* signal)
 void
 DbgdmProxy::sendTC_SCHVERREQ(Signal* signal, Uint32 ssId, SectionHandle*)
 {
+  jam();
   Ss_TC_SCHVERREQ& ss = ssFind<Ss_TC_SCHVERREQ>(ssId);
 
   TcSchVerReq* req = (TcSchVerReq*)signal->getDataPtrSend();
@@ -87,6 +96,7 @@ DbgdmProxy::sendTC_SCHVERREQ(Signal* signal, Uint32 ssId, SectionHandle*)
 void
 DbgdmProxy::execTC_SCHVERCONF(Signal* signal)
 {
+  jam();
   const TcSchVerConf* conf = (const TcSchVerConf*)signal->getDataPtr();
   Uint32 ssId = conf->senderData;
   Ss_TC_SCHVERREQ& ss = ssFind<Ss_TC_SCHVERREQ>(ssId);
@@ -96,11 +106,15 @@ DbgdmProxy::execTC_SCHVERCONF(Signal* signal)
 void
 DbgdmProxy::sendTC_SCHVERCONF(Signal* signal, Uint32 ssId)
 {
+  jam();
   Ss_TC_SCHVERREQ& ss = ssFind<Ss_TC_SCHVERREQ>(ssId);
   BlockReference dictRef = ss.m_req.senderRef;
 
   if (!lastReply(ss))
+  {
+    jam();
     return;
+  }
 
   TcSchVerConf* conf = (TcSchVerConf*)signal->getDataPtrSend();
   conf->senderRef = reference();
@@ -116,6 +130,7 @@ DbgdmProxy::sendTC_SCHVERCONF(Signal* signal, Uint32 ssId)
 void
 DbgdmProxy::execTAB_COMMITREQ(Signal* signal)
 {
+  jam();
   Ss_TAB_COMMITREQ& ss = ssSeize<Ss_TAB_COMMITREQ>(1);
 
   const TabCommitReq* req = (const TabCommitReq*)signal->getDataPtr();
@@ -126,6 +141,7 @@ DbgdmProxy::execTAB_COMMITREQ(Signal* signal)
 void
 DbgdmProxy::sendTAB_COMMITREQ(Signal* signal, Uint32 ssId, SectionHandle*)
 {
+  jam();
   Ss_TAB_COMMITREQ& ss = ssFind<Ss_TAB_COMMITREQ>(ssId);
 
   TabCommitReq* req = (TabCommitReq*)signal->getDataPtrSend();
@@ -139,6 +155,7 @@ DbgdmProxy::sendTAB_COMMITREQ(Signal* signal, Uint32 ssId, SectionHandle*)
 void
 DbgdmProxy::execTAB_COMMITCONF(Signal* signal)
 {
+  jam();
   const TabCommitConf* conf = (TabCommitConf*)signal->getDataPtr();
   Uint32 ssId = conf->senderData;
   Ss_TAB_COMMITREQ& ss = ssFind<Ss_TAB_COMMITREQ>(ssId);
@@ -148,6 +165,7 @@ DbgdmProxy::execTAB_COMMITCONF(Signal* signal)
 void
 DbgdmProxy::execTAB_COMMITREF(Signal* signal)
 {
+  jam();
   const TabCommitRef* ref = (TabCommitRef*)signal->getDataPtr();
   Uint32 ssId = ref->senderData;
   Ss_TAB_COMMITREQ& ss = ssFind<Ss_TAB_COMMITREQ>(ssId);
@@ -158,13 +176,18 @@ DbgdmProxy::execTAB_COMMITREF(Signal* signal)
 void
 DbgdmProxy::sendTAB_COMMITCONF(Signal* signal, Uint32 ssId)
 {
+  jam();
   Ss_TAB_COMMITREQ& ss = ssFind<Ss_TAB_COMMITREQ>(ssId);
   BlockReference dictRef = ss.m_req.senderRef;
 
   if (!lastReply(ss))
+  {
+    jam();
     return;
+  }
 
-  if (ss.m_error == 0) {
+  if (ss.m_error == 0)
+  {
     jam();
     TabCommitConf* conf = (TabCommitConf*)signal->getDataPtrSend();
     conf->senderData = ss.m_req.senderData;
@@ -172,7 +195,9 @@ DbgdmProxy::sendTAB_COMMITCONF(Signal* signal, Uint32 ssId)
     conf->tableId = ss.m_req.tableId;
     sendSignal(dictRef, GSN_TAB_COMMITCONF,
                signal, TabCommitConf::SignalLength, JBB);
-  } else {
+  }
+  else
+  {
     jam();
     TabCommitRef* ref = (TabCommitRef*)signal->getDataPtrSend();
     ref->senderData = ss.m_req.senderData;
@@ -191,6 +216,7 @@ DbgdmProxy::sendTAB_COMMITCONF(Signal* signal, Uint32 ssId)
 void
 DbgdmProxy::execPREP_DROP_TAB_REQ(Signal* signal)
 {
+  jam();
   const PrepDropTabReq* req = (const PrepDropTabReq*)signal->getDataPtr();
   Uint32 ssId = getSsId(req);
   Ss_PREP_DROP_TAB_REQ& ss = ssSeize<Ss_PREP_DROP_TAB_REQ>(ssId);
@@ -202,6 +228,7 @@ DbgdmProxy::execPREP_DROP_TAB_REQ(Signal* signal)
 void
 DbgdmProxy::sendPREP_DROP_TAB_REQ(Signal* signal, Uint32 ssId, SectionHandle*)
 {
+  jam();
   Ss_PREP_DROP_TAB_REQ& ss = ssFind<Ss_PREP_DROP_TAB_REQ>(ssId);
 
   PrepDropTabReq* req = (PrepDropTabReq*)signal->getDataPtrSend();
@@ -215,6 +242,7 @@ DbgdmProxy::sendPREP_DROP_TAB_REQ(Signal* signal, Uint32 ssId, SectionHandle*)
 void
 DbgdmProxy::execPREP_DROP_TAB_CONF(Signal* signal)
 {
+  jam();
   const PrepDropTabConf* conf = (const PrepDropTabConf*)signal->getDataPtr();
   Uint32 ssId = getSsId(conf);
   Ss_PREP_DROP_TAB_REQ& ss = ssFind<Ss_PREP_DROP_TAB_REQ>(ssId);
@@ -224,6 +252,7 @@ DbgdmProxy::execPREP_DROP_TAB_CONF(Signal* signal)
 void
 DbgdmProxy::execPREP_DROP_TAB_REF(Signal* signal)
 {
+  jam();
   const PrepDropTabRef* ref = (const PrepDropTabRef*)signal->getDataPtr();
   Uint32 ssId = getSsId(ref);
   Ss_PREP_DROP_TAB_REQ& ss = ssFind<Ss_PREP_DROP_TAB_REQ>(ssId);
@@ -233,13 +262,18 @@ DbgdmProxy::execPREP_DROP_TAB_REF(Signal* signal)
 void
 DbgdmProxy::sendPREP_DROP_TAB_CONF(Signal* signal, Uint32 ssId)
 {
+  jam();
   Ss_PREP_DROP_TAB_REQ& ss = ssFind<Ss_PREP_DROP_TAB_REQ>(ssId);
   BlockReference dictRef = ss.m_req.senderRef;
 
   if (!lastReply(ss))
+  {
+    jam();
     return;
+  }
 
-  if (ss.m_error == 0) {
+  if (ss.m_error == 0)
+  {
     jam();
     PrepDropTabConf* conf = (PrepDropTabConf*)signal->getDataPtrSend();
     conf->senderRef = reference();
@@ -247,7 +281,9 @@ DbgdmProxy::sendPREP_DROP_TAB_CONF(Signal* signal, Uint32 ssId)
     conf->tableId = ss.m_req.tableId;
     sendSignal(dictRef, GSN_PREP_DROP_TAB_CONF,
                signal, PrepDropTabConf::SignalLength, JBB);
-  } else {
+  }
+  else
+  {
     jam();
     PrepDropTabRef* ref = (PrepDropTabRef*)signal->getDataPtrSend();
     ref->senderRef = reference();
@@ -266,6 +302,7 @@ DbgdmProxy::sendPREP_DROP_TAB_CONF(Signal* signal, Uint32 ssId)
 void
 DbgdmProxy::execDROP_TAB_REQ(Signal* signal)
 {
+  jam();
   const DropTabReq* req = (const DropTabReq*)signal->getDataPtr();
   Uint32 ssId = getSsId(req);
   Ss_DROP_TAB_REQ& ss = ssSeize<Ss_DROP_TAB_REQ>(ssId);
@@ -277,6 +314,7 @@ DbgdmProxy::execDROP_TAB_REQ(Signal* signal)
 void
 DbgdmProxy::sendDROP_TAB_REQ(Signal* signal, Uint32 ssId, SectionHandle*)
 {
+  jam();
   Ss_DROP_TAB_REQ& ss = ssFind<Ss_DROP_TAB_REQ>(ssId);
 
   DropTabReq* req = (DropTabReq*)signal->getDataPtrSend();
@@ -290,6 +328,7 @@ DbgdmProxy::sendDROP_TAB_REQ(Signal* signal, Uint32 ssId, SectionHandle*)
 void
 DbgdmProxy::execDROP_TAB_CONF(Signal* signal)
 {
+  jam();
   const DropTabConf* conf = (const DropTabConf*)signal->getDataPtr();
   Uint32 ssId = getSsId(conf);
   Ss_DROP_TAB_REQ& ss = ssFind<Ss_DROP_TAB_REQ>(ssId);
@@ -299,6 +338,7 @@ DbgdmProxy::execDROP_TAB_CONF(Signal* signal)
 void
 DbgdmProxy::execDROP_TAB_REF(Signal* signal)
 {
+  jam();
   const DropTabRef* ref = (const DropTabRef*)signal->getDataPtr();
   Uint32 ssId = getSsId(ref);
   Ss_DROP_TAB_REQ& ss = ssFind<Ss_DROP_TAB_REQ>(ssId);
@@ -308,13 +348,18 @@ DbgdmProxy::execDROP_TAB_REF(Signal* signal)
 void
 DbgdmProxy::sendDROP_TAB_CONF(Signal* signal, Uint32 ssId)
 {
+  jam();
   Ss_DROP_TAB_REQ& ss = ssFind<Ss_DROP_TAB_REQ>(ssId);
   BlockReference dictRef = ss.m_req.senderRef;
 
   if (!lastReply(ss))
+  {
+    jam();
     return;
+  }
 
-  if (ss.m_error == 0) {
+  if (ss.m_error == 0)
+  {
     jam();
     DropTabConf* conf = (DropTabConf*)signal->getDataPtrSend();
     conf->senderRef = reference();
@@ -322,7 +367,9 @@ DbgdmProxy::sendDROP_TAB_CONF(Signal* signal, Uint32 ssId)
     conf->tableId = ss.m_req.tableId;
     sendSignal(dictRef, GSN_DROP_TAB_CONF,
                signal, DropTabConf::SignalLength, JBB);
-  } else {
+  }
+  else
+  {
     jam();
     DropTabRef* ref = (DropTabRef*)signal->getDataPtrSend();
     ref->senderRef = reference();
@@ -347,6 +394,7 @@ DbgdmProxy::execALTER_TAB_REQ(Signal* signal)
     return;
   }
 
+  jam();
   const AlterTabReq* req = (const AlterTabReq*)signal->getDataPtr();
   Uint32 ssId = getSsId(req);
   Ss_ALTER_TAB_REQ& ss = ssSeize<Ss_ALTER_TAB_REQ>(ssId);
@@ -362,6 +410,7 @@ void
 DbgdmProxy::sendALTER_TAB_REQ(Signal* signal, Uint32 ssId,
                              SectionHandle* handle)
 {
+  jam();
   Ss_ALTER_TAB_REQ& ss = ssFind<Ss_ALTER_TAB_REQ>(ssId);
 
   AlterTabReq* req = (AlterTabReq*)signal->getDataPtrSend();
@@ -375,6 +424,7 @@ DbgdmProxy::sendALTER_TAB_REQ(Signal* signal, Uint32 ssId,
 void
 DbgdmProxy::execALTER_TAB_CONF(Signal* signal)
 {
+  jam();
   const AlterTabConf* conf = (const AlterTabConf*)signal->getDataPtr();
   Uint32 ssId = getSsId(conf);
   Ss_ALTER_TAB_REQ& ss = ssFind<Ss_ALTER_TAB_REQ>(ssId);
@@ -384,6 +434,7 @@ DbgdmProxy::execALTER_TAB_CONF(Signal* signal)
 void
 DbgdmProxy::execALTER_TAB_REF(Signal* signal)
 {
+  jam();
   const AlterTabRef* ref = (const AlterTabRef*)signal->getDataPtr();
   Uint32 ssId = getSsId(ref);
   Ss_ALTER_TAB_REQ& ss = ssFind<Ss_ALTER_TAB_REQ>(ssId);
@@ -393,20 +444,27 @@ DbgdmProxy::execALTER_TAB_REF(Signal* signal)
 void
 DbgdmProxy::sendALTER_TAB_CONF(Signal* signal, Uint32 ssId)
 {
+  jam();
   Ss_ALTER_TAB_REQ& ss = ssFind<Ss_ALTER_TAB_REQ>(ssId);
   BlockReference dictRef = ss.m_req.senderRef;
 
   if (!lastReply(ss))
+  {
+    jam();
     return;
+  }
 
-  if (ss.m_error == 0) {
+  if (ss.m_error == 0)
+  {
     jam();
     AlterTabConf* conf = (AlterTabConf*)signal->getDataPtrSend();
     conf->senderRef = reference();
     conf->senderData = ss.m_req.senderData;
     sendSignal(dictRef, GSN_ALTER_TAB_CONF,
                signal, AlterTabConf::SignalLength, JBB);
-  } else {
+  }
+  else
+  {
     jam();
     AlterTabRef* ref = (AlterTabRef*)signal->getDataPtrSend();
     ref->senderRef = reference();

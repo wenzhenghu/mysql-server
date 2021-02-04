@@ -58,10 +58,10 @@ PARTITION p1
 # Verifying .ibd files
 ---- MYSQLD_DATADIR/test
 ---- MYSQLTEST_VARDIR/mysql-test-data-dir/test
-t1#P#p0.ibd
-t1#P#p1.ibd
-t2#P#p0.ibd
-t2#P#p1.ibd
+t1#p#p0.ibd
+t1#p#p1.ibd
+t2#p#p0.ibd
+t2#p#p1.ibd
 # The ibd tablespaces should not be directly under the DATA DIRECTORY
 ---- MYSQLTEST_VARDIR/mysql-test-data-dir
 test
@@ -70,17 +70,17 @@ FLUSH TABLES;
 SHOW CREATE TABLE t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
-  `c1` int(11) DEFAULT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=latin1
-/*!50100 PARTITION BY HASH (c1)
+  `c1` int DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+/*!50100 PARTITION BY HASH (`c1`)
 (PARTITION p0 DATA DIRECTORY = 'MYSQLTEST_VARDIR/mysql-test-data-dir/' ENGINE = InnoDB,
  PARTITION p1 DATA DIRECTORY = 'MYSQLTEST_VARDIR/mysql-test-data-dir/' ENGINE = InnoDB) */
 SHOW CREATE TABLE t2;
 Table	Create Table
 t2	CREATE TABLE `t2` (
-  `c1` int(11) DEFAULT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=latin1
-/*!50100 PARTITION BY HASH (c1)
+  `c1` int DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+/*!50100 PARTITION BY HASH (`c1`)
 (PARTITION p0 DATA DIRECTORY = 'MYSQLTEST_VARDIR/mysql-test-data-dir/' ENGINE = InnoDB,
  PARTITION p1 DATA DIRECTORY = 'MYSQLTEST_VARDIR/mysql-test-data-dir/' ENGINE = InnoDB) */
 #
@@ -91,22 +91,22 @@ ALTER TABLE t1 engine=MyISAM REMOVE PARTITIONING;
 SHOW CREATE TABLE t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
-  `c1` int(11) DEFAULT NULL
-) ENGINE=MyISAM DEFAULT CHARSET=latin1
+  `c1` int DEFAULT NULL
+) ENGINE=MyISAM DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
 ALTER TABLE t2 engine=MyISAM REMOVE PARTITIONING;
 SHOW CREATE TABLE t2;
 Table	Create Table
 t2	CREATE TABLE `t2` (
-  `c1` int(11) DEFAULT NULL
-) ENGINE=MyISAM DEFAULT CHARSET=latin1
+  `c1` int DEFAULT NULL
+) ENGINE=MyISAM DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
 # Verifying .par and MyISAM files (.MYD, MYI)
 ---- MYSQLD_DATADIR/test
 t1.MYD
 t1.MYI
-t1_XXX.SDI
+t1_XXX.sdi
 t2.MYD
 t2.MYI
-t2_XXX.SDI
+t2_XXX.sdi
 ---- MYSQLTEST_VARDIR/mysql-test-data-dir
 test
 ---- MYSQLTEST_VARDIR/mysql-test-idx-dir
@@ -119,14 +119,14 @@ ALTER TABLE t1 engine=InnoDB;
 SHOW CREATE TABLE t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
-  `c1` int(11) DEFAULT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=latin1
+  `c1` int DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
 ALTER TABLE t2 engine=InnoDB;
 SHOW CREATE TABLE t2;
 Table	Create Table
 t2	CREATE TABLE `t2` (
-  `c1` int(11) DEFAULT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=latin1
+  `c1` int DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
 # Verifying InnoDB .ibd files
 ---- MYSQLD_DATADIR/test
 t1.ibd
@@ -161,17 +161,17 @@ ALTER TABLE test.t1 ENGINE= MyISAM REMOVE PARTITIONING;
 # datadir/test:
 t1.MYD
 t1.MYI
-t1_XXX.SDI
+t1_XXX.sdi
 # datadir/test2:
 ALTER TABLE test2.t1 ENGINE= MyISAM REMOVE PARTITIONING;
 # datadir/test:
 t1.MYD
 t1.MYI
-t1_XXX.SDI
+t1_XXX.sdi
 # datadir/test2:
 t1.MYD
 t1.MYI
-t1_XXX.SDI
+t1_XXX.sdi
 FLUSH TABLES;
 SELECT * FROM test.t1;
 a

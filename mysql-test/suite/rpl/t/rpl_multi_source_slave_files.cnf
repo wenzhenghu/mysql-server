@@ -6,19 +6,12 @@
 # instances when MTR runs rpl tests with parallel 4 or more.
 
 [mysqld.1]
-log-slave-updates
 
 [mysqld.2]
-master-info-repository=TABLE
-relay-log-info-repository=TABLE
-log-slave-updates
-log-bin
-log-slave-updates
 relay-log-purge=0
 relay-log-recovery=1
 sync_relay_log=10
 max-relay-log-size=1073741824
-relay-log-space-limit=1073741824
 relay-log=relaylog-msr
 relay-log-index=relaylog-msr.index
 sync-master-info=10
@@ -27,17 +20,14 @@ relay-log-info-file=relaylog-msr.information
 
 
 [mysqld.3]
-log-slave-updates
 loose-innodb_write_io_threads=    2
 loose-innodb_read_io_threads=     2
 
 [mysqld.4]
-log-slave-updates
 loose-innodb_write_io_threads=    2
 loose-innodb_read_io_threads=     2
 
 [mysqld.5]
-log-slave-updates
 loose-innodb_write_io_threads=    2
 loose-innodb_read_io_threads=     2
 

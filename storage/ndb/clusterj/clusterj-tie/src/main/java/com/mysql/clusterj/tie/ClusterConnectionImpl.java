@@ -1,14 +1,21 @@
 /*
- *  Copyright (c) 2010, 2016, Oracle and/or its affiliates. All rights reserved.
+ *  Copyright (c) 2010, 2020, Oracle and/or its affiliates.
  *
  *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; version 2 of the License.
+ *  it under the terms of the GNU General Public License, version 2.0,
+ *  as published by the Free Software Foundation.
+ *
+ *  This program is also distributed with certain software (including
+ *  but not limited to OpenSSL) that is licensed under separate terms,
+ *  as designated in a particular file or component or in included license
+ *  documentation.  The authors of MySQL hereby grant you an additional
+ *  permission to link the program and your derivative works with the
+ *  separately licensed software that they have included with MySQL.
  *
  *  This program is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
+ *  GNU General Public License, version 2.0, for more details.
  *
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, write to the Free Software
@@ -31,7 +38,9 @@ import com.mysql.ndbjtie.ndbapi.NdbDictionary.Dictionary;
 
 import com.mysql.clusterj.ClusterJDatastoreException;
 import com.mysql.clusterj.ClusterJFatalInternalException;
+import com.mysql.clusterj.ClusterJFatalUserException;
 import com.mysql.clusterj.ClusterJHelper;
+import com.mysql.clusterj.ClusterJUserException;
 
 import com.mysql.clusterj.core.spi.ValueHandlerFactory;
 import com.mysql.clusterj.core.store.Db;
@@ -102,6 +111,8 @@ public class ClusterConnectionImpl
 
     /** The dictionary used to create NdbRecords */
     Dictionary dictionaryForNdbRecord = null;
+
+    private boolean isClosing = false;
 
     private long[] autoIncrement;
 
@@ -223,14 +234,29 @@ public class ClusterConnectionImpl
         throw new ClusterJDatastoreException(msg);
     }
 
-    public void close() {
+    public void closing() {
+        this.isClosing = true;
         if (clusterConnection != null) {
             logger.info(local.message("INFO_Close_Cluster_Connection", connectString, nodeId));
-            for (DbImpl db: dbs.keySet()) {
-                // mark all dbs as closing so no more transactions will start
-                db.closing();
+            if (dbs.size() > 0) {
+                for (DbImpl db: dbs.keySet()) {
+                    // mark all dbs as closing so no more operations will start
+                    db.closing();
+                }
             }
-            dbForNdbRecord.closing();
+            if (dbForNdbRecord != null) {
+                dbForNdbRecord.closing();
+            }
+        }
+    }
+
+    public void close() {
+        if (clusterConnection != null) {
+            if (!this.isClosing) {
+                this.closing();
+                // sleep for 1000 milliseconds to allow operations in other threads to terminate
+                sleep(1000);
+            }
             if (dbs.size() != 0) {
                 Map<Db, Object> dbsToClose = new IdentityHashMap<Db, Object>(dbs);
                 for (Db db: dbsToClose.keySet()) {
@@ -247,6 +273,14 @@ public class ClusterConnectionImpl
             ndbRecordImplMap.clear();
             Ndb_cluster_connection.delete(clusterConnection);
             clusterConnection = null;
+        }
+    }
+
+    private void sleep(long millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
         }
     }
 
@@ -273,7 +307,7 @@ public class ClusterConnectionImpl
      * @return the NdbRecordImpl for the table
      */
     protected NdbRecordImpl getCachedNdbRecordImpl(Table storeTable) {
-        dbForNdbRecord.assertOpen("ClusterConnectionImpl.getCachedNdbRecordImpl for table");
+        dbForNdbRecord.assertNotClosed("ClusterConnectionImpl.getCachedNdbRecordImpl for table");
         // tableKey is table name plus projection indicator
         String tableName = storeTable.getKey();
         // find the NdbRecordImpl in the global cache
@@ -323,7 +357,7 @@ public class ClusterConnectionImpl
      * @return the NdbRecordImpl for the index
      */
     protected NdbRecordImpl getCachedNdbRecordImpl(Index storeIndex, Table storeTable) {
-        dbForNdbRecord.assertOpen("ClusterConnectionImpl.getCachedNdbRecordImpl for index");
+        dbForNdbRecord.assertNotClosed("ClusterConnectionImpl.getCachedNdbRecordImpl for index");
         String recordName = storeTable.getName() + "+" + storeIndex.getInternalName();
         // find the NdbRecordImpl in the global cache
         NdbRecordImpl result = ndbRecordImplMap.get(recordName);
@@ -431,4 +465,48 @@ public class ClusterConnectionImpl
         this.byteBufferPoolSizes = poolSizes;
     }
 
+    public void setRecvThreadCPUid(short cpuid) {
+        int ret = 0;
+        if (cpuid < 0) {
+            // Invalid cpu id
+            throw new ClusterJUserException(
+                    local.message("ERR_Invalid_CPU_Id", cpuid));
+        }
+        ret = clusterConnection.set_recv_thread_cpu(cpuid);
+        if (ret != 0) {
+            // Error in binding cpu
+            switch (ret) {
+            case 22:    /* EINVAL - Invalid CPU id error in Linux/FreeBSD */
+            case 31994: /* CPU_ID_MISSING_ERROR - Invalid CPU id error in Windows */
+                throw new ClusterJUserException(
+                        local.message("ERR_Invalid_CPU_Id", cpuid));
+            case 31999: /* BIND_CPU_NOT_SUPPORTED_ERROR */
+                throw new ClusterJFatalUserException(
+                        local.message("ERR_Bind_CPU_Not_Supported"));
+            default:
+                // Unknown error code. Print it to user.
+                throw new ClusterJFatalInternalException(
+                        local.message("ERR_Binding_Recv_Thread_To_CPU", cpuid, ret));
+            }
+        }
+    }
+
+    public void unsetRecvThreadCPUid() {
+        int ret = clusterConnection.unset_recv_thread_cpu();
+        if (ret == 31999) {
+            // BIND_CPU_NOT_SUPPORTED_ERROR
+            throw new ClusterJFatalUserException(
+                    local.message("ERR_Bind_CPU_Not_Supported"));
+        } else if (ret != 0) {
+            throw new ClusterJFatalInternalException(
+                    local.message("ERR_Unbinding_Recv_Thread_From_CPU", ret));
+        }
+    }
+
+    public void setRecvThreadActivationThreshold(int threshold) {
+        if (clusterConnection.set_recv_thread_activation_threshold(threshold) == -1) {
+            throw new ClusterJFatalInternalException(
+                    local.message("ERR_Setting_Activation_Threshold"));
+        }
+    }
 }

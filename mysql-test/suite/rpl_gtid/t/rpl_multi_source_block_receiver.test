@@ -16,6 +16,8 @@
 
 --source include/have_debug.inc
 --source include/have_debug_sync.inc
+# Test requires master-info-repository=TABLE, relay-log-info-repository=TABLE
+--source include/have_slave_repository_type_table.inc
 
 --let $rpl_skip_start_slave=1
 --let $rpl_gtid_utils=1
@@ -107,14 +109,16 @@ DROP TABLE t1;
 --let $sync_slave_connection= server_2
 --source include/sync_slave_sql_with_master.inc
 
+--let $rpl_channel_name= 'channel_3'
+--source include/start_slave.inc
+
 --let $rpl_connection_name= server_3
 --source include/rpl_connection.inc
 DROP TABLE t2;
 
---let $rpl_connection_name= server_2
---source include/rpl_connection.inc
 --let $rpl_channel_name= 'channel_3'
---source include/start_slave.inc
+--let $sync_slave_connection= server_2
+--source include/sync_slave_sql_with_master.inc
 
 --let $rpl_skip_sync=1
 --source include/rpl_end.inc

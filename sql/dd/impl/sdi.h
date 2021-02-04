@@ -1,22 +1,32 @@
-/* Copyright (c) 2015, 2017, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2015, 2020, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software Foundation,
-   51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 #ifndef DD__SDI_INCLUDED
 #define DD__SDI_INCLUDED
 
-#include "dd/string_type.h"                    // dd::String_type
+#include <functional>
+#include "my_compiler.h"
+#include "sql/dd/sdi_fwd.h"      // RJ_Document
+#include "sql/dd/string_type.h"  // dd::String_type
 
 class THD;
 struct handlerton;
@@ -25,8 +35,7 @@ struct handlerton;
   @file
   @ingroup sdi
 
-  Declares the SDI ((de)serialization) api which exposes
-  SDI-related functionality to the rest of the dictionary code.
+  Exposes SDI-related functionality to the rest of the dictionary code.
 */
 
 namespace dd {
@@ -35,7 +44,71 @@ class Schema;
 class Table;
 class Tablespace;
 class View;
-typedef String_type sdi_t;
+
+typedef String_type Sdi_type;
+
+/**
+  The version of the current SDI Json format.
+
+  This version number is stored inside SDIs. This number is bumpred only when
+  there is a change in how the data dictionary information is converted to json
+  (e.g. adding a forgotten member). It does not need to be bumped when the data
+  dictionary schema structure is changed, as this is covered by the DD_VERSION
+  variable.
+
+  The SDI version number is the MySQL server version number
+  of the first MySQL server version that published a given SDI Json format.
+  The format is Mmmdd with M=Major, m=minor, d=dot, so that MySQL 8.0.4 is
+  encoded as 80004. This is the same version numbering scheme as the
+  information schema and performance schema are using.
+
+  The next change to the SDI Json format will be associated with the next
+  available MySQL server version number.
+
+  Historical version number published in the data dictionary, (note that 1 is a
+  legacy number from before SDI version numbers were mapped to server versions):
+
+
+  1: Published in 8.0.15
+  ----------------------------------------------------------------------------
+  Initial version.
+
+
+  80016: Published in 8.0.16
+  ----------------------------------------------------------------------------
+  Changes from version 1:
+
+  - Bug#29210646: DD::INDEX_IMPL::M_HIDDEN NOT INCLUDED IN SDI
+
+
+  80019: Current
+  ----------------------------------------------------------------------------
+  Changes from version 80016:
+
+  - Bug#30326020: SUBPARTITIONING NOT REFLECTED IN SDI
+
+
+  800XX: Next SDI version number after the previous is public. The next
+         server version > current SDI version where a change to the SDI
+         JSON format is made.
+  ----------------------------------------------------------------------------
+  Changes from current version:
+
+  - No changes, this version number is not active yet.
+
+  If a new SDI version is published in a MRU, it will not
+  be possible to import this version into previous MRUs within the same GA.
+*/
+constexpr const std::uint64_t SDI_VERSION = 80019;
+
+/**
+  @defgroup serialize_api (De)serialize api functions.
+  @ingroup sdi
+
+  Functions for serializing (with complete header) and deserializing
+  the dd object which supports this.
+  @{
+ */
 
 /**
   Serialize a Schema object.
@@ -45,20 +118,19 @@ typedef String_type sdi_t;
   @return sdi (as json string).
 
 */
-sdi_t serialize(const Schema &schema);
-
+Sdi_type serialize(const Schema &schema);
 
 /**
   Serialize a Table object.
 
-  @param thd
+  @param thd thread context
   @param table object which will be serialized
-  @param schema_name
+  @param schema_name name of the schema
   @return sdi (as json string).
 
 */
-sdi_t serialize(THD *thd, const Table &table, const String_type &schema_name);
-
+Sdi_type serialize(THD *thd, const Table &table,
+                   const String_type &schema_name);
 
 /**
   Serialize a Tablespace object.
@@ -69,28 +141,20 @@ sdi_t serialize(THD *thd, const Table &table, const String_type &schema_name);
 
 */
 
-sdi_t serialize(const Tablespace &tablespace);
-
+Sdi_type serialize(const Tablespace &tablespace);
 
 /**
-  Deserialize a dd::Schema object.
-
-  Populates the dd::Schema object provided with data from sdi string.
-  Note! Additional objects are dynamically allocated and added to the
-  top-level Schema object, which assumes ownership.
-
-  @param thd thread context
-  @param sdi  serialized representation of schema (as a json string)
-  @param schema empty top-level object
-
-  @return error status
-    @retval false if successful
-    @retval true otherwise
-
+   Type alias for std::function wrapping a callable to check if
+   SDI, as an RJ_Document, is compatible. Normale MySQL error handling.
+   Return value: false => success, true => error in DA.
 */
+using SdiCompatibilityChecker = std::function<bool(const RJ_Document &)>;
 
-bool deserialize(THD *thd, const sdi_t &sdi, Schema *schema);
+bool CheckDefaultCompatibility(const RJ_Document &);
 
+bool deserialize(THD *thd, const Sdi_type &sdi, Table *table,
+                 SdiCompatibilityChecker comp_checker,
+                 String_type *deser_schema_name = nullptr);
 
 /**
   Deserialize a dd::Table object.
@@ -98,6 +162,8 @@ bool deserialize(THD *thd, const sdi_t &sdi, Schema *schema);
   Populates the dd::Table object provided with data from sdi string.
   Note! Additional objects are dynamically allocated and added to the
   top-level Schema object, which assumes ownership.
+  @note Uses the default strict compatibility checking, @see
+  DefaultCheckCompatibility
 
   @param thd thread context
   @param sdi  serialized representation of schema (as a json string)
@@ -107,12 +173,15 @@ bool deserialize(THD *thd, const sdi_t &sdi, Schema *schema);
   @return error status
     @retval false if successful
     @retval true otherwise
-
 */
+inline bool deserialize(THD *thd, const Sdi_type &sdi, Table *table,
+                        String_type *deser_schema_name = nullptr) {
+  return deserialize(thd, sdi, table, CheckDefaultCompatibility,
+                     deser_schema_name);
+}
 
-bool deserialize(THD *thd, const sdi_t &sdi, Table *table,
-                 String_type *deser_schema_name= nullptr);
-
+bool deserialize(THD *thd, const Sdi_type &sdi, Tablespace *tablespace,
+                 SdiCompatibilityChecker comp_checker);
 
 /**
   Deserialize a dd::Tablespace object.
@@ -121,6 +190,9 @@ bool deserialize(THD *thd, const sdi_t &sdi, Table *table,
   Note! Additional objects are dynamically allocated and added to the
   top-level Tablespace object, which assumes ownership.
 
+  @note Uses the default strict compatibility checking, @see
+  DefaultCheckCompatibility
+
   @param thd thread context
   @param sdi  serialized representation of schema (as a json string)
   @param tablespace empty top-level object
@@ -128,55 +200,40 @@ bool deserialize(THD *thd, const sdi_t &sdi, Table *table,
   @return error status
     @retval false if successful
     @retval true otherwise
-
 */
+inline bool deserialize(THD *thd, const Sdi_type &sdi, Tablespace *tablespace) {
+  return deserialize(thd, sdi, tablespace, CheckDefaultCompatibility);
+}
 
-bool deserialize(THD *thd, const sdi_t &sdi, Tablespace *tablespace);
-
-
-/**
-  Wl#7524
- */
-bool import_sdi(THD *thd, Table *table, const String_type &schema_name);
-
+/** @} End of group serialize_api */
 
 namespace sdi {
+
+/**
+  @defgroup sdi_storage_ops Storage operations on SDIs.
+  @ingroup sdi
+
+  Functions for storing and dropping (deleting) SDIs. To be used from
+  dd::cache::Storage_adapter and dd::cache::Dictionary_client to store
+  and remove SDIs as DD objects are added, modified or deleted.
+  @{
+*/
 
 /**
   Generic noop for all types that don't have a specific overload. No
   SDIs are written for these types.
 
-  @param thd
-  @param ddo
+  @param thd thread context
+  @param ddo DD object
   @return error status
     @retval false always
  */
 
 template <class DDT>
 inline bool store(THD *thd MY_ATTRIBUTE((unused)),
-                  const DDT *ddo MY_ATTRIBUTE((unused)))
-{
+                  const DDT *ddo MY_ATTRIBUTE((unused))) {
   return false;
 }
-
-
-/**
-  Stores the SDI for a Schema.
-
-  Serializes the schema object, and then forwards to SE through handlerton
-  api, or falls back to storing the sdi string in an .SDI file in the
-  default case.
-
-  @param thd    Thread handle.
-  @param s      Schema object.
-
-  @return error status
-    @retval false on success
-    @retval true otherwise
-*/
-
-bool store(THD *thd, const Schema *s);
-
 
 /**
   Stores the SDI for a table.
@@ -187,7 +244,7 @@ bool store(THD *thd, const Schema *s);
   if the schema's SDI file does not exist, or if is missing from the
   tablespace used to store the table.
 
-  @param thd
+  @param thd thread context
   @param t Table object.
 
   @return error status
@@ -197,7 +254,6 @@ bool store(THD *thd, const Schema *s);
 
 bool store(THD *thd, const Table *t);
 
-
 /**
   Stores the SDI for a table space.
 
@@ -205,7 +261,7 @@ bool store(THD *thd, const Table *t);
   handlerton api, or falls back to storing the sdi string in an .SDI
   file in the default case.
 
-  @param thd
+  @param thd thread context
   @param ts     Tablespace object.
 
   @return error status
@@ -215,41 +271,19 @@ bool store(THD *thd, const Table *t);
 
 bool store(THD *thd, const Tablespace *ts);
 
-
 /**
   Generic noop for all types that don't have a specific overload. No
   SDIs are removed for these types.
 
-  @param thd
+  @param thd thread context
   @return error status
     @retval false always
  */
 
 template <class DDT>
-inline bool drop(THD *thd MY_ATTRIBUTE((unused)),
-                 const DDT*)
-{
+inline bool drop(THD *thd MY_ATTRIBUTE((unused)), const DDT *) {
   return false;
 }
-
-
-/**
-  Remove SDI for a schema.
-
-  Forwards to SE through handlerton api, which will remove from
-  tablespace, or falls back to deleting the .SDI file in the default
-  case.
-
-  @param thd
-  @param s      Schema object.
-
-  @return error status
-    @retval false on success
-    @retval true otherwise
-*/
-
-bool drop(THD *thd, const Schema *s);
-
 
 /**
   Remove SDI for a table.
@@ -258,7 +292,7 @@ bool drop(THD *thd, const Schema *s);
   tablespace, or falls back to deleting the .SDI file in the default
   case.
 
-  @param thd
+  @param thd thread context
   @param t Table object.
 
   @return error status
@@ -268,32 +302,16 @@ bool drop(THD *thd, const Schema *s);
 
 bool drop(THD *thd, const Table *t);
 
-
-/**
-  Remove SDI for a table space.
-
-  Forwards to SE through handlerton api, which will remove from
-  tablespace, or falls back to deleting the .SDI file in the default
-  case.
-
-  @param thd    Thread handle.
-  @param ts     Tablespace object.
-
-  @return error status
-    @retval false on success
-    @retval true otherwise
-*/
-
-bool drop(THD *thd, const Tablespace *ts);
-
+// Note that there is NO drop() overload for Tablespace. Dropping a
+// tablespace implies that all sdis in it are dropped also.
 
 /**
   Hook for SDI cleanup after updating DD object. Generic noop for all
   types that don't have a specific overload.
 
-  @param thd
-  @param old_ddo
-  @param new_ddo
+  @param thd thread context
+  @param old_ddo old DD object
+  @param new_ddo new DD object
   @return error status
     @retval false always
  */
@@ -301,32 +319,9 @@ bool drop(THD *thd, const Tablespace *ts);
 template <class DDT>
 inline bool drop_after_update(THD *thd MY_ATTRIBUTE((unused)),
                               const DDT *old_ddo MY_ATTRIBUTE((unused)),
-                              const DDT *new_ddo MY_ATTRIBUTE((unused)))
-{
+                              const DDT *new_ddo MY_ATTRIBUTE((unused))) {
   return false;
 }
-
-
-/**
-  Schema cleanup hook. When Dictionary_client issues a store which is
-  performed as an update in the DD a new schema SDI file will be
-  stored. If the update modifies the name of the schema it is
-  necessary to remove the old SDI file after the new one has been
-  written successfully. If the file names are the same the file is
-  updated in place, potentially leaving it corrupted if something goes
-  wrong.
-
-  @param thd
-  @param old_s old Schema object
-  @param new_s new Schema object
-
-  @return error status
-    @retval false on success
-    @retval true otherwise
-*/
-
-bool drop_after_update(THD *thd, const Schema *old_s, const Schema *new_s);
-
 
 /**
   Table cleanup hook. When a Dictionary_client issues a store which is
@@ -339,7 +334,7 @@ bool drop_after_update(THD *thd, const Schema *old_s, const Schema *new_s);
   will use the same key even if the names change and the update will
   transactional so then this hook does nothing.
 
-  @param thd
+  @param thd thread context
   @param old_t old Schema object
   @param new_t new Schema object
 
@@ -350,7 +345,8 @@ bool drop_after_update(THD *thd, const Schema *old_s, const Schema *new_s);
 
 bool drop_after_update(THD *thd, const Table *old_t, const Table *new_t);
 
-} // namespace sdi
-} // namespace dd
+/** @} End of group sdi_storage_ops */
+}  // namespace sdi
+}  // namespace dd
 
 #endif /* DD__SDI_INCLUDED */

@@ -1,15 +1,6 @@
 --source include/have_debug.inc
 --source include/have_debug_sync.inc
 
-########################################
-##### WL#7554 Force schema `test` to character set latin1
-##### This test should be migrated to utf8mb4
---disable_query_log
-let $testdbcs35=`select default_character_set_name from information_schema.schemata where schema_name='test'`;
-alter schema test default character set latin1;
---enable_query_log
-########################################
-
 --source include/count_sessions.inc
 
 SET NAMES utf8;
@@ -85,9 +76,30 @@ drop table t1;
 # Wait till all disconnects are completed
 --source include/wait_until_count_sessions.inc
 
-########################################
-##### WL#7554 set schema `test` back to what it was
---disable_query_log
---eval alter schema test default character set $testdbcs35;
---enable_query_log
-########################################
+--echo #
+--echo # Bug #27753193  ASSERTION `PREBUILT->TRX->ERROR_KEY_NUM <
+--echo #                HA_ALTER_INFO->KEY_COUNT'
+
+CREATE TABLE t1 (a INT, UNIQUE KEY(a)) ENGINE = INNODB;
+INSERT INTO t1 VALUES (1);
+
+SET DEBUG_SYNC = 'row_log_table_apply1_before signal S1 WAIT_FOR S2';
+--send OPTIMIZE TABLE t1;
+
+CONNECT (con1,localhost,root,,);
+CONNECTION con1;
+SET DEBUG_SYNC = 'now WAIT_FOR S1';
+--error ER_DUP_ENTRY
+INSERT INTO t1 VALUES (1);
+SET DEBUG_SYNC = 'now SIGNAL S2';
+
+CONNECTION default;
+--echo /* reap */ OPTIMIZE TABLE t1;
+--reap
+DISCONNECT con1;
+SET DEBUG_SYNC='RESET';
+
+DROP TABLE t1;
+
+# Wait till all disconnects are completed
+--source include/wait_until_count_sessions.inc

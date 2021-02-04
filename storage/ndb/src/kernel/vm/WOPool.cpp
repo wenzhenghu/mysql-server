@@ -1,14 +1,21 @@
 /*
-   Copyright (c) 2006, 2016, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2006, 2020, Oracle and/or its affiliates.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -50,7 +57,7 @@ WOPool<T>::seize_new_page(Ptr<T>& ptr)
 {
   WOPage* page;
   Uint32 page_no = RNIL;
-  if ((page = (WOPage*)m_ctx.alloc_page(m_record_info.m_type_id, &page_no)))
+  if ((page = (WOPage*)m_ctx.alloc_page19(m_record_info.m_type_id, &page_no)))
   {
     if (m_current_page)
     {
@@ -72,7 +79,8 @@ template<typename T>
 void
 WOPool<T>::release_not_current(Ptr<T> ptr)
 {
-  WOPage* page = (WOPage*)(UintPtr(ptr.p) & ~(GLOBAL_PAGE_SIZE - 1));
+  const Uint32 pageI = ptr.i >> POOL_RECORD_BITS;
+  WOPage* page = m_memroot + pageI;
   Uint32 cnt = page->m_ref_count;
   Uint32 type = page->m_type_id;
   Uint32 ri_type = m_record_info.m_type_id;
@@ -80,7 +88,7 @@ WOPool<T>::release_not_current(Ptr<T> ptr)
   {
     if (cnt == 1)
     {
-      m_ctx.release_page(ri_type, ptr.i >> POOL_RECORD_BITS);
+      m_ctx.release_page(ri_type, pageI);
       return;
     }
     page->m_ref_count = cnt - 1;
@@ -135,7 +143,8 @@ template<typename T>
 void
 WOPool<T>::handle_inconsistent_release(Ptr<T> ptr)
 {
-  WOPage* page = (WOPage*)(UintPtr(ptr.p) & ~(GLOBAL_PAGE_SIZE - 1));
+  const Uint32 pageI = ptr.i >> POOL_RECORD_BITS;
+  WOPage* page = m_memroot + pageI;
   Uint32 cnt = page->m_ref_count;
   Uint32 type = page->m_type_id;
   Uint32 ri_type = m_record_info.m_type_id;

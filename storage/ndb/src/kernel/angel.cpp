@@ -1,21 +1,30 @@
-/* Copyright (c) 2009, 2016, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2009, 2020, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA */
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 
 #include <ndb_global.h>
 #include <ndb_version.h>
+
+#include <memory>
 
 #include "angel.hpp"
 #include "ndbd.hpp"
@@ -29,6 +38,7 @@
 #include <ConfigRetriever.hpp>
 
 #include <EventLogger.hpp>
+#include <NdbTCP.h>
 extern EventLogger * g_eventLogger;
 
 static void
@@ -98,7 +108,7 @@ reportShutdown(const ndb_mgm_configuration* config,
       continue;
 
     BaseString connect_str;
-    connect_str.assfmt("%s:%d", hostname, port);
+    connect_str.assfmt("%s %d", hostname, port);
 
 
     NdbMgmHandle h = ndb_mgm_create_handle();
@@ -578,9 +588,11 @@ angel_run(const char* progname,
                          "error: '%s'", retriever.getErrorString());
     angel_exit(1);
   }
-  g_eventLogger->info("Angel connected to '%s:%d'",
-                      retriever.get_mgmd_host(),
-                      retriever.get_mgmd_port());
+
+  char buf[512];
+  char* sockaddr_string = Ndb_combine_address_port(buf, sizeof(buf), retriever.get_mgmd_host(),
+                           retriever.get_mgmd_port());
+  g_eventLogger->info("Angel connected to '%s'", sockaddr_string);
 
   const int alloc_retries = 10;
   const int alloc_delay = 3;
@@ -593,8 +605,10 @@ angel_run(const char* progname,
   }
   g_eventLogger->info("Angel allocated nodeid: %u", nodeid);
 
-  ndb_mgm_configuration * config = retriever.getConfig(nodeid);
-  NdbAutoPtr<ndb_mgm_configuration> config_autoptr(config);
+  std::unique_ptr<ndb_mgm_configuration, ConfigRetriever::ConfigDeleter>
+      config_autoptr{retriever.getConfig(nodeid)};
+  ndb_mgm_configuration* config{config_autoptr.get()};
+
   if (config == 0)
   {
     g_eventLogger->error("Could not fetch configuration/invalid "
@@ -666,6 +680,9 @@ angel_run(const char* progname,
     args.push_back(one_arg);
 
     one_arg.assfmt("--nostart=%d", no_start);
+    args.push_back(one_arg);
+
+    one_arg.assfmt("--angel-pid=%d", getpid());
     args.push_back(one_arg);
 
     pid_t child = retry_spawn_process(progname, args);

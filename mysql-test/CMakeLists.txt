@@ -1,43 +1,70 @@
-# Copyright (c) 2009, 2015, Oracle and/or its affiliates. All rights reserved.
+# Copyright (c) 2009, 2020, Oracle and/or its affiliates. All rights reserved.
 # 
 # This program is free software; you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; version 2 of the License.
-# 
+# it under the terms of the GNU General Public License, version 2.0,
+# as published by the Free Software Foundation.
+#
+# This program is also distributed with certain software (including
+# but not limited to OpenSSL) that is licensed under separate terms,
+# as designated in a particular file or component or in included license
+# documentation.  The authors of MySQL hereby grant you an additional
+# permission to link the program and your derivative works with the
+# separately licensed software that they have included with MySQL.
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-# 
+# GNU General Public License, version 2.0, for more details.
+#
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
-# Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301 USA
+# Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
 
 # Skip -- Up-to-date messages in case of multiple 'make install'.
 # This works for CMAKE 3.1.3 and up
 SET(CMAKE_INSTALL_MESSAGE LAZY)
 
 IF(INSTALL_MYSQLTESTDIR)
-INSTALL(
-  DIRECTORY .
-  DESTINATION ${INSTALL_MYSQLTESTDIR}
-  USE_SOURCE_PERMISSIONS
-  COMPONENT Test
-  PATTERN "var/" EXCLUDE
-  PATTERN "lib/My/SafeProcess" EXCLUDE
-  PATTERN "lib/t*" EXCLUDE
-  PATTERN "CPack" EXCLUDE
-  PATTERN "CMake*" EXCLUDE
-  PATTERN "mtr.out*" EXCLUDE
-  PATTERN ".cvsignore" EXCLUDE
-  PATTERN "*.am" EXCLUDE
-  PATTERN "*.in" EXCLUDE
-)
+  INSTALL(
+    DIRECTORY .
+    DESTINATION ${INSTALL_MYSQLTESTDIR}
+    USE_SOURCE_PERMISSIONS
+    COMPONENT Test
+    PATTERN "var" EXCLUDE
+    PATTERN "var/" EXCLUDE
+    PATTERN "lib/My/SafeProcess" EXCLUDE
+    PATTERN "CPack" EXCLUDE
+    PATTERN "CMake*" EXCLUDE
+    PATTERN "Makefile" EXCLUDE
+    PATTERN "mtr.out*" EXCLUDE
+    PATTERN "*.cmake" EXCLUDE
+    PATTERN "*.in" EXCLUDE
+    )
+  IF(NOT INSTALL_LAYOUT MATCHES "RPM" AND
+      NOT INSTALL_LAYOUT MATCHES "DEB")
+    INSTALL(FILES ${CMAKE_SOURCE_DIR}/LICENSE
+      DESTINATION ${INSTALL_DOCREADMEDIR}
+      COMPONENT TestReadme
+      RENAME LICENSE-test
+      )
+    INSTALL(FILES ${CMAKE_SOURCE_DIR}/README
+      DESTINATION ${INSTALL_DOCREADMEDIR}
+      COMPONENT TestReadme
+      RENAME README-test
+      )
+  ENDIF()
 ENDIF()
 
 
 IF(NOT ${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_BINARY_DIR})
   # Enable running mtr from build directory
+  FIND_PROGRAM(PERL_EXECUTABLE perl
+    /usr/bin /usr/local/bin
+    NO_CMAKE_ENVIRONMENT_PATH
+    NO_SYSTEM_ENVIRONMENT_PATH)
+  # If not found in hard-coded list above, look in PATH as well.
+  FIND_PROGRAM(PERL_EXECUTABLE perl)
+
   CONFIGURE_FILE(
     ${CMAKE_CURRENT_SOURCE_DIR}/mtr.out-of-source 
     ${CMAKE_CURRENT_BINARY_DIR}/mysql-test-run.pl
@@ -72,12 +99,11 @@ IF(DEBUG_EXTNAME)
 ENDIF()
 
 IF(CMAKE_BUILD_TYPE)
-  IF(CMAKE_BUILD_TYPE MATCHES "Debug")
+  IF(CMAKE_BUILD_TYPE_UPPER STREQUAL "DEBUG")
     SET(DEBUG_SERVER "--debug-server")
   ELSE()
     SET(DEBUG_SERVER "")
-    IF(CMAKE_GENERATOR MATCHES "Visual Studio" OR
-       CMAKE_GENERATOR MATCHES "Xcode")
+    IF(NOT BUILD_IS_SINGLE_CONFIG)
       SET(VS_CONFIG "--vs-config=${CMAKE_CFG_INTDIR}")
     ENDIF()
   ENDIF()
@@ -113,16 +139,19 @@ MACRO(PROCESS_COLLECTION_INCLUDE collin collection)
   ENDFOREACH()
 ENDMACRO()
 
-FILE(GLOB infiles "collections/*.in")
-FOREACH(collin ${infiles})
-  STRING(REPLACE ".in" "" collection ${collin})
-  STRING(REPLACE ".in" ".done" colldone ${collin})
-  # Only generate file once
-  IF(NOT EXISTS ${colldone})
-    PROCESS_COLLECTION_INCLUDE(${collin} ${collection})
-    FILE(APPEND ${colldone} "${collin}\n")
-  ENDIF()
-ENDFOREACH()
+# For internal testing in PB2, append collections files
+IF(DEFINED ENV{PB2WORKDIR})
+  FILE(GLOB infiles "collections/*.in")
+  FOREACH(collin ${infiles})
+    STRING(REPLACE ".in" "" collection ${collin})
+    STRING(REPLACE ".in" ".done" colldone ${collin})
+    # Only generate file once
+    IF(NOT EXISTS ${colldone})
+      PROCESS_COLLECTION_INCLUDE(${collin} ${collection})
+      FILE(APPEND ${colldone} "${collin}\n")
+    ENDIF()
+  ENDFOREACH()
+ENDIF()
 
 # With different MAX_INDEXES values, server might behave differently in
 # certain cases. 'max_indexes.inc' file should be updated accordingly to

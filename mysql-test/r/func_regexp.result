@@ -10,7 +10,7 @@ Table	Create Table
 t1	CREATE TABLE `t1` (
   `s1` varchar(64) CHARACTER SET latin1 DEFAULT NULL,
   `s2` varchar(64) CHARACTER SET latin1 DEFAULT NULL
-) ENGINE=default_engine DEFAULT CHARSET=utf8mb4
+) ENGINE=default_engine DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
 delete from t1;
 insert into t1 values('aaa','aaa');
 insert into t1 values('aaa|qqq','qqq');
@@ -25,7 +25,6 @@ insert into t1 values('aaa','aba');
 insert into t1 values(null,'abc');
 insert into t1 values('def',null);
 insert into t1 values(null,null);
-insert into t1 values('ghi','ghi[');
 select HIGH_PRIORITY s1 regexp s2 from t1;
 s1 regexp s2
 1
@@ -41,7 +40,8 @@ s1 regexp s2
 NULL
 NULL
 NULL
-NULL
+SELECT 'ghi' REGEXP 'ghi[';
+ERROR HY000: The regular expression contains an unclosed bracket expression.
 drop table t1;
 create table t1 (xxx char(128));
 insert into t1 (xxx) values('this is a test of some long text to see what happens');
@@ -51,12 +51,11 @@ test.t1	analyze	status	OK
 select * from t1 where xxx regexp('is a test of some long text to');
 xxx
 this is a test of some long text to see what happens
-explain extended select * from t1 where xxx regexp('is a test of some long text to');
+explain select * from t1 where xxx regexp('is a test of some long text to');
 id	select_type	table	partitions	type	possible_keys	key	key_len	ref	rows	filtered	Extra
 1	SIMPLE	t1	NULL	ALL	NULL	NULL	NULL	NULL	1	100.00	Using where
 Warnings:
-Warning	1681	'EXTENDED' is deprecated and will be removed in a future release.
-Note	1003	/* select#1 */ select `test`.`t1`.`xxx` AS `xxx` from `test`.`t1` where (`test`.`t1`.`xxx` regexp 'is a test of some long text to')
+Note	1003	/* select#1 */ select `test`.`t1`.`xxx` AS `xxx` from `test`.`t1` where regexp_like(`test`.`t1`.`xxx`,'is a test of some long text to')
 select * from t1 where xxx regexp('is a test of some long text to ');
 xxx
 this is a test of some long text to see what happens
@@ -70,9 +69,12 @@ drop table t1;
 create table t1 (xxx char(128));
 insert into t1 (xxx) values('this is some text: to test - out.reg exp (22/45)');
 select * from t1 where xxx REGEXP '^this is some text: to test - out\\.reg exp [[(][0-9]+[/\\][0-9]+[])][ ]*$';
-xxx
-this is some text: to test - out.reg exp (22/45)
+ERROR HY000: The regular expression contains an unclosed bracket expression.
 drop table t1;
+# The Henry Spencer library used prior to ICU was inonsistent
+# here. When the regular expression search is performed in a
+# case-insensitive manner, both '[[:lower:]]' and '[[:upper:]]'
+# will match.
 select _latin1 0xFF regexp _latin1 '[[:lower:]]' COLLATE latin1_bin;
 _latin1 0xFF regexp _latin1 '[[:lower:]]' COLLATE latin1_bin
 1
@@ -119,17 +121,14 @@ SELECT 1 REGEXP NULL;
 1 REGEXP NULL
 NULL
 SELECT '' REGEXP BINARY NULL;
-'' REGEXP BINARY NULL
-NULL
+ERROR HY000: Character set 'latin1_swedish_ci' cannot be used in conjunction with 'binary' in call to regexp_like.
 SELECT NULL REGEXP BINARY NULL;
 NULL REGEXP BINARY NULL
 NULL
 SELECT 'A' REGEXP BINARY NULL;
-'A' REGEXP BINARY NULL
-NULL
+ERROR HY000: Character set 'latin1_swedish_ci' cannot be used in conjunction with 'binary' in call to regexp_like.
 SELECT "ABC" REGEXP BINARY NULL;
-"ABC" REGEXP BINARY NULL
-NULL
+ERROR HY000: Character set 'latin1_swedish_ci' cannot be used in conjunction with 'binary' in call to regexp_like.
 End of 5.0 tests
 CREATE TABLE t1(a INT, b CHAR(4));
 INSERT INTO t1 VALUES (1, '6.1'), (1, '7.0'), (1, '8.0');
@@ -154,7 +153,7 @@ SELECT ' '  REGEXP '[[:blank:]]';
 1
 SELECT '\t' REGEXP '[[:blank:]]';
 '\t' REGEXP '[[:blank:]]'
-0
+1
 SELECT ' '  REGEXP '[[:space:]]';
 ' '  REGEXP '[[:space:]]'
 1
@@ -167,3 +166,7 @@ SELECT '\t' REGEXP '[[:space:]]';
 #
 DO 1 regexp (multilinestring(point(1,1)));
 ERROR HY000: Incorrect arguments to multilinestring
+#
+# Bug#58026: massive recursion and crash in regular expression handling
+#
+SELECT '1' RLIKE RPAD('1', 10000, '(');

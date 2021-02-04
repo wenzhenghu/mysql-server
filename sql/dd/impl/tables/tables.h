@@ -1,33 +1,41 @@
-/* Copyright (c) 2014, 2017, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2014, 2020, Oracle and/or its affiliates.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software Foundation,
-   51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 #ifndef DD_TABLES__TABLES_INCLUDED
 #define DD_TABLES__TABLES_INCLUDED
 
 #include <string>
 
-#include "dd/impl/raw/raw_record.h"
-#include "dd/impl/types/dictionary_object_table_impl.h" // dd::Dictionary_obj...
-#include "dd/object_id.h"                               // dd::Object_id
 #include "my_inttypes.h"
+#include "sql/dd/impl/raw/raw_record.h"
+#include "sql/dd/impl/types/entity_object_table_impl.h"
+#include "sql/dd/object_id.h"  // dd::Object_id
+#include "sql/dd/string_type.h"
+#include "sql/dd/types/abstract_table.h"
 
 namespace dd {
 
-class Object_key;
-class Dictionary_object;
 class Item_name_key;
+class Object_key;
 class Open_dictionary_tables_ctx;
 class Se_private_id_key;
 
@@ -35,20 +43,13 @@ namespace tables {
 
 ///////////////////////////////////////////////////////////////////////////
 
-class Tables : public Dictionary_object_table_impl
-{
-public:
+class Tables : public Entity_object_table_impl {
+ public:
   static const Tables &instance();
 
-  static const String_type &table_name()
-  {
-    static String_type s_table_name("tables");
-    return s_table_name;
-  }
+  static const CHARSET_INFO *name_collation();
 
-public:
-  enum enum_fields
-  {
+  enum enum_fields {
     FIELD_ID,
     FIELD_SCHEMA_ID,
     FIELD_NAME,
@@ -65,9 +66,11 @@ public:
     FIELD_TABLESPACE_ID,
     FIELD_PARTITION_TYPE,
     FIELD_PARTITION_EXPRESSION,
+    FIELD_PARTITION_EXPRESSION_UTF8,
     FIELD_DEFAULT_PARTITIONING,
     FIELD_SUBPARTITION_TYPE,
     FIELD_SUBPARTITION_EXPRESSION,
+    FIELD_SUBPARTITION_EXPRESSION_UTF8,
     FIELD_DEFAULT_SUBPARTITIONING,
     FIELD_CREATED,
     FIELD_LAST_ALTERED,
@@ -80,25 +83,42 @@ public:
     FIELD_VIEW_DEFINER,
     FIELD_VIEW_CLIENT_COLLATION_ID,
     FIELD_VIEW_CONNECTION_COLLATION_ID,
-    FIELD_VIEW_COLUMN_NAMES
+    FIELD_VIEW_COLUMN_NAMES,
+    FIELD_LAST_CHECKED_FOR_UPGRADE_VERSION_ID,
+    FIELD_ENGINE_ATTRIBUTE,
+    FIELD_SECONDARY_ENGINE_ATTRIBUTE,
+    NUMBER_OF_FIELDS  // Always keep this entry at the end of the enum
   };
 
-public:
+  enum enum_indexes {
+    INDEX_PK_ID = static_cast<uint>(Common_index::PK_ID),
+    INDEX_UK_SCHEMA_ID_NAME = static_cast<uint>(Common_index::UK_NAME),
+    INDEX_UK_ENGINE_SE_PRIVATE_ID,
+    INDEX_K_ENGINE,
+    INDEX_K_COLLATION_ID,
+    INDEX_K_TABLESPACE_ID,
+    INDEX_K_TYPE,
+    INDEX_K_VIEW_CLIENT_COLLATION_ID,
+    INDEX_K_VIEW_CONNECTION_COLLATION_ID,
+    INDEX_K_TYPE_VIEW_DEFINER
+  };
+
+  enum enum_foreign_keys {
+    FK_SCHEMA_ID,
+    FK_COLLATION_ID,
+    FK_TABLESPACE_ID,
+    FK_VIEW_CLIENT_COLLATION_ID,
+    FK_VIEW_CONNECTION_COLLATION_ID
+  };
+
   Tables();
 
-  virtual const String_type &name() const
-  { return Tables::table_name(); }
+  Abstract_table *create_entity_object(const Raw_record &r) const override;
 
-  virtual Dictionary_object *create_dictionary_object(
-    const Raw_record &r) const;
-
-public:
-  static bool update_object_key(Item_name_key *key,
-                                Object_id schema_id,
+  static bool update_object_key(Item_name_key *key, Object_id schema_id,
                                 const String_type &table_name);
 
-  static bool update_aux_key(Se_private_id_key *key,
-                             const String_type &engine,
+  static bool update_aux_key(Se_private_id_key *key, const String_type &engine,
                              ulonglong se_private_id);
 
   static Object_key *create_se_private_key(const String_type &engine,
@@ -108,16 +128,21 @@ public:
 
   static Object_key *create_key_by_tablespace_id(Object_id tablespace_id);
 
-  static bool max_se_private_id(Open_dictionary_tables_ctx *otx,
-                                const String_type &engine,
-                                ulonglong *max_id);
+  /**
+    Create a key to find all views for a given definer.
+
+    @param definer   Name of the definer.
+
+    @returns Pointer to Object_key.
+  */
+  static Object_key *create_key_by_definer(const String_type &definer);
 
   static ulonglong read_se_private_id(const Raw_record &r);
 };
 
 ///////////////////////////////////////////////////////////////////////////
 
-}
-}
+}  // namespace tables
+}  // namespace dd
 
-#endif // DD_TABLES__TABLES_INCLUDED
+#endif  // DD_TABLES__TABLES_INCLUDED

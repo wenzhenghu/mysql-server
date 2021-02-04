@@ -1,14 +1,5 @@
 --source include/have_debug_sync.inc
 
-########################################
-##### WL#7554 Force schema `test` to character set latin1
-##### This test should be migrated to utf8mb4
---disable_query_log
-let $testdbcs39=`select default_character_set_name from information_schema.schemata where schema_name='test'`;
-alter schema test default character set latin1;
---enable_query_log
-########################################
-
 let $innodb_metrics_select=
 SELECT name, count FROM INFORMATION_SCHEMA.INNODB_METRICS WHERE
 subsystem = 'ddl' and count > 0;
@@ -83,8 +74,9 @@ ALTER TABLE t1 ADD UNIQUE INDEX(c2);
 connection default;
 DELETE FROM t1 WHERE c1 = 7;
 connection con1;
-# ADD FOREIGN KEY is not supported in-place
---error ER_ALTER_OPERATION_NOT_SUPPORTED_REASON
+# The new FOREIGN KEY will make a new supporting index be created, but there
+# is no additional index that can be used as parent index.
+--error ER_FK_NO_INDEX_PARENT
 ALTER TABLE t1 ADD FOREIGN KEY(c2) REFERENCES t1(c2), ALGORITHM = INPLACE;
 # The previous DEBUG_SYNC should be ignored, because an exclusive lock
 # has been requested and the online log is not being allocated.
@@ -148,10 +140,6 @@ AND stat_value = 6;
 SELECT * FROM mysql.innodb_index_stats WHERE table_name IN ('t1');
 CREATE TABLE t1_c2_stats SELECT * FROM mysql.innodb_index_stats
 WHERE database_name = 'test' AND table_name = 't1' and index_name = 'c2';
-# in Embedded mode (./mtr --embedded-server) the t1_c2_stats table gets
-# created in MyISAM format by default even if we set
-# default_storage_engine='innodb'
-ALTER TABLE t1_c2_stats ENGINE=INNODB;
 DROP INDEX c2 ON t1;
 ANALYZE TABLE t1_c2_stats;
 --replace_column 4 LAST_UPDATE
@@ -253,8 +241,8 @@ while ($c)
 # (The output below strips TEMP_INDEX_PREFIX from the name.)
 eval $innodb_metrics_select;
 SET GLOBAL innodb_monitor_reset = module_ddl;
-SELECT sf.name, sf.pos FROM INFORMATION_SCHEMA.INNODB_SYS_INDEXES si
-INNER JOIN INFORMATION_SCHEMA.INNODB_SYS_FIELDS sf
+SELECT sf.name, sf.pos FROM INFORMATION_SCHEMA.INNODB_INDEXES si
+INNER JOIN INFORMATION_SCHEMA.INNODB_FIELDS sf
 ON si.index_id = sf.index_id WHERE si.name = '?c2e';
 
 # Release con1.
@@ -270,8 +258,8 @@ reap;
 # cache with index->online_status = ONLINE_INDEX_ABORTED_DROPPED.
 eval $innodb_metrics_select;
 SET GLOBAL innodb_monitor_reset = module_ddl;
-SELECT sf.name, sf.pos FROM INFORMATION_SCHEMA.INNODB_SYS_INDEXES si
-INNER JOIN INFORMATION_SCHEMA.INNODB_SYS_FIELDS sf
+SELECT sf.name, sf.pos FROM INFORMATION_SCHEMA.INNODB_INDEXES si
+INNER JOIN INFORMATION_SCHEMA.INNODB_FIELDS sf
 ON si.index_id = sf.index_id WHERE si.name = 'c2e';
 
 # ddl_background_drop_indexes = 1 here, because the incomplete index c2e still
@@ -331,8 +319,8 @@ connection default;
 SET DEBUG_SYNC = 'now WAIT_FOR c3p5_created';
 
 # Check that the index was created.
-SELECT sf.name, sf.pos FROM INFORMATION_SCHEMA.INNODB_SYS_INDEXES si
-INNER JOIN INFORMATION_SCHEMA.INNODB_SYS_FIELDS sf
+SELECT sf.name, sf.pos FROM INFORMATION_SCHEMA.INNODB_INDEXES si
+INNER JOIN INFORMATION_SCHEMA.INNODB_FIELDS sf
 ON si.index_id = sf.index_id WHERE si.name = '?c3p5';
 
 SET DEBUG_SYNC = 'ib_after_row_insert SIGNAL ins_done WAIT_FOR ddl_timed_out';
@@ -346,8 +334,8 @@ SET DEBUG_SYNC = 'now SIGNAL ddl_timed_out';
 
 # InnoDB should have cleaned up the index c3p5 from the data dictionary,
 # but not yet from the dictionary cache.
-SELECT sf.name, sf.pos FROM INFORMATION_SCHEMA.INNODB_SYS_INDEXES si
-INNER JOIN INFORMATION_SCHEMA.INNODB_SYS_FIELDS sf
+SELECT sf.name, sf.pos FROM INFORMATION_SCHEMA.INNODB_INDEXES si
+INNER JOIN INFORMATION_SCHEMA.INNODB_FIELDS sf
 ON si.index_id = sf.index_id WHERE si.name = 'c3p5';
 eval $innodb_metrics_select;
 SET GLOBAL innodb_monitor_reset = module_ddl;
@@ -358,7 +346,7 @@ reap;
 eval $innodb_metrics_select;
 SET GLOBAL innodb_monitor_reset = module_ddl;
 
---disable_parsing
+--disable_testcase BUG#0000
 # Temporarily disabled by fix for bug#14213236. Should be either
 # removed or updated to take into account that locking for IMPORT/
 # DISCARD TABLESPACE happens on MDL layer. New test case is added 
@@ -396,7 +384,7 @@ disconnect con2;
 connection default;
 --error ER_LOCK_WAIT_TIMEOUT
 reap;
---enable_parsing
+--enable_testcase
 #remove below con1 disconnect if above test case is enabled
 connection con1;
 disconnect con1;
@@ -428,10 +416,3 @@ SET GLOBAL innodb_monitor_reset = default;
 SET GLOBAL innodb_monitor_enable = default;
 SET GLOBAL innodb_monitor_disable = default;
 --enable_warnings
-
-########################################
-##### WL#7554 set schema `test` back to what it was
---disable_query_log
---eval alter schema test default character set $testdbcs39;
---enable_query_log
-########################################

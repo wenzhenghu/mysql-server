@@ -1,20 +1,6 @@
-# Embedded server doesn't support external clients
---source include/not_embedded.inc
 --source include/have_archive.inc
-
-########################################
-##### WL#7554 Force schema `test` to character set latin1
-##### This test should be migrated to utf8mb4
---disable_query_log
-let $testdbcs219=`select default_character_set_name from information_schema.schemata where schema_name='test'`;
-alter schema default character set latin1;
-use test;
---enable_query_log
-########################################
-
---disable_warnings
-drop table if exists t1, t2, t3, t4, t5, t6;
---enable_warnings
+--source include/force_myisam_default.inc
+--source include/have_myisam.inc
 
 create table t1 (id int(8), name varchar(32));
 create table t2 (id int(8), name varchar(32)) ENGINE="MyISAM";
@@ -84,9 +70,6 @@ drop table t6;
 # Show that mysqldump's stand-in tables for views are always of MyISAM
 # type to avoid Inno's column-number limits (~1000 columns) etc.
 # Here because it needs Inno-engine.
-
-SELECT @@global.default_storage_engine INTO @old_engine;
-SET GLOBAL default_storage_engine=InnoDB;
 
 --disable_query_log
 CREATE TABLE `t1` (
@@ -1131,12 +1114,3 @@ SELECT COUNT(*) FROM v1;
 
 DROP VIEW  v1;
 DROP TABLE t1;
-
-SET GLOBAL default_storage_engine=@old_engine;
-
-########################################
-##### WL#7554 set schema `test` back to what it was
---disable_query_log
---eval alter schema test default character set $testdbcs219;
---enable_query_log
-########################################

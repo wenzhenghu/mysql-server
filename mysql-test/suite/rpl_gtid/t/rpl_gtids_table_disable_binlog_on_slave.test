@@ -9,12 +9,14 @@
 # GLOBAL.GTID_PURGED correctly when binlog is disabled.
 #
 
+--source include/have_myisam.inc
 --source include/not_group_replication_plugin.inc
 
 # required by extra/rpl_tests/rpl_xa_gtid_next.inc
 
 --source include/have_debug.inc
 --source include/have_debug_sync.inc
+--source include/set_privilege_checks_user_as_system_user.inc
 --source include/master-slave.inc
 
 --let $master_uuid= `SELECT @@GLOBAL.SERVER_UUID`
@@ -28,9 +30,11 @@ CREATE TABLE t2 (a INT) ENGINE=MyISAM;
 --echo #
 INSERT INTO t2 VALUES(1);
 XA START '1';
+--disable_warnings
 INSERT INTO t2 VALUES(2);
 INSERT INTO t1 VALUES(1);
 INSERT INTO t1 VALUES(2);
+--enable_warnings
 XA END '1';
 XA PREPARE '1';
 XA COMMIT '1';
@@ -50,7 +54,9 @@ XA COMMIT '1';
 --replace_result $master_uuid MASTER_UUID
 --eval SET @@SESSION.GTID_NEXT= '$master_uuid:$gno_1'
 XA START '1';
+--disable_warnings
 INSERT INTO t1 VALUES(3);
+--enable_warnings
 XA END '1';
 XA PREPARE '1';
 --let $gno_2 = $gno_1
@@ -80,9 +86,9 @@ SELECT * FROM mysql.gtid_executed;
 call mtr.add_suppression("You need to use --log-bin to make --binlog-format work");
 call mtr.add_suppression("Slave SQL for channel '': Error in Xid_log_event: Commit could not "
                          "be completed, 'Got error -1 - 'Unknown error.*' from storage engine', "
-                         "Error_code: 1030");
-call mtr.add_suppression("Slave.*Got error -1 .* from storage engine.*Error_code: 1030");
-call mtr.add_suppression("Slave: An error occured at storing the GTID value");
+                         "Error_code: MY-001030");
+call mtr.add_suppression("Slave.*Got error -1 .* from storage engine.*Error_code: MY-001030");
+call mtr.add_suppression("Slave: An error occurred at storing the GTID value");
 call mtr.add_suppression("The slave coordinator and worker threads are stopped");
 
 --let $assert_text= committed gtids MASTER_UUID:$gno_root:$gno_1-$gno_2
@@ -112,12 +118,14 @@ COMMIT;
 --let $assert_cond= "[SELECT @@GLOBAL.GTID_EXECUTED]" = "$expected_gtid"
 --source include/assert.inc
 
---echo #
---echo # Verify that we store gtid into gtid_executed table within
---echo # each transaction when binlog is disabled.
---echo #
---replace_result $master_uuid MASTER_UUID
-SELECT * FROM mysql.gtid_executed;
+# GTID is persisted now in batches by Innodb background thread. Number of
+# rows in gtid_executed could vary and should check only after compressing.
+#--echo #
+#--echo # Verify that we store gtid into gtid_executed table within
+#--echo # each transaction when binlog is disabled.
+#--echo #
+#--replace_result $master_uuid MASTER_UUID
+#SELECT * FROM mysql.gtid_executed;
 
 --echo #
 --echo # Verify that the gtid_executed table is compressed.
@@ -128,6 +136,10 @@ SET @@GLOBAL.DEBUG= '+d,compress_gtid_table';
 --replace_result $master_uuid MASTER_UUID
 --eval SET @@SESSION.GTID_NEXT= '$master_uuid:$gno_2'
 COMMIT;
+--eval SET GTID_NEXT='AUTOMATIC'
+
+--echo # Trigger compression explicitly
+FLUSH LOGS;
 SET DEBUG_SYNC='now WAIT_FOR complete_compression';
 SET GLOBAL DEBUG= @debug_save;
 --replace_result $master_uuid MASTER_UUID
@@ -141,7 +153,6 @@ SELECT * FROM mysql.gtid_executed;
 --let $assert_cond= "[SELECT @@GLOBAL.GTID_EXECUTED]" = "[SELECT @@GLOBAL.GTID_PURGED]"
 --source include/assert.inc
 
---eval SET GTID_NEXT='AUTOMATIC'
 --echo #
 --echo # Verify that no gtid is generated for transaction
 --echo # when binlog is disabled
@@ -197,7 +208,8 @@ DROP TABLE t1, t2;
 --connection master
 CREATE TABLE t3 (a INT);
 --source include/sync_slave_sql_with_master.inc
-
+# simulate_err_on_write_gtid_into_table would disable gtid background.
+FLUSH LOGS;
 --echo #
 --echo # Verify that transaction's gtid is not stored into gtid_executed table
 --echo # and the transaction is rolled back if we encounter an error
@@ -219,8 +231,10 @@ SET GLOBAL DEBUG= @debug_save;
 --echo #
 --echo # Stored gtids MASTER_UUID:$gno_root:$gno_1-$gno_2 in gtid_executed table on slave.
 --echo #
---replace_result $master_uuid MASTER_UUID
---eval SELECT * FROM mysql.gtid_executed
+# GTID is persisted now in batches by Innodb background thread. Number of
+# rows in gtid_executed could vary and should check only after compressing.
+#--replace_result $master_uuid MASTER_UUID
+#--eval SELECT * FROM mysql.gtid_executed
 --let $assert_text= committed gtids MASTER_UUID:$gno_root:$gno_1-$gno_2
 --let $assert_cond= "[SELECT @@GLOBAL.GTID_EXECUTED]" = "$expected_gtid"
 --source include/assert.inc
@@ -228,10 +242,30 @@ SET GLOBAL DEBUG= @debug_save;
 --let $assert_cond= "[SELECT a FROM t3 WHERE a=1]" = ""
 --source include/assert.inc
 
+--echo #
+--echo # Verify that the gtid_executed table is compressed.
+--echo #
+SET @debug_save= @@GLOBAL.DEBUG;
+SET @@GLOBAL.DEBUG= '+d,compress_gtid_table';
+--inc $gno_2
+--replace_result $master_uuid MASTER_UUID
+--eval SET @@SESSION.GTID_NEXT= '$master_uuid:$gno_2'
+COMMIT;
+--eval SET GTID_NEXT='AUTOMATIC'
+
+--echo # Trigger compression explicitly
+FLUSH LOGS;
+SET DEBUG_SYNC='now WAIT_FOR complete_compression';
+SET GLOBAL DEBUG= @debug_save;
+--replace_result $master_uuid MASTER_UUID
+SELECT * FROM mysql.gtid_executed;
+
 --connection master
 DROP TABLE t3;
+CALL mtr.add_suppression("Statement is unsafe because it is being used inside a XA transaction");
 --connection slave
 DROP TABLE t3;
+CALL mtr.add_suppression("Statement is unsafe because it is being used inside a XA transaction");
 # We are intentionally making Slave ahead of Master
 # which is not allowed after fix for bug#18789758.
 # Since we are at cleanup stage only, we can

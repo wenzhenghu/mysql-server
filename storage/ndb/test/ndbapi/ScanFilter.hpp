@@ -1,15 +1,20 @@
-/*
-   Copyright (C) 2003-2006, 2008 MySQL AB, 2009 Sun Microsystems, Inc.
-    All rights reserved. Use is subject to license terms.
+/* Copyright (c) 2003, 2020, Oracle and/or its affiliates.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -39,7 +44,7 @@ public:
 	     int colNo,
 	     int val);
 #endif
-  ScanFilter(int records = 1000){};
+  ScanFilter(int records = 1000){}
   virtual ~ScanFilter() {}
   virtual int filterOp(NdbOperation*) = 0;
   virtual int verifyRecord(NDBT_ResultRow&) = 0;
@@ -50,28 +55,28 @@ private:
 
 class LessThanFilter : public ScanFilter {
 public:
-  LessThanFilter(int records){ compare_value = records / 100; };
-  virtual ~LessThanFilter(){}
+  LessThanFilter(int records){ compare_value = records / 100; }
+  ~LessThanFilter() override {}
 private:
   Uint32 compare_value;
-  int filterOp(NdbOperation* pOp);
-  int verifyRecord(NDBT_ResultRow&);
+  int filterOp(NdbOperation* pOp) override;
+  int verifyRecord(NDBT_ResultRow&) override;
 };
 
 class EqualFilter : public ScanFilter {
 public:
-  virtual ~EqualFilter(){}
+  ~EqualFilter() override {}
 
   static const Uint32 compare_value = 100;
-  int filterOp(NdbOperation* pOp);
-  int verifyRecord(NDBT_ResultRow&);
+  int filterOp(NdbOperation* pOp) override;
+  int verifyRecord(NDBT_ResultRow&) override;
 };
 
 class NoFilter : public ScanFilter {
 public:
-  virtual ~NoFilter(){}
-  int filterOp(NdbOperation* pOp);
-  int verifyRecord(NDBT_ResultRow&);
+  ~NoFilter() override {}
+  int filterOp(NdbOperation* pOp) override;
+  int verifyRecord(NDBT_ResultRow&) override;
 };
 
 

@@ -2,27 +2,34 @@
 #define OPT_COSTCONSTANTCACHE_INCLUDED
 
 /*
-   Copyright (c) 2014, 2016, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2014, 2019, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software Foundation,
-   51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 #include <stddef.h>
 
 #include "my_dbug.h"
+#include "mysql/components/services/mysql_mutex_bits.h"
 #include "mysql/psi/mysql_mutex.h"
-#include "opt_costconstants.h"           // Cost_model_constants
-
+#include "sql/opt_costconstants.h"  // Cost_model_constants
 
 /**
   This class implements a cache for "cost constant sets". This cache
@@ -30,7 +37,7 @@
   sessions access to the latest versions of the cost constants, and
   for re-reading the cost constant tables in the case where these have
   been updated.
- 
+
   The cost constant cache keeps a copy of the current set of cost
   constants. Each time a new session initializes its Cost_model_server
   object (by calling Cost_model_server::init() in lex_start()), the
@@ -48,9 +55,8 @@
   constant set is deleted.
 */
 
-class Cost_constant_cache
-{
-public:
+class Cost_constant_cache {
+ public:
   /**
     Creates an empty cost constant cache. To initialize it with default
     cost constants, @c init() must be called. To use cost constants from
@@ -106,8 +112,7 @@ public:
     @return pointer to the cost constants
   */
 
-  const Cost_model_constants *get_cost_constants()
-  {
+  const Cost_model_constants *get_cost_constants() {
     mysql_mutex_lock(&LOCK_cost_const);
 
     // Increase the ref count on the cost constant object
@@ -130,29 +135,27 @@ public:
     @param cost_constants pointer to the cost constant set
   */
 
-  void release_cost_constants(const Cost_model_constants *cost_constants)
-  {
-    DBUG_ASSERT(cost_constants != NULL);
+  void release_cost_constants(const Cost_model_constants *cost_constants) {
+    DBUG_ASSERT(cost_constants != nullptr);
 
     /*
       The reason for using a const cast here is to be able to keep
       the cost constant object const outside of this module.
     */
-    Cost_model_constants *cost=
-      const_cast<Cost_model_constants*>(cost_constants);
+    Cost_model_constants *cost =
+        const_cast<Cost_model_constants *>(cost_constants);
 
     mysql_mutex_lock(&LOCK_cost_const);
 
-    const unsigned int ref_count= cost->dec_ref_count();
+    const unsigned int ref_count = cost->dec_ref_count();
 
     mysql_mutex_unlock(&LOCK_cost_const);
 
     // If none is using these cost constants then delete them
-    if (ref_count == 0)
-      delete cost;
+    if (ref_count == 0) delete cost;
   }
 
-private:
+ private:
   /**
     Create default cost constants.
 
@@ -184,7 +187,6 @@ private:
   bool m_inited;
 };
 
-
 /**
   Initializes the optimizer cost module. This should be done during
   startup from mysqld.cc.
@@ -208,4 +210,4 @@ void delete_optimizer_cost_module();
 */
 void reload_optimizer_cost_constants();
 
-#endif  /* OPT_COSTCONSTANTCACHE_INCLUDED */
+#endif /* OPT_COSTCONSTANTCACHE_INCLUDED */

@@ -69,16 +69,18 @@ select * from t1 where a in (b,c);
 select * from t1 where 'a' in (a,b,c);
 select * from t1 where 'a' in (a);
 select * from t1 where a in ('a');
+set names latin1;
 select * from t1 where 'a' collate latin1_general_ci in (a,b,c);
 select * from t1 where 'a' collate latin1_bin in (a,b,c);
 select * from t1 where 'a' in (a,b,c collate latin1_bin);
-explain extended select * from t1 where 'a' in (a,b,c collate latin1_bin);
+explain select * from t1 where 'a' in (a,b,c collate latin1_bin);
 drop table t1;
+set names utf8mb4;
 
 set names utf8;
 create table t1 (a char(10) character set utf8 not null);
-insert into t1 values ('bbbb'),(_koi8r'√√√√'),(_latin1'ƒƒƒƒ');
-select a from t1 where a in ('bbbb',_koi8r'√√√√',_latin1'ƒƒƒƒ') order by a;
+insert into t1 values ('bbbb'),(_koi8r x'C3C3C3C3'),(_latin1 x'C4C4C4C4');
+select a from t1 where a in ('bbbb',_koi8r x'C3C3C3C3',_latin1 x'C4C4C4C4') order by a;
 drop table t1;
 # Bug#7834 Illegal mix of collations in IN operator
 create table t1 (a char(10) character set latin1 not null);
@@ -284,6 +286,7 @@ EXPLAIN SELECT STRAIGHT_JOIN * FROM t3
   JOIN t2 ON t3.a=t2.a
   JOIN t4 WHERE t4.a IN (t1.b, t2.b);
 
+--sorted_result
 SELECT STRAIGHT_JOIN * FROM t3 
   JOIN t1 ON t3.a=t1.a 
   JOIN t2 ON t3.a=t2.a
@@ -294,6 +297,7 @@ EXPLAIN SELECT STRAIGHT_JOIN
   FROM t3, t1, t2
   WHERE t3.a=t1.a AND t3.a=t2.a;
 
+--sorted_result
 SELECT STRAIGHT_JOIN 
    (SELECT SUM(t4.a) FROM t4 WHERE t4.a IN (t1.b, t2.b)) 
   FROM t3, t1, t2
@@ -379,6 +383,7 @@ DROP TABLE t1,t2,t3,t4;
 CREATE TABLE t1 (id int not null);
 INSERT INTO t1 VALUES (1),(2);
 
+--skip_if_hypergraph  # Different warnings.
 SELECT id FROM t1 WHERE id IN(4564, (SELECT IF(1=0,1,1/0)) );
 
 DROP TABLE t1;
@@ -391,9 +396,11 @@ DROP TABLE t1;
 #
 create table t1(f1 char(1));
 insert into t1 values ('a'),('b'),('1');
+--sorted_result
 select f1 from t1 where f1 in ('a',1);
 select f1, case f1 when 'a' then '+' when 1 then '-' end from t1;
 create index t1f1_idx on t1(f1);
+--sorted_result
 select f1 from t1 where f1 in ('a',1);
 # Ignore possible changes in key_len for different character sets
 --replace_column 8 2
@@ -408,10 +415,12 @@ select f1 from t1 where f1 in (2,1);
 explain select f1 from t1 where f1 in (2,1);
 create table t2(f2 int, index t2f2(f2));
 insert into t2 values(0),(1),(2);
+--skip_if_hypergraph  # Different warnings.
 select f2 from t2 where f2 in ('a',2);
 explain select f2 from t2 where f2 in ('a',2);
 select f2 from t2 where f2 in ('a','b');
 explain select f2 from t2 where f2 in ('a','b');
+--skip_if_hypergraph  # Different warnings.
 select f2 from t2 where f2 in (1,'b');
 explain select f2 from t2 where f2 in (1,'b');
 drop table t1, t2;
@@ -612,7 +621,7 @@ DROP TABLE t1,subq;
 --echo # Bug #11766270  59343: YEAR(4): INCORRECT RESULT AND VALGRIND WARNINGS WITH MIN/MAX, UNION
 --echo #
 
-CREATE TABLE t1(f1 YEAR(4));
+CREATE TABLE t1(f1 YEAR);
 INSERT INTO t1 VALUES (0000),(2001);
 --enable_metadata
 (SELECT MAX(f1) FROM t1) UNION (SELECT MAX(f1) FROM t1);
@@ -623,7 +632,7 @@ DROP TABLE t1;
 --echo # Bug #11764651-57510: IN(string,real,string) causes invalid read in sort function
 --echo #
 
-SELECT LEFT(ST_GEOMFROMTEXT("POINT(0 0)"),1) IN (@@global.query_cache_type,1,"");
+SELECT LEFT(ST_GEOMFROMTEXT("POINT(0 0)"),1) IN (@@global.max_allowed_packet,1,"");
 
 --echo # End of test BUG#11764651-57510
 

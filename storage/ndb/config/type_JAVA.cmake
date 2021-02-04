@@ -1,22 +1,28 @@
-# Copyright (c) 2010, 2014, Oracle and/or its affiliates. All rights reserved.
+# Copyright (c) 2010, 2020, Oracle and/or its affiliates. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; version 2 of the License.
+# it under the terms of the GNU General Public License, version 2.0,
+# as published by the Free Software Foundation.
+#
+# This program is also distributed with certain software (including
+# but not limited to OpenSSL) that is licensed under separate terms,
+# as designated in a particular file or component or in included license
+# documentation.  The authors of MySQL hereby grant you an additional
+# permission to link the program and your derivative works with the
+# separately licensed software that they have included with MySQL.
 #
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
+# GNU General Public License, version 2.0, for more details.
 #
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
-# Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+# Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
 
 INCLUDE(libutils)
-INCLUDE(cmake_parse_arguments)
 
-SET(JAVAC_TARGET "1.6")
+SET(JAVAC_TARGET "1.8")
 
 # Build (if not already done) NDB version string used for generating jars etc.
 MACRO(SET_JAVA_NDB_VERSION)
@@ -26,7 +32,8 @@ MACRO(SET_JAVA_NDB_VERSION)
     MESSAGE(FATAL_ERROR "NDB_VERSION_MAJOR variable not set!")
   ENDIF()
 
-  SET(JAVA_NDB_VERSION "${NDB_VERSION_MAJOR}.${NDB_VERSION_MINOR}.${NDB_VERSION_BUILD}")
+  SET(JAVA_NDB_VERSION
+    "${NDB_VERSION_MAJOR}.${NDB_VERSION_MINOR}.${NDB_VERSION_BUILD}")
   IF(NDB_VERSION_STATUS)
     SET(JAVA_NDB_VERSION "${JAVA_NDB_VERSION}.${NDB_VERSION_STATUS}")
   ENDIF()
@@ -35,24 +42,28 @@ MACRO(SET_JAVA_NDB_VERSION)
 
 ENDMACRO(SET_JAVA_NDB_VERSION)
 
-MACRO(CREATE_MANIFEST filename EXPORTS NAME)
+MACRO(CREATE_MANIFEST filename EXPORTS_LIST NAME)
+  # Convert cmake list to comma-separated string
+  STRING(REPLACE ";" "," EXPORTS_STRING "${EXPORTS_LIST}")
   FILE(WRITE "${CMAKE_CURRENT_BINARY_DIR}/${filename}" "Manifest-Version: 1.0
-Export-Package: ${EXPORTS}
+Export-Package: ${EXPORTS_STRING}
 Bundle-Name: ${NAME}
 Bundle-Description: ClusterJ")
 ENDMACRO(CREATE_MANIFEST)
 
-MACRO(CREATE_JAR)
+# CREATE_JAR(TARGET sources... options/keywords...)
 
-  MYSQL_PARSE_ARGUMENTS(ARG
-    "CLASSPATH;MERGE_JARS;DEPENDENCIES;MANIFEST;ENHANCE;EXTRA_FILES;BROKEN_JAVAC"
+MACRO(CREATE_JAR TARGET_ARG)
+
+  CMAKE_PARSE_ARGUMENTS(ARG
     ""
+    "MANIFEST"
+    "BROKEN_JAVAC;CLASSPATH;MERGE_JARS;DEPENDENCIES;EXTRA_FILES"
     ${ARGN}
-  )
+    )
 
-  LIST(GET ARG_DEFAULT_ARGS 0 TARGET)
-  SET(JAVA_FILES ${ARG_DEFAULT_ARGS})
-  LIST(REMOVE_AT JAVA_FILES 0)
+  SET(TARGET ${TARGET_ARG})
+  SET(JAVA_FILES ${ARG_UNPARSED_ARGUMENTS})
 
   SET (BUILD_DIR "${CMAKE_CURRENT_BINARY_DIR}/target")
   SET (CLASS_DIR "${BUILD_DIR}/classes")
@@ -86,6 +97,17 @@ MACRO(CREATE_JAR)
   # Add target
   ADD_CUSTOM_TARGET(${TARGET}.jar ALL DEPENDS ${JAR})
 
+  # Limit memory of javac, otherwise build might fail for parallel builds.
+  # (out-of-memory/timeout if garbage collector kicks in too late)
+  IF(SIZEOF_VOIDP EQUAL 8)
+    SET(JAVA_ARGS "-J-Xmx3G")
+  ELSE()
+    SET(JAVA_ARGS "-J-Xmx1G")
+  ENDIF()
+
+  # Treat all deprecation warnings as errors
+  SET(JAVA_ARGS ${JAVA_ARGS} -Xlint:deprecation -Xlint:-options -Werror)
+
   # Compile
   IF (JAVA_FILES)
     IF (ARG_BROKEN_JAVAC)
@@ -93,8 +115,8 @@ MACRO(CREATE_JAR)
         OUTPUT ${MARKER}
         COMMAND ${CMAKE_COMMAND} -E remove_directory ${BUILD_DIR}
         COMMAND ${CMAKE_COMMAND} -E make_directory ${CLASS_DIR}
-        COMMAND echo \"${JAVA_COMPILE} -target ${JAVAC_TARGET} -source ${JAVAC_TARGET} -d ${TARGET_DIR} -classpath ${classpath_str} ${ARG_BROKEN_JAVAC}\"
-        COMMAND ${JAVA_COMPILE} -target ${JAVAC_TARGET} -source ${JAVAC_TARGET} -d ${TARGET_DIR} -classpath "${classpath_str}" ${ARG_BROKEN_JAVAC}
+        COMMAND echo \"${JAVA_COMPILE} ${JAVA_ARGS} -target ${JAVAC_TARGET} -source ${JAVAC_TARGET} -d ${TARGET_DIR} -classpath ${classpath_str} ${ARG_BROKEN_JAVAC}\"
+        COMMAND ${JAVA_COMPILE} ${JAVA_ARGS} -target ${JAVAC_TARGET} -source ${JAVAC_TARGET} -d ${TARGET_DIR} -classpath "${classpath_str}" ${ARG_BROKEN_JAVAC}
         COMMAND ${CMAKE_COMMAND} -E touch ${MARKER}
         DEPENDS ${JAVA_FILES}
         COMMENT "Building objects for ${TARGET}.jar"
@@ -104,8 +126,8 @@ MACRO(CREATE_JAR)
         OUTPUT ${MARKER}
         COMMAND ${CMAKE_COMMAND} -E remove_directory ${BUILD_DIR}
         COMMAND ${CMAKE_COMMAND} -E make_directory ${CLASS_DIR}
-        COMMAND echo \"${JAVA_COMPILE} -target ${JAVAC_TARGET} -source ${JAVAC_TARGET} -d ${TARGET_DIR} -classpath ${classpath_str} ${JAVA_FILES}\"
-        COMMAND ${JAVA_COMPILE} -target ${JAVAC_TARGET} -source ${JAVAC_TARGET} -d ${TARGET_DIR} -classpath "${classpath_str}" ${JAVA_FILES}
+        COMMAND echo \"${JAVA_COMPILE} ${JAVA_ARGS} -target ${JAVAC_TARGET} -source ${JAVAC_TARGET} -d ${TARGET_DIR} -classpath ${classpath_str} ${JAVA_FILES}\"
+        COMMAND ${JAVA_COMPILE} ${JAVA_ARGS} -target ${JAVAC_TARGET} -source ${JAVAC_TARGET} -d ${TARGET_DIR} -classpath "${classpath_str}" ${JAVA_FILES}
         COMMAND ${CMAKE_COMMAND} -E touch ${MARKER}
         DEPENDS ${JAVA_FILES}
         COMMENT "Building objects for ${TARGET}.jar"
@@ -148,25 +170,6 @@ MACRO(CREATE_JAR)
       )
     ENDIF()
   ENDFOREACH()
-
-  # Enhance
-  IF(EXISTS ${ARG_ENHANCE})
-    SET(ENHANCER org.apache.openjpa.enhance.PCEnhancer)
-
-    SET(OLD_MARKER ${MARKER})
-    MATH(EXPR COUNTER "${COUNTER} + 1")
-    SET(MARKER "${MARKER_BASE}.${COUNTER}")
-
-    ADD_CUSTOM_COMMAND(
-      OUTPUT ${MARKER}
-      COMMAND echo \"${JAVA_RUNTIME} -classpath ${classpath_str}${separator}${WITH_CLASSPATH} ${ENHANCER} -p ${ARG_ENHANCE} -d ${TARGET_DIR}\"
-      COMMAND ${JAVA_RUNTIME} -classpath "${classpath_str}${separator}${WITH_CLASSPATH}" ${ENHANCER} -p ${ARG_ENHANCE} -d ${TARGET_DIR}
-      
-      COMMAND ${CMAKE_COMMAND} -E touch ${MARKER}
-      DEPENDS ${OLD_MARKER}
-      COMMENT "Enhancing objects for ${TARGET}.jar"
-    )
-  ENDIF()
 
   # Unpack extra jars
   FOREACH(_J ${ARG_MERGE_JARS})

@@ -78,7 +78,7 @@ DROP VIEW v1;
 # Column name conflicts with a auto-generated one.
 CREATE VIEW v1 AS SELECT 'c1', 'c2 ', ' c3', ' c4 ', 'Name_exp_2';
 DROP VIEW v1;
-CREATE VIEW v1 AS select 'c1' AS `c1`,'c2 ' AS `Name_exp_2`,' c3' AS `c3`,' c4 ' AS `Name_exp_4`,'Name_exp_2' AS `My_exp_Name_exp_2`;
+CREATE VIEW v1 AS select 'c1' AS `c1`,'c2 ' AS `Name_exp_2`,' c3' AS `c3`,' c4 ' AS `Name_exp_4`,'Name_exp_2' AS `Name_exp_Name_exp_2`;
 DROP VIEW v1;
 # Invalid conlumn name in subquery.
 CREATE VIEW v1 AS SELECT (SELECT ' c1 ');
@@ -96,7 +96,7 @@ DROP VIEW v1;
 CREATE VIEW v1 AS SELECT a FROM t1 WHERE EXISTS (SELECT a AS alias FROM t1 GROUP BY alias);
 SHOW CREATE VIEW v1;
 View	Create View	character_set_client	collation_connection
-v1	CREATE ALGORITHM=UNDEFINED DEFINER=`root`@`localhost` SQL SECURITY DEFINER VIEW `v1` AS select `t1`.`a` AS `a` from `t1` where exists(select `t1`.`a` AS `alias` from `t1` group by `alias`)	latin1	latin1_swedish_ci
+v1	CREATE ALGORITHM=UNDEFINED DEFINER=`root`@`localhost` SQL SECURITY DEFINER VIEW `v1` AS select `t1`.`a` AS `a` from `t1` where exists(select `t1`.`a` AS `alias` from `t1` group by `alias`)	utf8mb4	utf8mb4_0900_ai_ci
 DROP VIEW v1;
 CREATE VIEW v1 AS select `test`.`t1`.`a` AS `a` from `test`.`t1` where exists(select `test`.`t1`.`a` AS `alias` from `test`.`t1` group by `alias`);
 DROP VIEW v1;
@@ -104,7 +104,7 @@ DROP VIEW v1;
 CREATE VIEW v1 AS SELECT a FROM t1 WHERE EXISTS (SELECT '  a   ' AS alias FROM t1 GROUP BY alias);
 SHOW CREATE VIEW v1;
 View	Create View	character_set_client	collation_connection
-v1	CREATE ALGORITHM=UNDEFINED DEFINER=`root`@`localhost` SQL SECURITY DEFINER VIEW `v1` AS select `t1`.`a` AS `a` from `t1` where exists(select '  a   ' AS `alias` from `t1` group by `alias`)	latin1	latin1_swedish_ci
+v1	CREATE ALGORITHM=UNDEFINED DEFINER=`root`@`localhost` SQL SECURITY DEFINER VIEW `v1` AS select `t1`.`a` AS `a` from `t1` where exists(select '  a   ' AS `alias` from `t1` group by `alias`)	utf8mb4	utf8mb4_0900_ai_ci
 DROP VIEW v1;
 CREATE VIEW v1 AS select `test`.`t1`.`a` AS `a` from `test`.`t1` where exists(select '  a   ' AS `alias` from `test`.`t1` group by `alias`);
 DROP VIEW v1;

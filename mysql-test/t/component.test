@@ -1,5 +1,7 @@
---source include/not_embedded.inc
 --source include/have_example_component.inc
+
+# Save the initial number of concurrent sessions
+--source include/count_sessions.inc
 
 --echo # Simple load test
 INSTALL COMPONENT "file://component_example_component1";
@@ -12,7 +14,9 @@ INSTALL COMPONENT "file://component_example_component1";
 UNINSTALL COMPONENT "file://component_example_component1";
 
 --echo # Load not existing
---error ER_COMPONENTS_CANT_LOAD
+# To hide the path of the file
+--replace_regex /.*Can\'t open shared library.*/Can't open shared library/
+--error ER_CANT_OPEN_LIBRARY
 INSTALL COMPONENT "file://component_example_component4";
 
 --echo # Load with unsatisfied dependencies
@@ -176,7 +180,8 @@ SELECT COUNT(*) FROM mysql.component;
 --echo # Name of component is invalid
 --error ER_COMPONENTS_NO_SCHEME
 INSTALL COMPONENT "dynamic_loader_test_lib1";
---error ER_COMPONENTS_CANT_LOAD
+--replace_regex /.*Can\'t open shared library.*/Can't open shared library/
+--error ER_CANT_OPEN_LIBRARY
 INSTALL COMPONENT "file://dynamic_loader_test_lib2", "dynamic_loader_test_lib3";
 --error ER_COMPONENTS_UNLOAD_NOT_LOADED
 UNINSTALL COMPONENT "fle://dynamic_loader_test_lib1", "file://dynamic_loader_test_lib3";
@@ -186,7 +191,8 @@ UNINSTALL COMPONENT "dynamic_loader_test_lib2";
 INSTALL COMPONENT "file://localhost/tmp/dynamic_loader_test_lib1";
 --error ER_COMPONENTS_NO_SCHEME_SERVICE
 INSTALL COMPONENT "http://dynamic_loader_test_lib1";
---error ER_COMPONENTS_CANT_LOAD
+--replace_regex /.*Can\'t open shared library.*/Can't open shared library/
+--error ER_CANT_OPEN_LIBRARY
 INSTALL COMPONENT "file://dynamic_loader_test_lib2", "http://dynamic_loader_test_lib3";
 --error ER_COMPONENTS_UNLOAD_NOT_LOADED
 UNINSTALL COMPONENT "file://dynamic_loader_test_lib1", "http://dynamic_loader_test_lib3";
@@ -208,3 +214,26 @@ UNINSTALL COMPONENT "file://component_example_component1";
 disconnect conn1;
 connection default;
 DROP USER mysqltest_u1@localhost;
+
+
+--echo #
+--echo # Bug #27041374: ASSERTION `NEXT_INSERT_ID == 0' FAILED.
+--echo #
+
+SET @@session.insert_id=42949672950;
+
+--echo # Must not assert
+--error ER_COMPONENT_MANIPULATE_ROW_FAILED
+INSTALL COMPONENT
+"file://component_example_component2","file://component_example_component3";
+
+--echo # reset back the insert_id and auto_increment
+SET @@session.insert_id=0;
+ALTER TABLE mysql.component AUTO_INCREMENT=1;
+
+
+--echo # End of 8.0 tests
+
+
+# Wait till we reached the initial number of concurrent sessions
+--source include/wait_until_count_sessions.inc

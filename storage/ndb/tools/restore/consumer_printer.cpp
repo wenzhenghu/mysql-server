@@ -1,14 +1,21 @@
 /*
-   Copyright (c) 2004, 2016, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2004, 2020, Oracle and/or its affiliates.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -33,7 +40,7 @@ BackupPrinter::table(const TableS & tab)
   return true;
 }
 
-void
+bool
 BackupPrinter::tuple(const TupleS & tup, Uint32 fragId)
 {
   m_dataCount++;
@@ -46,12 +53,13 @@ BackupPrinter::tuple(const TupleS & tup, Uint32 fragId)
     }
     const TableS * table = tup.getTable();
     if ((!ga_dont_ignore_systab_0) &&  table->isSYSTAB_0())
-      return;
+      return true;
     m_ndbout << tup << g_ndbrecord_print_format.lines_terminated_by;  
   }
+  return true;
 }
 
-void
+bool
 BackupPrinter::logEntry(const LogEntry & logE)
 {
   if (m_print || m_print_log)
@@ -62,6 +70,7 @@ BackupPrinter::logEntry(const LogEntry & logE)
     ndbout << endl;
   }
   m_logCount++;
+  return true;
 }
 
 void
@@ -76,7 +85,7 @@ BackupPrinter::endOfLogEntrys()
   }
 }
 bool
-BackupPrinter::update_apply_status(const RestoreMetaData &metaData)
+BackupPrinter::update_apply_status(const RestoreMetaData &metaData, bool snapshotstart)
 {
   if (m_print)
   {

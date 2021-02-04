@@ -1,18 +1,29 @@
-/* Copyright (c) 2014, 2017, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2014, 2019, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
+
+   Without limiting anything contained in the foregoing, this file,
+   which is part of C Driver for MySQL (Connector/C), is also subject to the
+   Universal FOSS Exception, version 1.0, a copy of which can be found at
+   http://oss.oracle.com/licenses/universal-foss-exception.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-   MA 02110-1301, USA */
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 /**
   @file mysys/my_chmod.cc
@@ -38,36 +49,25 @@
   @return Permission in MY_STAT format
 */
 
-MY_MODE get_file_perm(ulong perm_flags)
-{
-  MY_MODE file_perm= 0;
-  if (perm_flags <= 0)
-    return file_perm;
+MY_MODE get_file_perm(ulong perm_flags) {
+  MY_MODE file_perm = 0;
+  if (perm_flags <= 0) return file_perm;
 
 #if defined _WIN32
   if (perm_flags & (USER_READ | GROUP_READ | OTHERS_READ))
-    file_perm|= _S_IREAD;
+    file_perm |= _S_IREAD;
   if (perm_flags & (USER_WRITE | GROUP_WRITE | OTHERS_WRITE))
-    file_perm|= _S_IWRITE;
+    file_perm |= _S_IWRITE;
 #else
-  if (perm_flags & USER_READ)
-    file_perm|= S_IRUSR;
-  if (perm_flags & USER_WRITE)
-    file_perm|= S_IWUSR;
-  if (perm_flags & USER_EXECUTE)
-    file_perm|= S_IXUSR;
-  if (perm_flags & GROUP_READ)
-    file_perm|= S_IRGRP;
-  if (perm_flags & GROUP_WRITE)
-    file_perm|= S_IWGRP;
-  if (perm_flags & GROUP_EXECUTE)
-    file_perm|= S_IXGRP;
-  if (perm_flags & OTHERS_READ)
-    file_perm|= S_IROTH;
-  if (perm_flags & OTHERS_WRITE)
-    file_perm|= S_IWOTH;
-  if (perm_flags & OTHERS_EXECUTE)
-    file_perm|= S_IXOTH;
+  if (perm_flags & USER_READ) file_perm |= S_IRUSR;
+  if (perm_flags & USER_WRITE) file_perm |= S_IWUSR;
+  if (perm_flags & USER_EXECUTE) file_perm |= S_IXUSR;
+  if (perm_flags & GROUP_READ) file_perm |= S_IRGRP;
+  if (perm_flags & GROUP_WRITE) file_perm |= S_IWGRP;
+  if (perm_flags & GROUP_EXECUTE) file_perm |= S_IXGRP;
+  if (perm_flags & OTHERS_READ) file_perm |= S_IROTH;
+  if (perm_flags & OTHERS_WRITE) file_perm |= S_IWOTH;
+  if (perm_flags & OTHERS_EXECUTE) file_perm |= S_IXOTH;
 #endif
 
   return file_perm;
@@ -81,31 +81,27 @@ MY_MODE get_file_perm(ulong perm_flags)
   @param my_flags : Error handling
 
   @return
-    @retval TRUE : Error changing file permission
-    @retval FALSE : File permission changed successfully
+    @retval true : Error changing file permission
+    @retval false : File permission changed successfully
 */
 
-bool my_chmod(const char *filename, ulong perm_flags, myf my_flags)
-{
+bool my_chmod(const char *filename, ulong perm_flags, myf MyFlags) {
   int ret_val;
   MY_MODE file_perm;
-  DBUG_ENTER("my_chmod");
+  DBUG_TRACE;
   DBUG_ASSERT(filename && filename[0]);
 
-  file_perm= get_file_perm(perm_flags);
+  file_perm = get_file_perm(perm_flags);
 #ifdef _WIN32
-  ret_val= _chmod(filename, file_perm);
+  ret_val = _chmod(filename, file_perm);
 #else
-  ret_val= chmod(filename, file_perm);
+  ret_val = chmod(filename, file_perm);
 #endif
 
-  if (ret_val && (my_flags & (MY_FAE+MY_WME)))
-  {
-    char errbuf[MYSYS_STRERROR_SIZE];
+  if (ret_val && (MyFlags & (MY_FAE | MY_WME))) {
     set_my_errno(errno);
-    my_error(EE_CHANGE_PERMISSIONS, MYF(0), filename,
-             errno, my_strerror(errbuf, sizeof(errbuf), errno));
+    MyOsError(my_errno(), EE_CHANGE_PERMISSIONS, MYF(0), filename);
   }
 
-  DBUG_RETURN(ret_val ? TRUE : FALSE);
+  return ret_val ? true : false;
 }

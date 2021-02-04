@@ -2,8 +2,9 @@
 # wl#9383 INNODB: ADD AN OPTION TO TURN OFF/ON DEADLOCK CHECKER
 #
 
---source include/not_embedded.inc
 --source include/count_sessions.inc
+--source include/not_hypergraph.inc  # Depends on choosing very specific query plans.
+
 
 SET GLOBAL innodb_deadlock_detect=OFF;
 SET GLOBAL innodb_lock_wait_timeout=2;

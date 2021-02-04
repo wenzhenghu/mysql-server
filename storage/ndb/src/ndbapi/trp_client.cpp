@@ -1,14 +1,21 @@
 /*
-   Copyright (c) 2010, 2017, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2010, 2019, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -22,8 +29,10 @@ trp_client::trp_client()
   : m_blockNo(~Uint32(0)),
     m_facade(NULL),
     m_locked_for_poll(false),
+    m_is_receiver_thread(false),
     m_mutex(NULL),
     m_poll(),
+    m_enabled_nodes_mask(),
     m_send_nodes_mask(),
     m_send_nodes_cnt(0),
     m_send_buffers(NULL),
@@ -88,10 +97,15 @@ Uint32
 trp_client::open(TransporterFacade* tf, int blockNo)
 {
   Uint32 res = 0;
+  assert(m_enabled_nodes_mask.isclear());
   assert(m_facade == NULL);
   if (m_facade == NULL)
   {
     m_facade = tf;
+
+    /* Initially allowed to communicate with itself */
+    m_enabled_nodes_mask.set(m_facade->theOwnId);
+
     res = tf->open_clnt(this, blockNo);
     if (res != 0)
     {
@@ -121,6 +135,60 @@ trp_client::close()
     m_facade = NULL;
     m_blockNo = ~Uint32(0);
   }
+  m_enabled_nodes_mask.clear();
+}
+
+/**
+ * Initial setup of the nodes having their send buffers enabled.
+ * Callback from TransporterFacade::open_clnt' called above.
+ *
+ * Protected by having the 'm_mutex' locked
+ */
+void
+trp_client::set_enabled_send(const NodeBitmask &nodes)
+{
+  assert(NdbMutex_Trylock(m_mutex) != 0);
+  m_enabled_nodes_mask.assign(nodes);
+}
+
+/**
+ * Enable/disable of trp_client sending.
+ *
+ * Protected by either locking the m_mutex, or being 'parked'
+ * in the inactive poll queue (is_locked_for_poll())
+ *
+ * Called from TransporterFacade when TF enable/disable
+ * its own 'global' send buffers.
+ *
+ * When disabling the send_buffers any buffered data is also
+ * discarded. The TransportRegistry 'protocol' also requires
+ * isSendEnabled() to be checked before attempting to allocate
+ * send buffers (getWritePtr() / updateWritePtr).
+ *
+ * No WritePtr allocation should be attempted from a disabled send buffer.
+ * Furthermore, finding pending send data to flush for a disabled send
+ * buffer will indicate a concurrency control problem. (Asserted)
+ */
+void
+trp_client::enable_send(NodeId node)
+{
+  assert(m_poll.m_locked || NdbMutex_Trylock(m_mutex) != 0);
+  m_enabled_nodes_mask.set(node);
+}
+
+void
+trp_client::disable_send(NodeId node)
+{
+  assert(m_poll.m_locked || NdbMutex_Trylock(m_mutex) != 0);
+  if (m_send_nodes_mask.get(node))
+  {
+    // Discard any buffered data to disabled node.
+    TFBuffer* b = m_send_buffers + node;
+    TFBufferGuard g0(* b);
+    m_facade->m_send_buffer.release_list(b->m_head);
+    b->clear();
+  }
+  m_enabled_nodes_mask.clear(node);
 }
 
 /**
@@ -128,7 +196,7 @@ trp_client::close()
  * its result. The call to ::do_poll() should be encapsulate with
  * a ::prepare_poll() - ::complete_poll() pair.
  */
-void
+  void
 trp_client::prepare_poll()
 {
   NdbMutex_Lock(m_mutex);
@@ -197,6 +265,39 @@ trp_client::do_forceSend(bool forceSend)
 }
 
 /**
+ * Append the private client send buffers to the
+ * TransporterFacade lists of prepared send buffers.
+ * The TransporterFacade may then send these whenever
+ * it find convienient.
+ *
+ * Build an aggregated bitmap 'm_flushed_nodes_mask'
+ * of nodes this client has flushed messages to.
+ * Client must ensure that the messages to these nodes
+ * are force-sent before it starts waiting for any reply.
+ *
+ * Need to be called with the 'm_mutex' held
+ */
+void
+trp_client::flush_send_buffers()
+{
+  assert(m_poll.m_locked);
+  const Uint32 cnt = m_send_nodes_cnt;
+  for (Uint32 i = 0; i<cnt; i++)
+  {
+    const Uint32 node = m_send_nodes_list[i];
+    assert(m_send_nodes_mask.get(node));
+    assert(m_enabled_nodes_mask.get(node));
+    TFBuffer* b = m_send_buffers + node;
+    TFBufferGuard g0(* b);
+    m_facade->flush_send_buffer(node, b);
+    b->clear();
+  }
+  m_flushed_nodes_mask.bitOR(m_send_nodes_mask);
+  m_send_nodes_cnt = 0;
+  m_send_nodes_mask.clear();
+}
+
+/**
  * The 'safe' sendSignal() methods has to be used instead of the
  * other sendSignal methods when a reply signal has to be
  * sent by the client getting a signal 'delivered'.
@@ -211,6 +312,14 @@ trp_client::safe_noflush_sendSignal(const NdbApiSignal* signal, Uint32 nodeId)
   return m_facade->m_poll_owner->raw_sendSignal(signal, nodeId);
 }
 
+int trp_client::safe_noflush_sendSignal(const NdbApiSignal* signal, Uint32 nodeId,
+                                        const LinearSectionPtr ptr[3], Uint32 secs)
+{
+  // This thread must be the poll owner
+  assert(m_facade->is_poll_owner_thread());
+  return m_facade->m_poll_owner->raw_sendSignal(signal, nodeId, ptr, secs);
+}
+
 int
 trp_client::safe_sendSignal(const NdbApiSignal* signal, Uint32 nodeId)
 {
@@ -222,10 +331,45 @@ trp_client::safe_sendSignal(const NdbApiSignal* signal, Uint32 nodeId)
   return res;
 }
 
-Uint32 *
-trp_client::getWritePtr(NodeId node, Uint32 lenBytes, Uint32 prio,
-                        Uint32 max_use)
+int
+trp_client::safe_sendSignal(const NdbApiSignal* signal, Uint32 nodeId,
+                            const LinearSectionPtr ptr[3], Uint32 secs)
 {
+  int res;
+  if ((res = safe_noflush_sendSignal(signal, nodeId, ptr, secs)) != -1)
+  {
+    m_facade->m_poll_owner->flush_send_buffers();
+  }
+  return res;
+}
+
+/**
+ * ::isSendEnabled() and get-/updateWritePtr()
+ *
+ * We assume (and assert) that TransporterRegistry::prepareSend()
+ * check whether a node is 'isSendEnabled()' before allocating send buffer
+ * for a node send by calling getWritePtr() - updateWritePtr().
+ *
+ * Requires the 'm_mutex' to be held prior to calling these functions
+ */
+bool
+trp_client::isSendEnabled(NodeId node) const
+{
+  assert(m_poll.m_locked);
+  return m_enabled_nodes_mask.get(node);
+}
+
+Uint32 *
+trp_client::getWritePtr(NodeId node,
+                        TrpId trp_id,
+                        Uint32 lenBytes,
+                        Uint32 prio,
+                        Uint32 max_use,
+                        SendStatus *error)
+{
+  (void)trp_id;
+  assert(isSendEnabled(node));
+  
   TFBuffer* b = m_send_buffers+node;
   TFBufferGuard g0(* b);
   bool found = m_send_nodes_mask.get(node);
@@ -246,25 +390,33 @@ trp_client::getWritePtr(NodeId node, Uint32 lenBytes, Uint32 prio,
     m_send_nodes_cnt = cnt + 1;
   }
 
-  TFPage* page = m_facade->alloc_sb_page(node);
-  if (likely(page != 0))
+  if (unlikely(lenBytes > TFPage::max_data_bytes()))
   {
-    page->init();
+    *error = SEND_MESSAGE_TOO_BIG;
+  }
+  else
+  {
+    TFPage* page = m_facade->alloc_sb_page(node);
+    if (likely(page != 0))
+    {
+      page->init();
 
-    if (b->m_tail == NULL)
-    {
-      assert(!found);
-      b->m_head = page;
-      b->m_tail = page;
+      if (b->m_tail == NULL)
+      {
+        assert(!found);
+        b->m_head = page;
+        b->m_tail = page;
+      }
+      else
+      {
+        assert(found);
+        assert(b->m_head != NULL);
+        b->m_tail->m_next = page;
+        b->m_tail = page;
+      }
+      return (Uint32 *)(page->m_data);
     }
-    else
-    {
-      assert(found);
-      assert(b->m_head != NULL);
-      b->m_tail->m_next = page;
-      b->m_tail = page;
-    }
-    return (Uint32 *)(page->m_data);
+    *error = SEND_BUFFER_FULL;
   }
 
   if (b->m_tail == 0)
@@ -279,6 +431,26 @@ trp_client::getWritePtr(NodeId node, Uint32 lenBytes, Uint32 prio,
   }
 
   return NULL;
+}
+
+Uint32
+trp_client::updateWritePtr(NodeId node,
+                           TrpId trp_id,
+                           Uint32 lenBytes,
+                           Uint32 prio)
+{
+  (void)trp_id;
+  TFBuffer* b = m_send_buffers+node;
+  TFBufferGuard g0(* b);
+  assert(m_send_nodes_mask.get(node));
+  assert(b->m_head != 0);
+  assert(b->m_tail != 0);
+
+  TFPage *page = b->m_tail;
+  assert(page->m_bytes + lenBytes <= page->max_data_bytes());
+  page->m_bytes += lenBytes;
+  b->m_bytes_in_buffer += lenBytes;
+  return b->m_bytes_in_buffer;
 }
 
 /**
@@ -310,57 +482,8 @@ trp_client::getSendBufferLevel(NodeId node, SB_LevelType &level)
   return;
 }
 
-Uint32
-trp_client::updateWritePtr(NodeId node, Uint32 lenBytes, Uint32 prio)
-{
-  TFBuffer* b = m_send_buffers+node;
-  TFBufferGuard g0(* b);
-  assert(m_send_nodes_mask.get(node));
-  assert(b->m_head != 0);
-  assert(b->m_tail != 0);
-
-  TFPage *page = b->m_tail;
-  assert(page->m_bytes + lenBytes <= page->max_data_bytes());
-  page->m_bytes += lenBytes;
-  b->m_bytes_in_buffer += lenBytes;
-  return b->m_bytes_in_buffer;
-}
-
-/**
- * Append the private client send buffers to the
- * TransporterFacade lists of prepared send buffers.
- * The TransporterFacade may then send these whenever
- * it find convienient.
- *
- * Build an aggregated bitmap 'm_flushed_nodes_mask'
- * of nodes this client has flushed messages to.
- * Client must ensure that the messages to these nodes
- * are force-sent before it starts waiting for any reply.
- *
- * Need to be called with the 'm_mutex' held
- */
-void
-trp_client::flush_send_buffers()
-{
-  assert(m_poll.m_locked);
-  Uint32 cnt = m_send_nodes_cnt;
-  for (Uint32 i = 0; i<cnt; i++)
-  {
-    Uint32 node = m_send_nodes_list[i];
-    assert(m_send_nodes_mask.get(node));
-    TFBuffer* b = m_send_buffers + node;
-    TFBufferGuard g0(* b);
-    m_facade->flush_send_buffer(node, b);
-    b->clear();
-  }
-
-  m_flushed_nodes_mask.bitOR(m_send_nodes_mask);
-  m_send_nodes_cnt = 0;
-  m_send_nodes_mask.clear();
-}
-
 bool
-trp_client::forceSend(NodeId node)
+trp_client::forceSend(NodeId, TrpId)
 {
   do_forceSend();
   return true;

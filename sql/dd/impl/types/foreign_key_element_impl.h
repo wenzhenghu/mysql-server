@@ -1,17 +1,24 @@
-/* Copyright (c) 2014, 2017, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2014, 2020, Oracle and/or its affiliates.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software Foundation,
-   51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 #ifndef DD__FOREIGN_KEY_ELEMENT_IMPL_INCLUDED
 #define DD__FOREIGN_KEY_ELEMENT_IMPL_INCLUDED
@@ -19,24 +26,23 @@
 #include <stddef.h>
 #include <sys/types.h>
 #include <new>
-#include <string>
 
-#include "dd/impl/types/weak_object_impl.h"  // dd::Weak_object_impl
-#include "dd/sdi_fwd.h"
-#include "dd/types/foreign_key_element.h"    // dd::Foreign_key_element
-#include "dd/types/object_type.h"            // dd::Object_id
+#include "sql/dd/impl/types/weak_object_impl.h"  // dd::Weak_object_impl
+#include "sql/dd/sdi_fwd.h"
+#include "sql/dd/string_type.h"
+#include "sql/dd/types/foreign_key_element.h"  // dd::Foreign_key_element
 
 namespace dd {
 
 ///////////////////////////////////////////////////////////////////////////
 
-class Foreign_key_impl;
-class Open_dictionary_tables_ctx;
-class Raw_record;
 class Column;
 class Foreign_key;
+class Foreign_key_impl;
 class Object_key;
 class Object_table;
+class Open_dictionary_tables_ctx;
+class Raw_record;
 class Sdi_rcontext;
 class Sdi_wcontext;
 class Weak_object;
@@ -44,105 +50,92 @@ class Weak_object;
 ///////////////////////////////////////////////////////////////////////////
 
 class Foreign_key_element_impl : public Weak_object_impl,
-                                 public Foreign_key_element
-{
-public:
+                                 public Foreign_key_element {
+ public:
   Foreign_key_element_impl()
-    : m_foreign_key(NULL),
-      m_column(NULL),
-      m_ordinal_position(0)
-  { }
+      : m_foreign_key(nullptr), m_column(nullptr), m_ordinal_position(0) {}
 
   Foreign_key_element_impl(Foreign_key_impl *foreign_key)
-    : m_foreign_key(foreign_key),
-      m_column(NULL),
-      m_ordinal_position(0)
-  { }
+      : m_foreign_key(foreign_key), m_column(nullptr), m_ordinal_position(0) {}
 
   Foreign_key_element_impl(const Foreign_key_element_impl &src,
                            Foreign_key_impl *parent, Column *column);
 
-  virtual ~Foreign_key_element_impl()
-  { }
+  ~Foreign_key_element_impl() override {}
 
-public:
-  virtual const Object_table &object_table() const
-  { return Foreign_key_element::OBJECT_TABLE(); }
+ public:
+  const Object_table &object_table() const override;
 
-  virtual bool validate() const;
+  static void register_tables(Open_dictionary_tables_ctx *otx);
 
-  virtual bool restore_attributes(const Raw_record &r);
+  bool validate() const override;
 
-  virtual bool store_attributes(Raw_record *r);
+  bool restore_attributes(const Raw_record &r) override;
 
-  void serialize(Sdi_wcontext *wctx, Sdi_writer *w) const;
+  bool store_attributes(Raw_record *r) override;
 
-  bool deserialize(Sdi_rcontext *rctx, const RJ_Value &val);
+  void serialize(Sdi_wcontext *wctx, Sdi_writer *w) const override;
 
-  void debug_print(String_type &outb) const;
+  bool deserialize(Sdi_rcontext *rctx, const RJ_Value &val) override;
 
-  void set_ordinal_position(uint ordinal_position)
-  { m_ordinal_position= ordinal_position; }
+  void debug_print(String_type &outb) const override;
 
-public:
+  void set_ordinal_position(uint ordinal_position) {
+    m_ordinal_position = ordinal_position;
+  }
+
+ public:
   /////////////////////////////////////////////////////////////////////////
   // Foreign key.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual const Foreign_key &foreign_key() const;
+  const Foreign_key &foreign_key() const override;
 
-  virtual Foreign_key &foreign_key();
+  Foreign_key &foreign_key() override;
 
   /////////////////////////////////////////////////////////////////////////
   // column.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual const Column &column() const
-  { return *m_column; }
+  const Column &column() const override { return *m_column; }
 
-  virtual void set_column(const Column *column)
-  { m_column= column; }
+  void set_column(const Column *column) override { m_column = column; }
 
   /////////////////////////////////////////////////////////////////////////
   // ordinal_position.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual uint ordinal_position() const
-  { return m_ordinal_position; }
+  uint ordinal_position() const override { return m_ordinal_position; }
 
-  virtual void set_ordinal_position(int ordinal_position)
-  { m_ordinal_position= ordinal_position; }
+  void set_ordinal_position(int ordinal_position) override {
+    m_ordinal_position = ordinal_position;
+  }
 
   /////////////////////////////////////////////////////////////////////////
   // referenced column name.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual const String_type &referenced_column_name() const
-  { return m_referenced_column_name; }
+  const String_type &referenced_column_name() const override {
+    return m_referenced_column_name;
+  }
 
-  virtual void referenced_column_name(const String_type &name)
-  { m_referenced_column_name= name; }
+  void referenced_column_name(const String_type &name) override {
+    m_referenced_column_name = name;
+  }
 
-  // Fix "inherits ... via dominance" warnings
-  virtual Weak_object_impl *impl()
-  { return Weak_object_impl::impl(); }
-  virtual const Weak_object_impl *impl() const
-  { return Weak_object_impl::impl(); }
-
-public:
-  static Foreign_key_element_impl *restore_item(Foreign_key_impl *fk)
-  {
+ public:
+  static Foreign_key_element_impl *restore_item(Foreign_key_impl *fk) {
     return new (std::nothrow) Foreign_key_element_impl(fk);
   }
 
   static Foreign_key_element_impl *clone(const Foreign_key_element_impl &other,
                                          Foreign_key_impl *fk);
 
-public:
-  virtual Object_key *create_primary_key() const;
-  virtual bool has_new_primary_key() const;
+ public:
+  Object_key *create_primary_key() const override;
+  bool has_new_primary_key() const override;
 
-private:
+ private:
   Foreign_key_impl *m_foreign_key;
   const Column *m_column;
   uint m_ordinal_position;
@@ -151,17 +144,6 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////
 
-class Foreign_key_element_type : public Object_type
-{
-public:
-  virtual void register_tables(Open_dictionary_tables_ctx *otx) const;
+}  // namespace dd
 
-  virtual Weak_object *create_object() const
-  { return new (std::nothrow) Foreign_key_element_impl(); }
-};
-
-///////////////////////////////////////////////////////////////////////////
-
-}
-
-#endif // DD__FOREIGN_KEY_ELEMENT_IMPL_INCLUDED
+#endif  // DD__FOREIGN_KEY_ELEMENT_IMPL_INCLUDED

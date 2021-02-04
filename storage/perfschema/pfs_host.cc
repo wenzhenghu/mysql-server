@@ -1,17 +1,24 @@
-/* Copyright (c) 2010, 2017, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2010, 2020, Oracle and/or its affiliates.
 
   This program is free software; you can redistribute it and/or modify
-  it under the terms of the GNU General Public License as published by
-  the Free Software Foundation; version 2 of the License.
+  it under the terms of the GNU General Public License, version 2.0,
+  as published by the Free Software Foundation.
+
+  This program is also distributed with certain software (including
+  but not limited to OpenSSL) that is licensed under separate terms,
+  as designated in a particular file or component or in included license
+  documentation.  The authors of MySQL hereby grant you an additional
+  permission to link the program and your derivative works with the
+  separately licensed software that they have included with MySQL.
 
   This program is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  GNU General Public License for more details.
+  GNU General Public License, version 2.0, for more details.
 
   You should have received a copy of the GNU General Public License
   along with this program; if not, write to the Free Software
-  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA
+  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
   */
 
 /**
@@ -24,14 +31,14 @@
 #include "my_compiler.h"
 #include "my_dbug.h"
 #include "my_sys.h"
-#include "mysqld.h"  // global_status_var
-#include "pfs.h"
-#include "pfs_buffer_container.h"
-#include "pfs_global.h"
-#include "pfs_instr.h"
-#include "pfs_instr_class.h"
-#include "pfs_setup_actor.h"
-#include "pfs_stat.h"
+#include "sql/mysqld.h"  // global_status_var
+#include "storage/perfschema/pfs.h"
+#include "storage/perfschema/pfs_buffer_container.h"
+#include "storage/perfschema/pfs_global.h"
+#include "storage/perfschema/pfs_instr.h"
+#include "storage/perfschema/pfs_instr_class.h"
+#include "storage/perfschema/pfs_setup_actor.h"
+#include "storage/perfschema/pfs_stat.h"
 
 /**
   @addtogroup performance_schema_buffers
@@ -46,11 +53,8 @@ static bool host_hash_inited = false;
   @param param                        sizing parameters
   @return 0 on success
 */
-int
-init_host(const PFS_global_param *param)
-{
-  if (global_host_container.init(param->m_host_sizing))
-  {
+int init_host(const PFS_global_param *param) {
+  if (global_host_container.init(param->m_host_sizing)) {
     return 1;
   }
 
@@ -58,22 +62,16 @@ init_host(const PFS_global_param *param)
 }
 
 /** Cleanup all the host buffers. */
-void
-cleanup_host(void)
-{
-  global_host_container.cleanup();
-}
+void cleanup_host(void) { global_host_container.cleanup(); }
 
-static const uchar *
-host_hash_get_key(const uchar *entry, size_t *length)
-{
+static const uchar *host_hash_get_key(const uchar *entry, size_t *length) {
   const PFS_host *const *typed_entry;
   const PFS_host *host;
   const void *result;
   typed_entry = reinterpret_cast<const PFS_host *const *>(entry);
-  DBUG_ASSERT(typed_entry != NULL);
+  DBUG_ASSERT(typed_entry != nullptr);
   host = *typed_entry;
-  DBUG_ASSERT(host != NULL);
+  DBUG_ASSERT(host != nullptr);
   *length = host->m_key.m_key_length;
   result = host->m_key.m_hash_key;
   return reinterpret_cast<const uchar *>(result);
@@ -83,56 +81,39 @@ host_hash_get_key(const uchar *entry, size_t *length)
   Initialize the host hash.
   @return 0 on success
 */
-int
-init_host_hash(const PFS_global_param *param)
-{
-  if ((!host_hash_inited) && (param->m_host_sizing != 0))
-  {
-    lf_hash_init(&host_hash,
-                 sizeof(PFS_host *),
-                 LF_HASH_UNIQUE,
-                 0,
-                 0,
-                 host_hash_get_key,
-                 &my_charset_bin);
+int init_host_hash(const PFS_global_param *param) {
+  if ((!host_hash_inited) && (param->m_host_sizing != 0)) {
+    lf_hash_init(&host_hash, sizeof(PFS_host *), LF_HASH_UNIQUE, 0, 0,
+                 host_hash_get_key, &my_charset_bin);
     host_hash_inited = true;
   }
   return 0;
 }
 
 /** Cleanup the host hash. */
-void
-cleanup_host_hash(void)
-{
-  if (host_hash_inited)
-  {
+void cleanup_host_hash(void) {
+  if (host_hash_inited) {
     lf_hash_destroy(&host_hash);
     host_hash_inited = false;
   }
 }
 
-static LF_PINS *
-get_host_hash_pins(PFS_thread *thread)
-{
-  if (unlikely(thread->m_host_hash_pins == NULL))
-  {
-    if (!host_hash_inited)
-    {
-      return NULL;
+static LF_PINS *get_host_hash_pins(PFS_thread *thread) {
+  if (unlikely(thread->m_host_hash_pins == nullptr)) {
+    if (!host_hash_inited) {
+      return nullptr;
     }
     thread->m_host_hash_pins = lf_hash_get_pins(&host_hash);
   }
   return thread->m_host_hash_pins;
 }
 
-static void
-set_host_key(PFS_host_key *key, const char *host, uint host_length)
-{
+static void set_host_key(PFS_host_key *key, const char *host,
+                         uint host_length) {
   DBUG_ASSERT(host_length <= HOSTNAME_LENGTH);
 
   char *ptr = &key->m_hash_key[0];
-  if (host_length > 0)
-  {
+  if (host_length > 0) {
     memcpy(ptr, host, host_length);
     ptr += host_length;
   }
@@ -141,18 +122,12 @@ set_host_key(PFS_host_key *key, const char *host, uint host_length)
   key->m_key_length = ptr - &key->m_hash_key[0];
 }
 
-PFS_host *
-find_or_create_host(PFS_thread *thread,
-                    const char *hostname,
-                    uint hostname_length)
-{
-  static PFS_ALIGNED PFS_cacheline_uint32 monotonic;
-
+PFS_host *find_or_create_host(PFS_thread *thread, const char *hostname,
+                              uint hostname_length) {
   LF_PINS *pins = get_host_hash_pins(thread);
-  if (unlikely(pins == NULL))
-  {
+  if (unlikely(pins == nullptr)) {
     global_host_container.m_lost++;
-    return NULL;
+    return nullptr;
   }
 
   PFS_host_key key;
@@ -166,9 +141,8 @@ find_or_create_host(PFS_thread *thread,
 
 search:
   entry = reinterpret_cast<PFS_host **>(
-    lf_hash_search(&host_hash, pins, key.m_hash_key, key.m_key_length));
-  if (entry && (entry != MY_LF_ERRPTR))
-  {
+      lf_hash_search(&host_hash, pins, key.m_hash_key, key.m_key_length));
+  if (entry && (entry != MY_LF_ERRPTR)) {
     PFS_host *pfs;
     pfs = *entry;
     pfs->inc_refcount();
@@ -179,16 +153,12 @@ search:
   lf_hash_search_unpin(pins);
 
   pfs = global_host_container.allocate(&dirty_state);
-  if (pfs != NULL)
-  {
+  if (pfs != nullptr) {
     pfs->m_key = key;
-    if (hostname_length > 0)
-    {
+    if (hostname_length > 0) {
       pfs->m_hostname = &pfs->m_key.m_hash_key[0];
-    }
-    else
-    {
-      pfs->m_hostname = NULL;
+    } else {
+      pfs->m_hostname = nullptr;
     }
     pfs->m_hostname_length = hostname_length;
 
@@ -199,33 +169,28 @@ search:
     int res;
     pfs->m_lock.dirty_to_allocated(&dirty_state);
     res = lf_hash_insert(&host_hash, pins, &pfs);
-    if (likely(res == 0))
-    {
+    if (likely(res == 0)) {
       return pfs;
     }
 
     global_host_container.deallocate(pfs);
 
-    if (res > 0)
-    {
-      if (++retry_count > retry_max)
-      {
+    if (res > 0) {
+      if (++retry_count > retry_max) {
         global_host_container.m_lost++;
-        return NULL;
+        return nullptr;
       }
       goto search;
     }
 
     global_host_container.m_lost++;
-    return NULL;
+    return nullptr;
   }
 
-  return NULL;
+  return nullptr;
 }
 
-void
-PFS_host::aggregate(bool alive)
-{
+void PFS_host::aggregate(bool alive) {
   aggregate_waits();
   aggregate_stages();
   aggregate_statements();
@@ -236,18 +201,13 @@ PFS_host::aggregate(bool alive)
   aggregate_stats();
 }
 
-void
-PFS_host::aggregate_waits()
-{
+void PFS_host::aggregate_waits() {
   /* No parent to aggregate to, clean the stats */
   reset_waits_stats();
 }
 
-void
-PFS_host::aggregate_stages()
-{
-  if (read_instr_class_stages_stats() == NULL)
-  {
+void PFS_host::aggregate_stages() {
+  if (read_instr_class_stages_stats() == nullptr) {
     return;
   }
 
@@ -259,11 +219,8 @@ PFS_host::aggregate_stages()
                        global_instr_class_stages_array);
 }
 
-void
-PFS_host::aggregate_statements()
-{
-  if (read_instr_class_statements_stats() == NULL)
-  {
+void PFS_host::aggregate_statements() {
+  if (read_instr_class_statements_stats() == nullptr) {
     return;
   }
 
@@ -275,11 +232,8 @@ PFS_host::aggregate_statements()
                            global_instr_class_statements_array);
 }
 
-void
-PFS_host::aggregate_transactions()
-{
-  if (read_instr_class_transactions_stats() == NULL)
-  {
+void PFS_host::aggregate_transactions() {
+  if (read_instr_class_transactions_stats() == nullptr) {
     return;
   }
 
@@ -291,11 +245,8 @@ PFS_host::aggregate_transactions()
                              &global_transaction_stat);
 }
 
-void
-PFS_host::aggregate_errors()
-{
-  if (read_instr_class_errors_stats() == NULL)
-  {
+void PFS_host::aggregate_errors() {
+  if (read_instr_class_errors_stats() == nullptr) {
     return;
   }
 
@@ -306,11 +257,8 @@ PFS_host::aggregate_errors()
   aggregate_all_errors(write_instr_class_errors_stats(), &global_error_stat);
 }
 
-void
-PFS_host::aggregate_memory(bool alive)
-{
-  if (read_instr_class_memory_stats() == NULL)
-  {
+void PFS_host::aggregate_memory(bool alive) {
+  if (read_instr_class_memory_stats() == nullptr) {
     return;
   }
 
@@ -318,77 +266,80 @@ PFS_host::aggregate_memory(bool alive)
     Aggregate MEMORY_SUMMARY_BY_HOST_BY_EVENT_NAME to:
     - MEMORY_SUMMARY_GLOBAL_BY_EVENT_NAME
   */
-  aggregate_all_memory(
-    alive, write_instr_class_memory_stats(), global_instr_class_memory_array);
+  aggregate_all_memory(alive, write_instr_class_memory_stats(),
+                       global_instr_class_memory_array);
 }
 
-void
-PFS_host::aggregate_status()
-{
-  /*
-    Aggregate STATUS_BY_HOST to:
-    - GLOBAL_STATUS
-  */
-  m_status_stats.aggregate_to(&global_status_var);
+void PFS_host::aggregate_status() {
+  /* No parent to aggregate to, clean the stats */
   m_status_stats.reset();
 }
 
-void
-PFS_host::aggregate_stats()
-{
+void PFS_host::aggregate_stats() {
   /* No parent to aggregate to, clean the stats */
   m_disconnected_count = 0;
 }
 
-void
-PFS_host::release()
-{
-  dec_refcount();
-}
+void PFS_host::release() { dec_refcount(); }
 
-void
-PFS_host::carry_memory_stat_delta(PFS_memory_stat_delta *delta, uint index)
-{
-  PFS_memory_stat *event_name_array;
-  PFS_memory_stat *stat;
-  PFS_memory_stat_delta delta_buffer;
-  PFS_memory_stat_delta *remaining_delta;
-
-  event_name_array = write_instr_class_memory_stats();
-  stat = &event_name_array[index];
-  remaining_delta = stat->apply_delta(delta, &delta_buffer);
-
-  if (remaining_delta != NULL)
-  {
-    carry_global_memory_stat_delta(remaining_delta, index);
+void PFS_host::rebase_memory_stats() {
+  PFS_memory_shared_stat *stat = m_instr_class_memory_stats;
+  PFS_memory_shared_stat *stat_last = stat + memory_class_max;
+  for (; stat < stat_last; stat++) {
+    stat->reset();
   }
 }
 
-PFS_host *
-sanitize_host(PFS_host *unsafe)
-{
+void PFS_host::carry_memory_stat_alloc_delta(PFS_memory_stat_alloc_delta *delta,
+                                             uint index) {
+  PFS_memory_shared_stat *event_name_array;
+  PFS_memory_shared_stat *stat;
+  PFS_memory_stat_alloc_delta delta_buffer;
+  PFS_memory_stat_alloc_delta *remaining_delta;
+
+  event_name_array = write_instr_class_memory_stats();
+  stat = &event_name_array[index];
+  remaining_delta = stat->apply_alloc_delta(delta, &delta_buffer);
+
+  if (remaining_delta != nullptr) {
+    carry_global_memory_stat_alloc_delta(remaining_delta, index);
+  }
+}
+
+void PFS_host::carry_memory_stat_free_delta(PFS_memory_stat_free_delta *delta,
+                                            uint index) {
+  PFS_memory_shared_stat *event_name_array;
+  PFS_memory_shared_stat *stat;
+  PFS_memory_stat_free_delta delta_buffer;
+  PFS_memory_stat_free_delta *remaining_delta;
+
+  event_name_array = write_instr_class_memory_stats();
+  stat = &event_name_array[index];
+  remaining_delta = stat->apply_free_delta(delta, &delta_buffer);
+
+  if (remaining_delta != nullptr) {
+    carry_global_memory_stat_free_delta(remaining_delta, index);
+  }
+}
+
+PFS_host *sanitize_host(PFS_host *unsafe) {
   return global_host_container.sanitize(unsafe);
 }
 
-static void
-purge_host(PFS_thread *thread, PFS_host *host)
-{
+static void purge_host(PFS_thread *thread, PFS_host *host) {
   LF_PINS *pins = get_host_hash_pins(thread);
-  if (unlikely(pins == NULL))
-  {
+  if (unlikely(pins == nullptr)) {
     return;
   }
 
   PFS_host **entry;
   entry = reinterpret_cast<PFS_host **>(lf_hash_search(
-    &host_hash, pins, host->m_key.m_hash_key, host->m_key.m_key_length));
-  if (entry && (entry != MY_LF_ERRPTR))
-  {
+      &host_hash, pins, host->m_key.m_hash_key, host->m_key.m_key_length));
+  if (entry && (entry != MY_LF_ERRPTR)) {
     DBUG_ASSERT(*entry == host);
-    if (host->get_refcount() == 0)
-    {
-      lf_hash_delete(
-        &host_hash, pins, host->m_key.m_hash_key, host->m_key.m_key_length);
+    if (host->get_refcount() == 0) {
+      lf_hash_delete(&host_hash, pins, host->m_key.m_hash_key,
+                     host->m_key.m_key_length);
       host->aggregate(false);
       global_host_container.deallocate(host);
     }
@@ -397,34 +348,25 @@ purge_host(PFS_thread *thread, PFS_host *host)
   lf_hash_search_unpin(pins);
 }
 
-class Proc_purge_host : public PFS_buffer_processor<PFS_host>
-{
-public:
-  Proc_purge_host(PFS_thread *thread) : m_thread(thread)
-  {
-  }
+class Proc_purge_host : public PFS_buffer_processor<PFS_host> {
+ public:
+  Proc_purge_host(PFS_thread *thread) : m_thread(thread) {}
 
-  virtual void
-  operator()(PFS_host *pfs)
-  {
+  void operator()(PFS_host *pfs) override {
     pfs->aggregate(true);
-    if (pfs->get_refcount() == 0)
-    {
+    if (pfs->get_refcount() == 0) {
       purge_host(m_thread, pfs);
     }
   }
 
-private:
+ private:
   PFS_thread *m_thread;
 };
 
 /** Purge non connected hosts, reset stats of connected hosts. */
-void
-purge_all_host(void)
-{
+void purge_all_host(void) {
   PFS_thread *thread = PFS_thread::get_current_thread();
-  if (unlikely(thread == NULL))
-  {
+  if (unlikely(thread == nullptr)) {
     return;
   }
 

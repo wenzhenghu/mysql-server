@@ -1,18 +1,25 @@
 /*
-   Copyright (c) 2003, 2015, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2003, 2020, Oracle and/or its affiliates.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 #ifndef SEGMENT_LIST_HPP
 #define SEGMENT_LIST_HPP
@@ -147,7 +154,7 @@ class SegmentSubPool :
 {
 public:
   explicit SegmentSubPool(SegmentUtils& parentPool);
-  ~SegmentSubPool();
+  ~SegmentSubPool() override;
 
   /**
    * init
@@ -161,13 +168,13 @@ public:
             Uint32 maxSegments);
 
   /* SegmentUtils Api */
-  virtual SectionSegment* getSegmentPtr(Uint32 iVal);
+  SectionSegment* getSegmentPtr(Uint32 iVal) override;
   virtual void getSegmentPtr(Ptr<SectionSegment>& p, Uint32 iVal);
-  virtual bool seizeSegment(Ptr<SectionSegment>& p);
-  virtual void releaseSegment(Uint32 iVal);
+  bool seizeSegment(Ptr<SectionSegment>& p) override;
+  void releaseSegment(Uint32 iVal) override;
 
   /* Release a section (ll of segments with size) */
-  virtual void releaseSegmentList(Uint32 iVal);
+  void releaseSegmentList(Uint32 iVal) override;
 
   /* SegmentSubPool information : */
   /**

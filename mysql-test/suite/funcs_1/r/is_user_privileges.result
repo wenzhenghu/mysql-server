@@ -28,21 +28,21 @@ DROP FUNCTION test.f1;
 #########################################################################
 DESCRIBE          information_schema.USER_PRIVILEGES;
 Field	Type	Null	Key	Default	Extra
-GRANTEE	varchar(81)	NO			
+GRANTEE	varchar(292)	NO			
 TABLE_CATALOG	varchar(512)	NO			
 PRIVILEGE_TYPE	varchar(64)	NO			
 IS_GRANTABLE	varchar(3)	NO			
 SHOW CREATE TABLE information_schema.USER_PRIVILEGES;
 Table	Create Table
 USER_PRIVILEGES	CREATE TEMPORARY TABLE `USER_PRIVILEGES` (
-  `GRANTEE` varchar(81) NOT NULL DEFAULT '',
+  `GRANTEE` varchar(292) NOT NULL DEFAULT '',
   `TABLE_CATALOG` varchar(512) NOT NULL DEFAULT '',
   `PRIVILEGE_TYPE` varchar(64) NOT NULL DEFAULT '',
   `IS_GRANTABLE` varchar(3) NOT NULL DEFAULT ''
 ) ENGINE=MEMORY DEFAULT CHARSET=utf8
 SHOW COLUMNS FROM information_schema.USER_PRIVILEGES;
 Field	Type	Null	Key	Default	Extra
-GRANTEE	varchar(81)	NO			
+GRANTEE	varchar(292)	NO			
 TABLE_CATALOG	varchar(512)	NO			
 PRIVILEGE_TYPE	varchar(64)	NO			
 IS_GRANTABLE	varchar(3)	NO			
@@ -126,7 +126,7 @@ max_questions	0
 max_updates	0
 max_connections	0
 max_user_connections	0
-plugin	mysql_native_password
+plugin	caching_sha2_password
 authentication_string	
 password_expired	N
 password_last_changed	DTVALUE
@@ -134,6 +134,10 @@ password_lifetime	NULL
 account_locked	N
 Create_role_priv	N
 Drop_role_priv	N
+Password_reuse_history	NULL
+Password_reuse_time	NULL
+Password_require_current	NULL
+User_attributes	NULL
 Host	localhost
 User	testuser2
 Select_priv	N
@@ -173,7 +177,7 @@ max_questions	0
 max_updates	0
 max_connections	0
 max_user_connections	0
-plugin	mysql_native_password
+plugin	caching_sha2_password
 authentication_string	
 password_expired	N
 password_last_changed	DTVALUE
@@ -181,6 +185,10 @@ password_lifetime	NULL
 account_locked	N
 Create_role_priv	N
 Drop_role_priv	N
+Password_reuse_history	NULL
+Password_reuse_time	NULL
+Password_require_current	NULL
+User_attributes	NULL
 Host	localhost
 User	testuser3
 Select_priv	N
@@ -220,7 +228,7 @@ max_questions	0
 max_updates	0
 max_connections	0
 max_user_connections	0
-plugin	mysql_native_password
+plugin	caching_sha2_password
 authentication_string	
 password_expired	N
 password_last_changed	DTVALUE
@@ -228,6 +236,10 @@ password_lifetime	NULL
 account_locked	N
 Create_role_priv	N
 Drop_role_priv	N
+Password_reuse_history	NULL
+Password_reuse_time	NULL
+Password_require_current	NULL
+User_attributes	NULL
 #
 # Add GRANT OPTION db_datadict.* to testuser1;
 GRANT UPDATE ON db_datadict.* TO 'testuser1'@'localhost' WITH GRANT OPTION;
@@ -291,7 +303,7 @@ max_questions	0
 max_updates	0
 max_connections	0
 max_user_connections	0
-plugin	mysql_native_password
+plugin	caching_sha2_password
 authentication_string	
 password_expired	N
 password_last_changed	DTVALUE
@@ -299,6 +311,10 @@ password_lifetime	NULL
 account_locked	N
 Create_role_priv	N
 Drop_role_priv	N
+Password_reuse_history	NULL
+Password_reuse_time	NULL
+Password_require_current	NULL
+User_attributes	NULL
 Host	localhost
 User	testuser2
 Select_priv	N
@@ -338,7 +354,7 @@ max_questions	0
 max_updates	0
 max_connections	0
 max_user_connections	0
-plugin	mysql_native_password
+plugin	caching_sha2_password
 authentication_string	
 password_expired	N
 password_last_changed	DTVALUE
@@ -346,6 +362,10 @@ password_lifetime	NULL
 account_locked	N
 Create_role_priv	N
 Drop_role_priv	N
+Password_reuse_history	NULL
+Password_reuse_time	NULL
+Password_require_current	NULL
+User_attributes	NULL
 Host	localhost
 User	testuser3
 Select_priv	N
@@ -385,7 +405,7 @@ max_questions	0
 max_updates	0
 max_connections	0
 max_user_connections	0
-plugin	mysql_native_password
+plugin	caching_sha2_password
 authentication_string	
 password_expired	N
 password_last_changed	DTVALUE
@@ -393,6 +413,10 @@ password_lifetime	NULL
 account_locked	N
 Create_role_priv	N
 Drop_role_priv	N
+Password_reuse_history	NULL
+Password_reuse_time	NULL
+Password_require_current	NULL
+User_attributes	NULL
 # Establish connection testuser1 (user=testuser1)
 SELECT * FROM information_schema.user_privileges
 WHERE grantee LIKE '''testuser%'''
@@ -442,7 +466,7 @@ max_questions	0
 max_updates	0
 max_connections	0
 max_user_connections	0
-plugin	mysql_native_password
+plugin	caching_sha2_password
 authentication_string	
 password_expired	N
 password_last_changed	DTVALUE
@@ -450,6 +474,10 @@ password_lifetime	NULL
 account_locked	N
 Create_role_priv	N
 Drop_role_priv	N
+Password_reuse_history	NULL
+Password_reuse_time	NULL
+Password_require_current	NULL
+User_attributes	NULL
 Host	localhost
 User	testuser2
 Select_priv	N
@@ -489,7 +517,7 @@ max_questions	0
 max_updates	0
 max_connections	0
 max_user_connections	0
-plugin	mysql_native_password
+plugin	caching_sha2_password
 authentication_string	
 password_expired	N
 password_last_changed	DTVALUE
@@ -497,6 +525,10 @@ password_lifetime	NULL
 account_locked	N
 Create_role_priv	N
 Drop_role_priv	N
+Password_reuse_history	NULL
+Password_reuse_time	NULL
+Password_require_current	NULL
+User_attributes	NULL
 Host	localhost
 User	testuser3
 Select_priv	N
@@ -536,7 +568,7 @@ max_questions	0
 max_updates	0
 max_connections	0
 max_user_connections	0
-plugin	mysql_native_password
+plugin	caching_sha2_password
 authentication_string	
 password_expired	N
 password_last_changed	DTVALUE
@@ -544,6 +576,10 @@ password_lifetime	NULL
 account_locked	N
 Create_role_priv	N
 Drop_role_priv	N
+Password_reuse_history	NULL
+Password_reuse_time	NULL
+Password_require_current	NULL
+User_attributes	NULL
 SHOW GRANTS;
 Grants for testuser1@localhost
 GRANT USAGE ON *.* TO `testuser1`@`localhost`
@@ -615,7 +651,7 @@ max_questions	0
 max_updates	0
 max_connections	0
 max_user_connections	0
-plugin	mysql_native_password
+plugin	caching_sha2_password
 authentication_string	
 password_expired	N
 password_last_changed	DTVALUE
@@ -623,6 +659,10 @@ password_lifetime	NULL
 account_locked	N
 Create_role_priv	N
 Drop_role_priv	N
+Password_reuse_history	NULL
+Password_reuse_time	NULL
+Password_require_current	NULL
+User_attributes	NULL
 Host	localhost
 User	testuser2
 Select_priv	N
@@ -662,7 +702,7 @@ max_questions	0
 max_updates	0
 max_connections	0
 max_user_connections	0
-plugin	mysql_native_password
+plugin	caching_sha2_password
 authentication_string	
 password_expired	N
 password_last_changed	DTVALUE
@@ -670,6 +710,10 @@ password_lifetime	NULL
 account_locked	N
 Create_role_priv	N
 Drop_role_priv	N
+Password_reuse_history	NULL
+Password_reuse_time	NULL
+Password_require_current	NULL
+User_attributes	NULL
 Host	localhost
 User	testuser3
 Select_priv	N
@@ -709,7 +753,7 @@ max_questions	0
 max_updates	0
 max_connections	0
 max_user_connections	0
-plugin	mysql_native_password
+plugin	caching_sha2_password
 authentication_string	
 password_expired	N
 password_last_changed	DTVALUE
@@ -717,6 +761,10 @@ password_lifetime	NULL
 account_locked	N
 Create_role_priv	N
 Drop_role_priv	N
+Password_reuse_history	NULL
+Password_reuse_time	NULL
+Password_require_current	NULL
+User_attributes	NULL
 GRANT SELECT ON *.* TO 'testuser1'@'localhost' WITH GRANT OPTION;
 #
 # Here <SELECT YES> is shown correctly for testuser1;
@@ -780,7 +828,7 @@ max_questions	0
 max_updates	0
 max_connections	0
 max_user_connections	0
-plugin	mysql_native_password
+plugin	caching_sha2_password
 authentication_string	
 password_expired	N
 password_last_changed	DTVALUE
@@ -788,6 +836,10 @@ password_lifetime	NULL
 account_locked	N
 Create_role_priv	N
 Drop_role_priv	N
+Password_reuse_history	NULL
+Password_reuse_time	NULL
+Password_require_current	NULL
+User_attributes	NULL
 Host	localhost
 User	testuser2
 Select_priv	N
@@ -827,7 +879,7 @@ max_questions	0
 max_updates	0
 max_connections	0
 max_user_connections	0
-plugin	mysql_native_password
+plugin	caching_sha2_password
 authentication_string	
 password_expired	N
 password_last_changed	DTVALUE
@@ -835,6 +887,10 @@ password_lifetime	NULL
 account_locked	N
 Create_role_priv	N
 Drop_role_priv	N
+Password_reuse_history	NULL
+Password_reuse_time	NULL
+Password_require_current	NULL
+User_attributes	NULL
 Host	localhost
 User	testuser3
 Select_priv	N
@@ -874,7 +930,7 @@ max_questions	0
 max_updates	0
 max_connections	0
 max_user_connections	0
-plugin	mysql_native_password
+plugin	caching_sha2_password
 authentication_string	
 password_expired	N
 password_last_changed	DTVALUE
@@ -882,6 +938,10 @@ password_lifetime	NULL
 account_locked	N
 Create_role_priv	N
 Drop_role_priv	N
+Password_reuse_history	NULL
+Password_reuse_time	NULL
+Password_require_current	NULL
+User_attributes	NULL
 # Switch to connection testuser1
 SELECT * FROM information_schema.user_privileges
 WHERE grantee LIKE '''testuser%'''
@@ -931,7 +991,7 @@ max_questions	0
 max_updates	0
 max_connections	0
 max_user_connections	0
-plugin	mysql_native_password
+plugin	caching_sha2_password
 authentication_string	
 password_expired	N
 password_last_changed	DTVALUE
@@ -939,6 +999,10 @@ password_lifetime	NULL
 account_locked	N
 Create_role_priv	N
 Drop_role_priv	N
+Password_reuse_history	NULL
+Password_reuse_time	NULL
+Password_require_current	NULL
+User_attributes	NULL
 Host	localhost
 User	testuser2
 Select_priv	N
@@ -978,7 +1042,7 @@ max_questions	0
 max_updates	0
 max_connections	0
 max_user_connections	0
-plugin	mysql_native_password
+plugin	caching_sha2_password
 authentication_string	
 password_expired	N
 password_last_changed	DTVALUE
@@ -986,6 +1050,10 @@ password_lifetime	NULL
 account_locked	N
 Create_role_priv	N
 Drop_role_priv	N
+Password_reuse_history	NULL
+Password_reuse_time	NULL
+Password_require_current	NULL
+User_attributes	NULL
 Host	localhost
 User	testuser3
 Select_priv	N
@@ -1025,7 +1093,7 @@ max_questions	0
 max_updates	0
 max_connections	0
 max_user_connections	0
-plugin	mysql_native_password
+plugin	caching_sha2_password
 authentication_string	
 password_expired	N
 password_last_changed	DTVALUE
@@ -1033,6 +1101,10 @@ password_lifetime	NULL
 account_locked	N
 Create_role_priv	N
 Drop_role_priv	N
+Password_reuse_history	NULL
+Password_reuse_time	NULL
+Password_require_current	NULL
+User_attributes	NULL
 SHOW GRANTS;
 Grants for testuser1@localhost
 GRANT SELECT ON *.* TO `testuser1`@`localhost` WITH GRANT OPTION
@@ -1134,7 +1206,7 @@ max_questions	0
 max_updates	0
 max_connections	0
 max_user_connections	0
-plugin	mysql_native_password
+plugin	caching_sha2_password
 authentication_string	
 password_expired	N
 password_last_changed	DTVALUE
@@ -1142,6 +1214,10 @@ password_lifetime	NULL
 account_locked	N
 Create_role_priv	N
 Drop_role_priv	N
+Password_reuse_history	NULL
+Password_reuse_time	NULL
+Password_require_current	NULL
+User_attributes	NULL
 Host	localhost
 User	testuser2
 Select_priv	N
@@ -1181,7 +1257,7 @@ max_questions	0
 max_updates	0
 max_connections	0
 max_user_connections	0
-plugin	mysql_native_password
+plugin	caching_sha2_password
 authentication_string	
 password_expired	N
 password_last_changed	DTVALUE
@@ -1189,6 +1265,10 @@ password_lifetime	NULL
 account_locked	N
 Create_role_priv	N
 Drop_role_priv	N
+Password_reuse_history	NULL
+Password_reuse_time	NULL
+Password_require_current	NULL
+User_attributes	NULL
 Host	localhost
 User	testuser3
 Select_priv	N
@@ -1228,7 +1308,7 @@ max_questions	0
 max_updates	0
 max_connections	0
 max_user_connections	0
-plugin	mysql_native_password
+plugin	caching_sha2_password
 authentication_string	
 password_expired	N
 password_last_changed	DTVALUE
@@ -1236,6 +1316,10 @@ password_lifetime	NULL
 account_locked	N
 Create_role_priv	N
 Drop_role_priv	N
+Password_reuse_history	NULL
+Password_reuse_time	NULL
+Password_require_current	NULL
+User_attributes	NULL
 # Switch to connection testuser1
 SELECT * FROM information_schema.user_privileges
 WHERE grantee LIKE '''testuser%'''
@@ -1332,7 +1416,7 @@ max_questions	0
 max_updates	0
 max_connections	0
 max_user_connections	0
-plugin	mysql_native_password
+plugin	caching_sha2_password
 authentication_string	
 password_expired	N
 password_last_changed	DTVALUE
@@ -1340,6 +1424,10 @@ password_lifetime	NULL
 account_locked	N
 Create_role_priv	N
 Drop_role_priv	N
+Password_reuse_history	NULL
+Password_reuse_time	NULL
+Password_require_current	NULL
+User_attributes	NULL
 Host	localhost
 User	testuser2
 Select_priv	N
@@ -1379,7 +1467,7 @@ max_questions	0
 max_updates	0
 max_connections	0
 max_user_connections	0
-plugin	mysql_native_password
+plugin	caching_sha2_password
 authentication_string	
 password_expired	N
 password_last_changed	DTVALUE
@@ -1387,6 +1475,10 @@ password_lifetime	NULL
 account_locked	N
 Create_role_priv	N
 Drop_role_priv	N
+Password_reuse_history	NULL
+Password_reuse_time	NULL
+Password_require_current	NULL
+User_attributes	NULL
 Host	localhost
 User	testuser3
 Select_priv	N
@@ -1426,7 +1518,7 @@ max_questions	0
 max_updates	0
 max_connections	0
 max_user_connections	0
-plugin	mysql_native_password
+plugin	caching_sha2_password
 authentication_string	
 password_expired	N
 password_last_changed	DTVALUE
@@ -1434,6 +1526,10 @@ password_lifetime	NULL
 account_locked	N
 Create_role_priv	N
 Drop_role_priv	N
+Password_reuse_history	NULL
+Password_reuse_time	NULL
+Password_require_current	NULL
+User_attributes	NULL
 # Switch to connection testuser1
 SELECT * FROM information_schema.user_privileges
 WHERE grantee LIKE '''testuser%'''
@@ -1483,7 +1579,7 @@ max_questions	0
 max_updates	0
 max_connections	0
 max_user_connections	0
-plugin	mysql_native_password
+plugin	caching_sha2_password
 authentication_string	
 password_expired	N
 password_last_changed	DTVALUE
@@ -1491,6 +1587,10 @@ password_lifetime	NULL
 account_locked	N
 Create_role_priv	N
 Drop_role_priv	N
+Password_reuse_history	NULL
+Password_reuse_time	NULL
+Password_require_current	NULL
+User_attributes	NULL
 Host	localhost
 User	testuser2
 Select_priv	N
@@ -1530,7 +1630,7 @@ max_questions	0
 max_updates	0
 max_connections	0
 max_user_connections	0
-plugin	mysql_native_password
+plugin	caching_sha2_password
 authentication_string	
 password_expired	N
 password_last_changed	DTVALUE
@@ -1538,6 +1638,10 @@ password_lifetime	NULL
 account_locked	N
 Create_role_priv	N
 Drop_role_priv	N
+Password_reuse_history	NULL
+Password_reuse_time	NULL
+Password_require_current	NULL
+User_attributes	NULL
 Host	localhost
 User	testuser3
 Select_priv	N
@@ -1577,7 +1681,7 @@ max_questions	0
 max_updates	0
 max_connections	0
 max_user_connections	0
-plugin	mysql_native_password
+plugin	caching_sha2_password
 authentication_string	
 password_expired	N
 password_last_changed	DTVALUE
@@ -1585,6 +1689,10 @@ password_lifetime	NULL
 account_locked	N
 Create_role_priv	N
 Drop_role_priv	N
+Password_reuse_history	NULL
+Password_reuse_time	NULL
+Password_require_current	NULL
+User_attributes	NULL
 SHOW GRANTS;
 Grants for testuser1@localhost
 GRANT USAGE ON *.* TO `testuser1`@`localhost`
@@ -1641,7 +1749,7 @@ max_questions	0
 max_updates	0
 max_connections	0
 max_user_connections	0
-plugin	mysql_native_password
+plugin	caching_sha2_password
 authentication_string	
 password_expired	N
 password_last_changed	DTVALUE
@@ -1649,6 +1757,10 @@ password_lifetime	NULL
 account_locked	N
 Create_role_priv	N
 Drop_role_priv	N
+Password_reuse_history	NULL
+Password_reuse_time	NULL
+Password_require_current	NULL
+User_attributes	NULL
 Host	localhost
 User	testuser2
 Select_priv	N
@@ -1688,7 +1800,7 @@ max_questions	0
 max_updates	0
 max_connections	0
 max_user_connections	0
-plugin	mysql_native_password
+plugin	caching_sha2_password
 authentication_string	
 password_expired	N
 password_last_changed	DTVALUE
@@ -1696,6 +1808,10 @@ password_lifetime	NULL
 account_locked	N
 Create_role_priv	N
 Drop_role_priv	N
+Password_reuse_history	NULL
+Password_reuse_time	NULL
+Password_require_current	NULL
+User_attributes	NULL
 Host	localhost
 User	testuser3
 Select_priv	N
@@ -1735,7 +1851,7 @@ max_questions	0
 max_updates	0
 max_connections	0
 max_user_connections	0
-plugin	mysql_native_password
+plugin	caching_sha2_password
 authentication_string	
 password_expired	N
 password_last_changed	DTVALUE
@@ -1743,6 +1859,10 @@ password_lifetime	NULL
 account_locked	N
 Create_role_priv	N
 Drop_role_priv	N
+Password_reuse_history	NULL
+Password_reuse_time	NULL
+Password_require_current	NULL
+User_attributes	NULL
 SHOW GRANTS;
 Grants for testuser1@localhost
 GRANT USAGE ON *.* TO `testuser1`@`localhost`
@@ -1814,7 +1934,7 @@ max_questions	0
 max_updates	0
 max_connections	0
 max_user_connections	0
-plugin	mysql_native_password
+plugin	caching_sha2_password
 authentication_string	
 password_expired	N
 password_last_changed	DTVALUE
@@ -1822,6 +1942,10 @@ password_lifetime	NULL
 account_locked	N
 Create_role_priv	N
 Drop_role_priv	N
+Password_reuse_history	NULL
+Password_reuse_time	NULL
+Password_require_current	NULL
+User_attributes	NULL
 Host	localhost
 User	testuser2
 Select_priv	N
@@ -1861,7 +1985,7 @@ max_questions	0
 max_updates	0
 max_connections	0
 max_user_connections	0
-plugin	mysql_native_password
+plugin	caching_sha2_password
 authentication_string	
 password_expired	N
 password_last_changed	DTVALUE
@@ -1869,6 +1993,10 @@ password_lifetime	NULL
 account_locked	N
 Create_role_priv	N
 Drop_role_priv	N
+Password_reuse_history	NULL
+Password_reuse_time	NULL
+Password_require_current	NULL
+User_attributes	NULL
 Host	localhost
 User	testuser3
 Select_priv	N
@@ -1908,7 +2036,7 @@ max_questions	0
 max_updates	0
 max_connections	0
 max_user_connections	0
-plugin	mysql_native_password
+plugin	caching_sha2_password
 authentication_string	
 password_expired	N
 password_last_changed	DTVALUE
@@ -1916,6 +2044,10 @@ password_lifetime	NULL
 account_locked	N
 Create_role_priv	N
 Drop_role_priv	N
+Password_reuse_history	NULL
+Password_reuse_time	NULL
+Password_require_current	NULL
+User_attributes	NULL
 # Switch to connection testuser1
 SELECT * FROM information_schema.user_privileges
 WHERE grantee LIKE '''testuser%'''

@@ -1,17 +1,24 @@
-/* Copyright (c) 2016, 2017, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2016, 2020, Oracle and/or its affiliates.
 
   This program is free software; you can redistribute it and/or modify
-  it under the terms of the GNU General Public License as published by
-  the Free Software Foundation; version 2 of the License.
+  it under the terms of the GNU General Public License, version 2.0,
+  as published by the Free Software Foundation.
+
+  This program is also distributed with certain software (including
+  but not limited to OpenSSL) that is licensed under separate terms,
+  as designated in a particular file or component or in included license
+  documentation.  The authors of MySQL hereby grant you an additional
+  permission to link the program and your derivative works with the
+  separately licensed software that they have included with MySQL.
 
   This program is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  GNU General Public License for more details.
+  GNU General Public License, version 2.0, for more details.
 
   You should have received a copy of the GNU General Public License
   along with this program; if not, write to the Free Software
-  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA
+  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
   */
 
 #ifndef TABLE_ESMH_BY_DIGEST_H
@@ -22,8 +29,8 @@
   Table EVENTS_STATEMENTS_HISTOGRAM_BY_DIGEST (declarations).
 */
 
-#include "table_helper.h"
-#include "pfs_digest.h"
+#include "storage/perfschema/pfs_digest.h"
+#include "storage/perfschema/table_helper.h"
 
 /**
   @addtogroup performance_schema_tables
@@ -36,64 +43,40 @@
   Index 1 on digest array (0 based).
   Index 2 on buckets (0 based).
 */
-struct pos_esmh_by_digest : public PFS_double_index
-{
-  pos_esmh_by_digest() : PFS_double_index(0, 0)
-  {
-  }
+struct pos_esmh_by_digest : public PFS_double_index {
+  pos_esmh_by_digest() : PFS_double_index(0, 0) {}
 
-  inline void
-  reset(void)
-  {
+  inline void reset(void) {
     m_index_1 = 0;
     m_index_2 = 0;
   }
 
-  inline bool
-  has_more_digest(void)
-  {
-    return (m_index_1 < digest_max);
-  }
+  inline bool has_more_digest(void) { return (m_index_1 < digest_max); }
 
-  inline void
-  next_digest(void)
-  {
+  inline void next_digest(void) {
     m_index_1++;
     m_index_2 = 0;
   }
 
-  inline bool
-  has_more_buckets(void)
-  {
-    return (m_index_2 < NUMBER_OF_BUCKETS);
-  }
+  inline bool has_more_buckets(void) { return (m_index_2 < NUMBER_OF_BUCKETS); }
 
-  inline void
-  next_bucket(void)
-  {
-    m_index_2++;
-  }
+  inline void next_bucket(void) { m_index_2++; }
 };
 
-class PFS_index_esmh_by_digest : public PFS_engine_index
-{
-public:
+class PFS_index_esmh_by_digest : public PFS_engine_index {
+ public:
   PFS_index_esmh_by_digest()
-    : PFS_engine_index(&m_key_1, &m_key_2, &m_key_3),
-      m_key_1("SCHEMA_NAME"),
-      m_key_2("DIGEST"),
-      m_key_3("BUCKET_NUMBER")
-  {
-  }
+      : PFS_engine_index(&m_key_1, &m_key_2, &m_key_3),
+        m_key_1("SCHEMA_NAME"),
+        m_key_2("DIGEST"),
+        m_key_3("BUCKET_NUMBER") {}
 
-  ~PFS_index_esmh_by_digest()
-  {
-  }
+  ~PFS_index_esmh_by_digest() override {}
 
   bool match_digest(PFS_statements_digest_stat *pfs);
   bool match_bucket(ulong bucket_index);
 
-private:
+ private:
   PFS_key_schema m_key_1;
   PFS_key_digest m_key_2;
   PFS_key_bucket_number m_key_3;
@@ -104,16 +87,14 @@ private:
   PERFORMANCE_SCHEMA.EVENTS_STATEMENTS_HISTOGRAM_BY_DIGEST.
 */
 
-struct PFS_esmh_by_digest_bucket
-{
+struct PFS_esmh_by_digest_bucket {
   /** Column COUNT_BUCKET. */
   ulonglong m_count_bucket;
   /** Column COUNT_BUCKET_AND_LOWER. */
   ulonglong m_count_bucket_and_lower;
 };
 
-struct PFS_esmh_by_digest_histogram
-{
+struct PFS_esmh_by_digest_histogram {
   /** Columns SCHEMA_NAME, DIGEST. */
   PFS_digest_row m_digest;
 
@@ -121,8 +102,7 @@ struct PFS_esmh_by_digest_histogram
   PFS_esmh_by_digest_bucket m_buckets[NUMBER_OF_BUCKETS];
 };
 
-struct row_esmh_by_digest
-{
+struct row_esmh_by_digest {
   /*
     No need to repeat SCHEMA_NAME, DIGEST here,
     only materialize the parts of the row that changes per bucket.
@@ -142,53 +122,47 @@ struct row_esmh_by_digest
 };
 
 /** Table PERFORMANCE_SCHEMA.EVENTS_STATEMENTS_HISTOGRAM_BY_DIGEST. */
-class table_esmh_by_digest : public PFS_engine_table
-{
+class table_esmh_by_digest : public PFS_engine_table {
   typedef pos_esmh_by_digest pos_t;
 
-public:
+ public:
   /** Table share */
   static PFS_engine_table_share m_share;
-  static PFS_engine_table *create();
+  static PFS_engine_table *create(PFS_engine_table_share *);
   static int delete_all_rows();
   static ha_rows get_row_count();
 
-  virtual void reset_position(void);
+  void reset_position(void) override;
 
-  virtual int rnd_next();
-  virtual int rnd_pos(const void *pos);
+  int rnd_next() override;
+  int rnd_pos(const void *pos) override;
 
-  virtual int index_init(uint idx, bool sorted);
-  virtual int index_next();
+  int index_init(uint idx, bool sorted) override;
+  int index_next() override;
 
-protected:
-  virtual int read_row_values(TABLE *table,
-                              unsigned char *buf,
-                              Field **fields,
-                              bool read_all);
+ protected:
+  int read_row_values(TABLE *table, unsigned char *buf, Field **fields,
+                      bool read_all) override;
 
   table_esmh_by_digest();
 
-public:
-  ~table_esmh_by_digest()
-  {
-  }
+ public:
+  ~table_esmh_by_digest() override {}
 
-protected:
+ protected:
   void materialize(PFS_statements_digest_stat *stat);
   int make_row(PFS_statements_digest_stat *stat, ulong bucket_index);
 
-private:
+ private:
   /** Table share lock. */
   static THR_LOCK m_table_lock;
-  /** Fields definition. */
-  static TABLE_FIELD_DEF m_field_def;
+  /** Table definition. */
+  static Plugin_table m_table_def;
 
   /** Current row. */
   PFS_statements_digest_stat *m_materialized_digest;
   PFS_esmh_by_digest_histogram m_materialized_histogram;
   row_esmh_by_digest m_row;
-  time_normalizer *m_normalizer;
   /** Current position. */
   pos_t m_pos;
   /** Next position. */

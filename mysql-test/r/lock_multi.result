@@ -172,7 +172,7 @@ create table t1(a int);
 lock tables t1 write;
 show columns from t1;
 Field	Type	Null	Key	Default	Extra
-a	int(11)	YES		NULL	
+a	int	YES		NULL	
 unlock tables;
 drop table t1;
 USE mysql;
@@ -557,14 +557,14 @@ LOCK TABLE t2 WRITE;
 # Sending:
 DROP TABLE t1, t2;
 # Connection con2
-SET SESSION information_schema_stats=latest;
+SET SESSION information_schema_stats_expiry=0;
 SELECT table_name, table_rows, table_comment FROM information_schema.tables
 WHERE table_schema= 'test' AND table_name= 't1';
 TABLE_NAME	TABLE_ROWS	TABLE_COMMENT
 t1	0	Lock wait timeout exceeded; try restarting transaction
 Warnings:
 Warning	1205	Lock wait timeout exceeded; try restarting transaction
-SET SESSION information_schema_stats=cached;
+SET SESSION information_schema_stats_expiry=default;
 # Connection default
 UNLOCK TABLES;
 # Connection con3

@@ -1,14 +1,21 @@
 /*
-   Copyright (c) 2003, 2013, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2003, 2019, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -75,6 +82,7 @@ public:
   STATIC_CONST( BRANCH_ATTR_EQ_NULL   = 24 );
   STATIC_CONST( BRANCH_ATTR_NE_NULL   = 25 );
   STATIC_CONST( BRANCH_ATTR_OP_ARG_2  = 26 );
+  STATIC_CONST( BRANCH_ATTR_OP_ATTR   = 27 );
 
   /**
    * Macros for creating code
@@ -93,7 +101,7 @@ public:
   static Uint32 ExitLastOK();
 
   /**
-   * Branch OP_ARG
+   * Branch OP_ARG (Attr1 <op> <value arg>)
    *
    * i = Instruction              -  5 Bits ( 0 - 5 ) max 63
    * a = Attribute id             -  16 bits
@@ -109,7 +117,36 @@ public:
    * iiiiii   ddvttttbbbbbbbbbbbbbbbb
    * aaaaaaaaaaaaaaaallllllllllllllll
    * -string....                    -
+   *
+   *
+   * Branch OP_ARG_2 (Attr1 <op> <ParamNo>)
+   *
+   * i = Instruction              -  5 Bits ( 0 - 5 ) max 63
+   * a = Attribute id             -  16 bits
+   * p = parameter no             -  16 bits OP_ARG_2
+   * b = Branch offset (words)    -  16 bits
+   * t = branch type              -  4 bits
+   *
+   *           1111111111222222222233
+   * 01234567890123456789012345678901
+   * iiiiii      ttttbbbbbbbbbbbbbbbb
+   * aaaaaaaaaaaaaaaapppppppppppppppp
+   *
+   *
+   * Branch OP_ATTR (Attr1 <op> Attr2)
+   *
+   * i = Instruction              -  5 Bits ( 0 - 5 ) max 63
+   * a = Attribute id1            -  16 bits
+   * A = Attribute id2            -  16 bits
+   * b = Branch offset (words)    -  16 bits
+   * t = branch type              -  4 bits
+   *
+   *           1111111111222222222233
+   * 01234567890123456789012345678901
+   * iiiiii      ttttbbbbbbbbbbbbbbbb
+   * aaaaaaaaaaaaaaaaAAAAAAAAAAAAAAAA
    */
+
   enum UnaryCondition {
     IS_NULL = 0,
     IS_NOT_NULL = 1
@@ -129,19 +166,26 @@ public:
     AND_EQ_ZERO = 10,
     AND_NE_ZERO = 11
   };
+  // Compare Attr with literal
   // TODO : Remove other 2 unused parameters.
   static Uint32 BranchCol(BinaryCondition cond, 
 			  Uint32 arrayLengthDiff, Uint32 varchar);
   static Uint32 BranchCol_2(Uint32 AttrId);
   static Uint32 BranchCol_2(Uint32 AttrId, Uint32 Len);
 
+  // Compare Attr with parameter
   static Uint32 BranchColParameter(BinaryCondition cond);
   static Uint32 BranchColParameter_2(Uint32 AttrId, Uint32 ParamNo);
+
+  // Compare two Attr from same table
+  static Uint32 BranchColAttrId(BinaryCondition cond);
+  static Uint32 BranchColAttrId_2(Uint32 AttrId1, Uint32 AttrId2);
 
   static Uint32 getBinaryCondition(Uint32 op1);
   static Uint32 getArrayLengthDiff(Uint32 op1);
   static Uint32 isVarchar(Uint32 op1);
   static Uint32 getBranchCol_AttrId(Uint32 op2);
+  static Uint32 getBranchCol_AttrId2(Uint32 op2);
   static Uint32 getBranchCol_Len(Uint32 op2);
   static Uint32 getBranchCol_ParamNo(Uint32 op2);
   
@@ -228,6 +272,20 @@ Interpreter::Branch(Uint32 Inst, Uint32 Reg1, Uint32 Reg2){
 
 inline
 Uint32
+Interpreter::BranchColAttrId(BinaryCondition cond) {
+  return
+    BRANCH_ATTR_OP_ATTR +     // Compare two ATTRs
+    (cond << 12);
+}
+
+inline
+Uint32
+Interpreter::BranchColAttrId_2(Uint32 AttrId1, Uint32 AttrId2) {
+  return (AttrId1 << 16) + AttrId2;
+}
+
+inline
+Uint32
 Interpreter::BranchCol(BinaryCondition cond, 
 		       Uint32 arrayLengthDiff,
 		       Uint32 varchar){
@@ -287,6 +345,12 @@ inline
 Uint32
 Interpreter::getBranchCol_AttrId(Uint32 op){
   return (op >> 16) & 0xFFFF;
+}
+
+inline
+Uint32
+Interpreter::getBranchCol_AttrId2(Uint32 op){
+  return op & 0xFFFF;
 }
 
 inline
@@ -389,29 +453,30 @@ Interpreter::getInstructionPreProcessingInfo(Uint32 *op,
     processing= LABEL_ADDRESS_REPLACEMENT;
     Uint32 byteLength= getBranchCol_Len(*(op+1));
     Uint32 wordLength= (byteLength + 3) >> 2;
-    return op+2+wordLength;
+    return op + 2 + wordLength;
   }
   case BRANCH_ATTR_OP_ARG_2:
+  case BRANCH_ATTR_OP_ATTR:
   {
-    /* We need to take the length from the second word of the
-     * branch instruction so we can skip over the inline const
-     * comparison data.
+    /* Second word of the branch instruction refer either paramNo
+     * or attrId to be compared -> fixed length.
      */
     processing= LABEL_ADDRESS_REPLACEMENT;
-    return op+2;
+    return op + 2;
   }
   case BRANCH_ATTR_EQ_NULL:
   case BRANCH_ATTR_NE_NULL:
     processing= LABEL_ADDRESS_REPLACEMENT;
-    return op+2;
+    return op + 2;
   case EXIT_OK:
   case EXIT_OK_LAST:
   case EXIT_REFUSE:
-    return op+1;
+    return op + 1;
   case CALL:
     processing= SUB_ADDRESS_REPLACEMENT;
+    return op + 1;
   case RETURN:
-    return op+1;
+    return op + 1;
 
   default:
     return NULL;

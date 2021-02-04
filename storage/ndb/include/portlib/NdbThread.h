@@ -1,14 +1,21 @@
 /*
-   Copyright (c) 2003, 2017, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2003, 2020, Oracle and/or its affiliates.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -19,7 +26,6 @@
 #define NDB_THREAD_H
 
 #include <ndb_global.h>
-#include <my_thread_local.h>
 
 #ifdef	__cplusplus
 extern "C" {
@@ -43,27 +49,19 @@ typedef enum NDB_THREAD_PRIO_ENUM {
   NDB_THREAD_PRIO_LOWEST
 } NDB_THREAD_PRIO;
 
-typedef enum NDB_THREAD_TLS_ENUM {
-  NDB_THREAD_TLS_JAM,           /* Jam buffer pointer. */
-  NDB_THREAD_TLS_THREAD,        /* Thread self pointer. */
-  NDB_THREAD_TLS_NDB_THREAD,    /* NDB thread pointer */
-  NDB_THREAD_TLS_RES_OWNER,     /* (Debug only) Shared resource owner */
-  NDB_THREAD_TLS_MAX
-} NDB_THREAD_TLS;
+#ifdef __cplusplus
+
+/* NDB thread pointer. */
+struct NdbThread;
+extern thread_local NdbThread* NDB_THREAD_TLS_NDB_THREAD;
+
+#endif
 
 typedef void* (NDB_THREAD_FUNC)(void*);
 typedef void* NDB_THREAD_ARG;
 typedef size_t NDB_THREAD_STACKSIZE;
 
 struct NdbThread;
-
-/*
-  Method to block/unblock thread from receiving KILL signal with
-  signum set in g_ndb_shm_signum in a portable manner.
-*/
-#ifdef NDB_SHM_TRANSPORTER
-void NdbThread_set_shm_sigmask(bool block);
-#endif
 
 /**
  * Create a thread
@@ -245,11 +243,6 @@ void NdbThread_UnassignFromCPUSet(struct NdbThread*,
 const struct processor_set_handler*
   NdbThread_LockGetCPUSetKey(struct NdbThread*);
 
-/**
- * Fetch and set thread-local storage entry.
- */
-void *NdbThread_GetTlsKey(NDB_THREAD_TLS key);
-void NdbThread_SetTlsKey(NDB_THREAD_TLS key, void *value);
 /* Get my own NdbThread pointer */
 struct NdbThread *NdbThread_GetNdbThread();
 
@@ -266,6 +259,20 @@ struct NdbThread *NdbThread_GetNdbThread();
  *  return -1 - Invalid spec
  */
 int NdbThread_SetHighPrioProperties(const char * spec);
+
+/**
+ * Clear Unix signal mask of thread
+ */
+void NdbThread_ClearSigMask();
+
+/**
+ * Check if CPU is available for our use, used to avoid using CPUs in
+ * automatic CPU locking that the process is not supposed to use. If
+ * we use ThreadConfig then the user have decided to use those anyways,
+ * so in that case we don't care.
+ */
+bool
+NdbThread_IsCPUAvailable(Uint32 cpu_id);
 
 #ifdef	__cplusplus
 }

@@ -1,14 +1,21 @@
 /*
-   Copyright (c) 2003, 2015, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2003, 2019, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -48,6 +55,7 @@ struct AccKeyReq
   static Uint32 getReplicaType(Uint32 requestInfo);
   static bool getTakeOver(Uint32 requestInfo);
   static bool getLockReq(Uint32 requestInfo);
+  static bool getNoWait(Uint32 requestInfo);
 
   static Uint32 setOperation(Uint32 requestInfo, Uint32 op);
   static Uint32 setLockType(Uint32 requestInfo, Uint32 locktype);
@@ -55,6 +63,7 @@ struct AccKeyReq
   static Uint32 setReplicaType(Uint32 requestInfo, Uint32 replicatype);
   static Uint32 setTakeOver(Uint32 requestInfo, bool takeover);
   static Uint32 setLockReq(Uint32 requestInfo, bool lockreq);
+  static Uint32 setNoWait(Uint32 requestInfo, bool lockreq);
 
 private:
   enum RequestInfo {
@@ -63,6 +72,7 @@ private:
     RI_DIRTY_OP_SHIFT     =  6, RI_DIRTY_OP_MASK     =  1,
     RI_REPLICA_TYPE_SHIFT =  7, RI_REPLICA_TYPE_MASK =  3,
     RI_TAKE_OVER_SHIFT    =  9, RI_TAKE_OVER_MASK    =  1,
+    RI_NOWAIT_SHIFT       = 10, RI_NOWAIT_MASK       =  1,
     RI_LOCK_REQ_SHIFT     = 31, RI_LOCK_REQ_MASK     =  1,
   };
 };
@@ -107,6 +117,13 @@ bool
 AccKeyReq::getLockReq(Uint32 requestInfo)
 {
   return (requestInfo >> RI_LOCK_REQ_SHIFT) & RI_LOCK_REQ_MASK;
+}
+
+inline
+bool
+AccKeyReq::getNoWait(Uint32 requestInfo)
+{
+  return (requestInfo >> RI_NOWAIT_SHIFT) & RI_NOWAIT_MASK;
 }
 
 inline
@@ -158,6 +175,14 @@ AccKeyReq::setLockReq(Uint32 requestInfo, bool lockreq)
 {
   return (requestInfo & ~(RI_LOCK_REQ_MASK << RI_LOCK_REQ_SHIFT))
     | (lockreq ? 1U << RI_LOCK_REQ_SHIFT : 0);
+}
+
+inline
+Uint32
+AccKeyReq::setNoWait(Uint32 requestInfo, bool nowait)
+{
+  return (requestInfo & ~(RI_NOWAIT_MASK << RI_NOWAIT_SHIFT))
+    | (nowait ? 1U << RI_NOWAIT_SHIFT : 0);
 }
 
 #endif

@@ -1,14 +1,21 @@
 /*
-   Copyright (c) 2003, 2016, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2003, 2020, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -31,6 +38,8 @@ public:
   : m_version(0),
     m_mysql_version(0),
     m_lqh_workers(0),
+    m_query_threads(0),
+    m_log_parts(0),
     m_type(INVALID),
     m_connectCount(0),
     m_connected(FALSE)
@@ -50,6 +59,8 @@ public:
   Uint32 m_version;       ///< Ndb version
   Uint32 m_mysql_version; ///< MySQL version
   Uint32 m_lqh_workers;   ///< LQH workers
+  Uint32 m_query_threads; ///< Query threads
+  Uint32 m_log_parts;     ///< REDO Log parts
   Uint32 m_type;          ///< Node type
   Uint32 m_connectCount;  ///< No of times connected
   Uint32 m_connected;     ///< Node is connected
@@ -68,7 +79,7 @@ NodeInfo::getType() const {
 class NdbVersion {
   Uint32 m_ver;
 public:
-  NdbVersion(Uint32 ver) : m_ver(ver) {};
+  NdbVersion(Uint32 ver) : m_ver(ver) {}
 
   friend NdbOut& operator<<(NdbOut&, const NdbVersion&);
 };

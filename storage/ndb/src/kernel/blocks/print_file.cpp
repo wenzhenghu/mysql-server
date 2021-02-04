@@ -1,14 +1,21 @@
 /*
-   Copyright (c) 2005, 2016, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2005, 2020, Oracle and/or its affiliates.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -35,7 +42,7 @@ static bool print_page(int page_no)
   return false;
 }
 
-inline void ndb_end_and_exit(int exitcode)
+[[noreturn]] inline void ndb_end_and_exit(int exitcode)
 {
   ndb_end(0);
   exit(exitcode);
@@ -388,9 +395,40 @@ print_undo_page(int count, void* ptr, Uint32 sz)
 	  printf(" %.4d - %.4d : ", pos - len + 1, pos);
 	switch(type){
 	case File_formats::Undofile::UNDO_LCP_FIRST:
+	  printf("[ %lld LCP First %d tab: %d frag: %d ]",
+                 lsn, 
+		 src[0],
+                 src[1] >> 16,
+                 src[1] & 0xFFFF);
+	  if(g_verbosity <= 3)
+	    printf("\n");
+          break;
 	case File_formats::Undofile::UNDO_LCP:
-	  printf("[ %lld LCP %d tab: %d frag: %d ]", lsn, 
-		 src[0], src[1] >> 16, src[1] & 0xFFFF);
+	  printf("[ %lld LCP %d tab: %d frag: %d ]",
+                 lsn, 
+		 src[0],
+                 src[1] >> 16,
+                 src[1] & 0xFFFF);
+	  if(g_verbosity <= 3)
+	    printf("\n");
+	  break;
+	case File_formats::Undofile::UNDO_LOCAL_LCP_FIRST:
+	  printf("[ %lld Local LCP First %d,%d tab: %d frag: %d ]",
+                 lsn, 
+		 src[0],
+		 src[1],
+                 src[2] >> 16,
+                 src[2] & 0xFFFF);
+	  if(g_verbosity <= 3)
+	    printf("\n");
+	  break;
+	case File_formats::Undofile::UNDO_LOCAL_LCP:
+	  printf("[ %lld Local LCP %d,%d tab: %d frag: %d ]",
+                 lsn, 
+		 src[0],
+		 src[1],
+                 src[2] >> 16,
+                 src[2] & 0xFFFF);
 	  if(g_verbosity <= 3)
 	    printf("\n");
 	  break;
@@ -421,52 +459,20 @@ print_undo_page(int count, void* ptr, Uint32 sz)
 	  if(g_verbosity > 3)
 	  {
 	    Dbtup::Disk_undo::Free *req= (Dbtup::Disk_undo::Free*)src;
-	    printf("[ %lld F %d %d %d gci: %d ]",
+	    printf("[ %lld F %d %d %d gci: %d, row(%u,%u) ]",
 		   lsn,
 		   req->m_file_no_page_idx >> 16,
 		   req->m_file_no_page_idx & 0xFFFF,
 		   req->m_page_no,
-		   req->m_gci);
+		   req->m_gci,
+                   src[3],
+                   src[4]);
 	  }
 	  break;
-	case File_formats::Undofile::UNDO_TUP_CREATE:
-	{
-	  Dbtup::Disk_undo::Create *req = (Dbtup::Disk_undo::Create*)src;
-	  printf("[ %lld Create %d ]", lsn, req->m_table);
-	  if(g_verbosity <= 3)
-	    printf("\n");
-	  break;
-	}
 	case File_formats::Undofile::UNDO_TUP_DROP:
 	{
 	  Dbtup::Disk_undo::Drop *req = (Dbtup::Disk_undo::Drop*)src;
 	  printf("[ %lld Drop %d ]", lsn, req->m_table);
-	  if(g_verbosity <= 3)
-	    printf("\n");
-	  break;
-	}
-	case File_formats::Undofile::UNDO_TUP_ALLOC_EXTENT:
-	{
-	  Dbtup::Disk_undo::AllocExtent *req = (Dbtup::Disk_undo::AllocExtent*)src;
-	  printf("[ %lld AllocExtent tab: %d frag: %d file: %d page: %d ]", 
-		 lsn, 
-		 req->m_table,
-		 req->m_fragment,
-		 req->m_file_no,
-		 req->m_page_no);
-	  if(g_verbosity <= 3)
-	    printf("\n");
-	  break;
-	}
-	case File_formats::Undofile::UNDO_TUP_FREE_EXTENT:
-	{
-	  Dbtup::Disk_undo::FreeExtent *req = (Dbtup::Disk_undo::FreeExtent*)src;
-	  printf("[ %lld FreeExtent tab: %d frag: %d file: %d page: %d ]", 
-		 lsn, 
-		 req->m_table,
-		 req->m_fragment,
-		 req->m_file_no,
-		 req->m_page_no);
 	  if(g_verbosity <= 3)
 	    printf("\n");
 	  break;

@@ -1,17 +1,24 @@
-/* Copyright (c) 2016, 2017, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2016, 2020, Oracle and/or its affiliates. All rights reserved.
 
   This program is free software; you can redistribute it and/or modify
-  it under the terms of the GNU General Public License as published by
-  the Free Software Foundation; version 2 of the License.
+  it under the terms of the GNU General Public License, version 2.0,
+  as published by the Free Software Foundation.
+
+  This program is also distributed with certain software (including
+  but not limited to OpenSSL) that is licensed under separate terms,
+  as designated in a particular file or component or in included license
+  documentation.  The authors of MySQL hereby grant you an additional
+  permission to link the program and your derivative works with the
+  separately licensed software that they have included with MySQL.
 
   This program is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  GNU General Public License for more details.
+  GNU General Public License, version 2.0, for more details.
 
   You should have received a copy of the GNU General Public License
-  along with this program; if not, write to the Free Software Foundation,
-  51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
+  along with this program; if not, write to the Free Software
+  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 #ifndef MYSQL_PSI_DATA_LOCK_H
 #define MYSQL_PSI_DATA_LOCK_H
@@ -27,9 +34,11 @@
 
 #include "my_inttypes.h"
 #include "my_sharedlib.h"
-#include "psi_base.h"
 
-#ifdef HAVE_PSI_INTERFACE
+/* HAVE_PSI_*_INTERFACE */
+#include "my_psi_config.h"  // IWYU pragma: keep
+
+#ifdef HAVE_PSI_DATA_LOCK_INTERFACE
 
 /**
   @def PSI_DATA_LOCK_VERSION_1
@@ -69,8 +78,7 @@
 #endif
 
 /** Entry point for the performance schema interface. */
-struct PSI_data_lock_bootstrap
-{
+struct PSI_data_lock_bootstrap {
   /**
     ABI interface finder.
     Calling this method with an interface version number returns either
@@ -96,15 +104,10 @@ typedef struct PSI_data_lock_bootstrap PSI_data_lock_bootstrap;
   to advertise row locks that exists within
   the storage engine tables.
 */
-class PSI_server_data_lock_container
-{
-public:
-  PSI_server_data_lock_container()
-  {
-  }
-  virtual ~PSI_server_data_lock_container()
-  {
-  }
+class PSI_server_data_lock_container {
+ public:
+  PSI_server_data_lock_container() {}
+  virtual ~PSI_server_data_lock_container() {}
 
   /**
     Add a string to the container cache.
@@ -166,8 +169,7 @@ public:
     AND SUBPARTITION_NAME = ... @endcode
   */
   virtual bool accept_object(const char *table_schema,
-                             size_t table_schema_length,
-                             const char *table_name,
+                             size_t table_schema_length, const char *table_name,
                              size_t table_name_length,
                              const char *partition_name,
                              size_t partition_name_length,
@@ -175,39 +177,23 @@ public:
                              size_t sub_partition_name_length) = 0;
 
   /** Add a row to table performance_schema.data_locks. */
-  virtual void add_lock_row(const char *engine,
-                            size_t engine_length,
-                            const char *engine_lock_id,
-                            size_t engine_lock_id_length,
-                            ulonglong transaction_id,
-                            ulonglong thread_id,
-                            ulonglong event_id,
-                            const char *table_schema,
-                            size_t table_schema_length,
-                            const char *table_name,
-                            size_t table_name_length,
-                            const char *partition_name,
-                            size_t partition_name_length,
-                            const char *sub_partition_name,
-                            size_t sub_partition_name_length,
-                            const char *index_name,
-                            size_t index_name_length,
-                            const void *identity,
-                            const char *lock_mode,
-                            const char *lock_type,
-                            const char *lock_status,
-                            const char *lock_data) = 0;
+  virtual void add_lock_row(
+      const char *engine, size_t engine_length, const char *engine_lock_id,
+      size_t engine_lock_id_length, ulonglong transaction_id,
+      ulonglong thread_id, ulonglong event_id, const char *table_schema,
+      size_t table_schema_length, const char *table_name,
+      size_t table_name_length, const char *partition_name,
+      size_t partition_name_length, const char *sub_partition_name,
+      size_t sub_partition_name_length, const char *index_name,
+      size_t index_name_length, const void *identity, const char *lock_mode,
+      const char *lock_type, const char *lock_status,
+      const char *lock_data) = 0;
 };
 
-class PSI_server_data_lock_wait_container
-{
-public:
-  PSI_server_data_lock_wait_container()
-  {
-  }
-  virtual ~PSI_server_data_lock_wait_container()
-  {
-  }
+class PSI_server_data_lock_wait_container {
+ public:
+  PSI_server_data_lock_wait_container() {}
+  virtual ~PSI_server_data_lock_wait_container() {}
 
   /** @sa PSI_server_data_lock_container::cache_string. */
   virtual const char *cache_string(const char *string) = 0;
@@ -278,20 +264,16 @@ public:
                                                   ulonglong event_id) = 0;
 
   /** Add a row to table performance_schema.data_lock_waits. */
-  virtual void add_lock_wait_row(const char *engine,
-                                 size_t engine_length,
-                                 const char *requesting_engine_lock_id,
-                                 size_t requesting_engine_lock_id_length,
-                                 ulonglong requesting_transaction_id,
-                                 ulonglong requesting_thread_id,
-                                 ulonglong requesting_event_id,
-                                 const void *requesting_identity,
-                                 const char *blocking_engine_lock_id,
-                                 size_t blocking_engine_lock_id_length,
-                                 ulonglong blocking_transaction_id,
-                                 ulonglong blocking_thread_id,
-                                 ulonglong blocking_event_id,
-                                 const void *blocking_identity) = 0;
+  virtual void add_lock_wait_row(
+      const char *engine, size_t engine_length,
+      const char *requesting_engine_lock_id,
+      size_t requesting_engine_lock_id_length,
+      ulonglong requesting_transaction_id, ulonglong requesting_thread_id,
+      ulonglong requesting_event_id, const void *requesting_identity,
+      const char *blocking_engine_lock_id,
+      size_t blocking_engine_lock_id_length, ulonglong blocking_transaction_id,
+      ulonglong blocking_thread_id, ulonglong blocking_event_id,
+      const void *blocking_identity) = 0;
 };
 
 /**
@@ -305,15 +287,10 @@ public:
   The server is to call scan() to ask the storage
   engine to add more rows to the container given.
 */
-class PSI_engine_data_lock_iterator
-{
-public:
-  PSI_engine_data_lock_iterator()
-  {
-  }
-  virtual ~PSI_engine_data_lock_iterator()
-  {
-  }
+class PSI_engine_data_lock_iterator {
+ public:
+  PSI_engine_data_lock_iterator() {}
+  virtual ~PSI_engine_data_lock_iterator() {}
 
   /**
     Scan for more data locks.
@@ -333,20 +310,14 @@ public:
     @return true if the iterator is done
   */
   virtual bool fetch(PSI_server_data_lock_container *container,
-                     const char *engine_lock_id,
-                     size_t engine_lock_id_length,
+                     const char *engine_lock_id, size_t engine_lock_id_length,
                      bool with_lock_data) = 0;
 };
 
-class PSI_engine_data_lock_wait_iterator
-{
-public:
-  PSI_engine_data_lock_wait_iterator()
-  {
-  }
-  virtual ~PSI_engine_data_lock_wait_iterator()
-  {
-  }
+class PSI_engine_data_lock_wait_iterator {
+ public:
+  PSI_engine_data_lock_wait_iterator() {}
+  virtual ~PSI_engine_data_lock_wait_iterator() {}
 
   /**
     Scan for more data lock waits.
@@ -385,15 +356,10 @@ public:
   while the iterator created is meant to be stateful,
   and dedicated to an opened performance_schema.row_locks table handle.
 */
-class PSI_engine_data_lock_inspector
-{
-public:
-  PSI_engine_data_lock_inspector()
-  {
-  }
-  virtual ~PSI_engine_data_lock_inspector()
-  {
-  }
+class PSI_engine_data_lock_inspector {
+ public:
+  PSI_engine_data_lock_inspector() {}
+  virtual ~PSI_engine_data_lock_inspector() {}
 
   /**
     Create a data lock iterator.
@@ -416,33 +382,32 @@ public:
     Destroy a data lock iterator.
   */
   virtual void destroy_data_lock_iterator(
-    PSI_engine_data_lock_iterator *it) = 0;
+      PSI_engine_data_lock_iterator *it) = 0;
 
   /**
     Destroy a data lock wait iterator.
   */
   virtual void destroy_data_lock_wait_iterator(
-    PSI_engine_data_lock_wait_iterator *it) = 0;
+      PSI_engine_data_lock_wait_iterator *it) = 0;
 };
 
 /**
   Row Lock registration API.
 */
 typedef void (*register_data_lock_v1_t)(
-  PSI_engine_data_lock_inspector *inspector);
+    PSI_engine_data_lock_inspector *inspector);
 
 /**
   Row Lock un registration API.
 */
 typedef void (*unregister_data_lock_v1_t)(
-  PSI_engine_data_lock_inspector *inspector);
+    PSI_engine_data_lock_inspector *inspector);
 
 /**
   Performance Schema Row Lock Interface, version 1.
   @since PSI_DATA_LOCK_VERSION_1
 */
-struct PSI_data_lock_service_v1
-{
+struct PSI_data_lock_service_v1 {
   register_data_lock_v1_t register_data_lock;
   unregister_data_lock_v1_t unregister_data_lock;
 };
@@ -458,7 +423,7 @@ typedef struct PSI_placeholder PSI_data_lock_service_t;
 
 extern MYSQL_PLUGIN_IMPORT PSI_data_lock_service_t *psi_data_lock_service;
 
-#endif /* HAVE_PSI_INTERFACE */
+#endif /* HAVE_PSI_DATA_LOCK_INTERFACE */
 
 /** @} (end of group psi_abi_data_lock) */
 

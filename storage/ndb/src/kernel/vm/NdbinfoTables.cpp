@@ -1,14 +1,21 @@
 /*
-   Copyright (c) 2009, 2016, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2009, 2020, Oracle and/or its affiliates.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -62,8 +69,8 @@ DECLARE_NDBINFO_TABLE(TEST,5) =
   }
 };
 
-DECLARE_NDBINFO_TABLE(POOLS,12) =
-{ { "pools", 12, 0, "pool usage" },
+DECLARE_NDBINFO_TABLE(POOLS,14) =
+{ { "pools", 14, 0, "pool usage" },
   {
     {"node_id",            Ndbinfo::Number, ""},
     {"block_number",       Ndbinfo::Number, ""},
@@ -77,7 +84,9 @@ DECLARE_NDBINFO_TABLE(POOLS,12) =
     {"config_param1",      Ndbinfo::Number, "config param 1 affecting pool"},
     {"config_param2",      Ndbinfo::Number, "config param 2 affecting pool"},
     {"config_param3",      Ndbinfo::Number, "config param 3 affecting pool"},
-    {"config_param4",      Ndbinfo::Number, "config param 4 affecting pool"}
+    {"config_param4",      Ndbinfo::Number, "config param 4 affecting pool"},
+    {"resource_id",        Ndbinfo::Number, ""},
+    {"type_id",            Ndbinfo::Number, "Record type id within resource"}
   }
 };
 
@@ -121,7 +130,7 @@ DECLARE_NDBINFO_TABLE(LOGBUFFERS, 7) =
 { { "logbuffers", 7, 0, "logbuffer usage" },
   {
     {"node_id",            Ndbinfo::Number, ""},
-    {"log_type",           Ndbinfo::Number, "0 = REDO, 1 = DD-UNDO"},
+    {"log_type",           Ndbinfo::Number, "0 = REDO, 1 = DD-UNDO, 2 = BACKUP-DATA, 3 = BACKUP-LOG"},
     {"log_id",             Ndbinfo::Number, ""},
     {"log_part",           Ndbinfo::Number, ""},
 
@@ -131,8 +140,8 @@ DECLARE_NDBINFO_TABLE(LOGBUFFERS, 7) =
   }
 };
 
-DECLARE_NDBINFO_TABLE(RESOURCES,6) =
-{ { "resources", 6, 0, "resources usage (a.k.a superpool)" },
+DECLARE_NDBINFO_TABLE(RESOURCES,7) =
+{ { "resources", 7, 0, "resources usage (a.k.a superpool)" },
   {
     {"node_id",            Ndbinfo::Number, ""},
     {"resource_id",        Ndbinfo::Number, ""},
@@ -140,7 +149,8 @@ DECLARE_NDBINFO_TABLE(RESOURCES,6) =
     {"reserved",           Ndbinfo::Number, "reserved for this resource"},
     {"used",               Ndbinfo::Number, "currently in use"},
     {"max",                Ndbinfo::Number, "max available"},
-    {"high",               Ndbinfo::Number, "in use high water mark"}
+    {"high",               Ndbinfo::Number, "in use high water mark"},
+    {"spare",              Ndbinfo::Number, "spare pages for restart"}
   }
 };
 
@@ -872,12 +882,245 @@ DECLARE_NDBINFO_TABLE(STORED_TABLES, 20) =
   }
 };
 
-#define DBINFOTBL(x) { Ndbinfo::x##_TABLEID, (Ndbinfo::Table*)&ndbinfo_##x }
+DECLARE_NDBINFO_TABLE(PROCESSES, 8) =
+{ { "processes", 8, 0, "Process ID and Name information for connected nodes" },
+  {
+    { "reporting_node_id",         Ndbinfo::Number,    "Reporting data node ID"},
+    { "node_id",                   Ndbinfo::Number,    "Connected node ID"},
+    { "node_type",                 Ndbinfo::Number,    "Type of node"},
+    { "node_version",              Ndbinfo::String,    "Node MySQL Cluster version string"},
+    { "process_id",                Ndbinfo::Number,    "PID of node process on host"},
+    { "angel_process_id",          Ndbinfo::Number,    "PID of node\\\'s angel process"},
+    { "process_name",              Ndbinfo::String,    "Node\\\'s executable process name"},
+    { "service_URI",               Ndbinfo::String,    "URI for service provided by node"}
+  }
+};
+
+DECLARE_NDBINFO_TABLE(CONFIG_NODES, 4) =
+{ { "config_nodes", 4, 0, "All nodes of current cluster configuration" },
+  {
+    { "reporting_node_id",         Ndbinfo::Number,    "Reporting data node ID"},
+    { "node_id",                   Ndbinfo::Number,    "Configured node ID"},
+    { "node_type",                 Ndbinfo::Number,    "Configured node type"},
+    { "node_hostname",             Ndbinfo::String,    "Configured hostname"}
+  }
+};
+
+DECLARE_NDBINFO_TABLE(PGMAN_TIME_TRACK_STATS, 8) =
+{ { "pgman_time_track_stats", 8, 0,
+    "Time tracking of reads and writes of disk data pages" },
+  {
+    {"node_id",                     Ndbinfo::Number, "node_id"},
+    {"block_number",                Ndbinfo::Number, "Block number"},
+    {"block_instance",              Ndbinfo::Number, "Block instance"},
+    {"upper_bound",                 Ndbinfo::Number,
+       "Upper bound in microseconds" },
+    {"page_reads",                  Ndbinfo::Number64,
+       "Number of disk reads in this range" },
+    {"page_writes",                      Ndbinfo::Number64,
+       "Number of disk writes in this range" },
+    {"log_waits",                   Ndbinfo::Number64,
+       "Number of waits due to WAL rule in this range (log waits)" },
+    {"get_page",                   Ndbinfo::Number64,
+       "Number of waits for get_page in this range" },
+  }
+};
+
+DECLARE_NDBINFO_TABLE(DISKSTAT, 12) =
+{ { "diskstat", 12, 0,
+    "Disk data statistics for last second"},
+  {
+    {"node_id",                     Ndbinfo::Number, "node_id"},
+    {"block_instance",              Ndbinfo::Number, "Block instance"},
+    {"pages_made_dirty",            Ndbinfo::Number,
+       "Pages made dirty last second"},
+    {"reads_issued",                Ndbinfo::Number,
+       "Reads issued last second"},
+    {"reads_completed",             Ndbinfo::Number,
+       "Reads completed last second"},
+    {"writes_issued",               Ndbinfo::Number,
+       "Writes issued last second"},
+    {"writes_completed",            Ndbinfo::Number,
+       "Writes completed last second"},
+    {"log_writes_issued",           Ndbinfo::Number,
+       "Log writes issued last second"},
+    {"log_writes_completed",        Ndbinfo::Number,
+       "Log writes completed last second"},
+    {"get_page_calls_issued",       Ndbinfo::Number,
+       "get_page calls issued last second"},
+    {"get_page_reqs_issued",       Ndbinfo::Number,
+       "get_page calls that triggered disk IO issued last second"},
+    {"get_page_reqs_completed",       Ndbinfo::Number,
+       "get_page calls that triggered disk IO completed last second"},
+  }
+};
+
+DECLARE_NDBINFO_TABLE(DISKSTATS_1SEC, 13) =
+{ { "diskstats_1sec", 13, 0,
+    "Disk data statistics history for last few seconds"},
+  {
+    {"node_id",                     Ndbinfo::Number, "node_id"},
+    {"block_instance",              Ndbinfo::Number, "Block instance"},
+    {"pages_made_dirty",            Ndbinfo::Number,
+       "Pages made dirty per second"},
+    {"reads_issued",                Ndbinfo::Number,
+       "Reads issued per second"},
+    {"reads_completed",             Ndbinfo::Number,
+       "Reads completed per second"},
+    {"writes_issued",               Ndbinfo::Number,
+       "Writes issued per second"},
+    {"writes_completed",            Ndbinfo::Number,
+       "Writes completed per second"},
+    {"log_writes_issued",           Ndbinfo::Number,
+       "Log writes issued per second"},
+    {"log_writes_completed",        Ndbinfo::Number,
+       "Log writes completed per second"},
+    {"get_page_calls_issued",       Ndbinfo::Number,
+       "get_page calls issued per second"},
+    {"get_page_reqs_issued",       Ndbinfo::Number,
+       "get_page calls that triggered disk IO issued per second"},
+    {"get_page_reqs_completed",       Ndbinfo::Number,
+       "get_page calls that triggered disk IO completed per second"},
+    {"seconds_ago",                 Ndbinfo::Number,
+       "Seconds ago that this measurement was made"},
+  }
+};
+
+DECLARE_NDBINFO_TABLE(HWINFO, 7) =
+{ { "hwinfo", 7, 0,
+    "HW information where node executes"},
+  {
+    {"node_id",                     Ndbinfo::Number, "node_id"},
+    {"cpu_cnt_max",                 Ndbinfo::Number,
+       "Number of processors in HW"},
+    {"cpu_cnt",                     Ndbinfo::Number,
+       "Number of processors available to node"},
+    {"num_cpu_cores",               Ndbinfo::Number,
+       "Number of CPU cores in HW of node"},
+    {"num_cpu_sockets",             Ndbinfo::Number,
+       "Number of CPU sockets in HW of node"},
+    {"HW_memory_size",              Ndbinfo::Number64,
+       "HW memory size where node executes"},
+    {"model_name",                  Ndbinfo::String,
+       "CPU model name"},
+  }
+};
+
+DECLARE_NDBINFO_TABLE(CPUINFO, 5) =
+{ { "cpuinfo", 5, 0,
+    "CPU information where node executes"},
+  {
+    {"node_id",                     Ndbinfo::Number, "node_id"},
+    {"cpu_no",                      Ndbinfo::Number, "Processor number"},
+    {"cpu_online",                  Ndbinfo::Number,
+       "Is Processor currently online, 1 if it is, 0 if it isn't"},
+    {"core_id",                     Ndbinfo::Number, "CPU core id"},
+    {"socket_id",                   Ndbinfo::Number, "CPU socket id"},
+  }
+};
+
+DECLARE_NDBINFO_TABLE(CPUDATA, 8) =
+{ { "cpudata", 8, 0,
+    "Data about CPU usage last second"},
+  {
+    {"node_id",                     Ndbinfo::Number, "node_id"},
+    {"cpu_no",                      Ndbinfo::Number, "Processor number"},
+    {"cpu_online",                  Ndbinfo::Number,
+       "Is Processor currently online, 1 if it is, 0 if it isn't"},
+    {"cpu_userspace_time",          Ndbinfo::Number,
+       "Time spent in userspace by CPU"},
+    {"cpu_idle_time",               Ndbinfo::Number,
+       "Time spent in idle state by CPU"},
+    {"cpu_system_time",             Ndbinfo::Number,
+       "Time spent in system time by CPU"},
+    {"cpu_interrupt_time",          Ndbinfo::Number,
+       "Time spent handling HW interrupts and soft interrupts"},
+    {"cpu_exec_vm_time",            Ndbinfo::Number,
+       "Time spent executing VM"},
+  }
+};
+
+DECLARE_NDBINFO_TABLE(CPUDATA_50MS, 10) =
+{ { "cpudata_50ms", 10, 0,
+    "Data about CPU usage per 50ms last second"},
+  {
+    {"node_id",                     Ndbinfo::Number, "node_id"},
+    {"measurement_id",              Ndbinfo::Number,
+       "Order of measurement, latest have lower id"},
+    {"cpu_no",                      Ndbinfo::Number, "Processor number"},
+    {"cpu_online",                  Ndbinfo::Number,
+       "Is Processor currently online, 1 if it is, 0 if it isn't"},
+    {"cpu_userspace_time",          Ndbinfo::Number,
+       "Time spent in userspace by CPU"},
+    {"cpu_idle_time",               Ndbinfo::Number,
+       "Time spent in idle state by CPU"},
+    {"cpu_system_time",             Ndbinfo::Number,
+       "Time spent in system time by CPU"},
+    {"cpu_interrupt_time",          Ndbinfo::Number,
+       "Time spent handling HW interrupts and soft interrupts"},
+    {"cpu_exec_vm_time",            Ndbinfo::Number,
+       "Time spent executing VM"},
+    {"elapsed_time",                Ndbinfo::Number,
+     "Elapsed time in microseconds for measurement" },
+  }
+};
+
+DECLARE_NDBINFO_TABLE(CPUDATA_1SEC, 10) =
+{ { "cpudata_1sec", 10, 0,
+    "Data about CPU usage per second last 20 seconds"},
+  {
+    {"node_id",                     Ndbinfo::Number, "node_id"},
+    {"measurement_id",              Ndbinfo::Number,
+       "Order of measurement, latest have lower id"},
+    {"cpu_no",                      Ndbinfo::Number, "Processor number"},
+    {"cpu_online",                  Ndbinfo::Number,
+       "Is Processor currently online, 1 if it is, 0 if it isn't"},
+    {"cpu_userspace_time",          Ndbinfo::Number,
+       "Time spent in userspace by CPU"},
+    {"cpu_idle_time",               Ndbinfo::Number,
+       "Time spent in idle state by CPU"},
+    {"cpu_system_time",             Ndbinfo::Number,
+       "Time spent in system time by CPU"},
+    {"cpu_interrupt_time",          Ndbinfo::Number,
+       "Time spent handling HW interrupts and soft interrupts"},
+    {"cpu_exec_vm_time",            Ndbinfo::Number,
+       "Time spent executing VM"},
+    {"elapsed_time",                                        Ndbinfo::Number,
+     "Elapsed time in microseconds for measurement" },
+  }
+};
+
+DECLARE_NDBINFO_TABLE(CPUDATA_20SEC, 10) =
+{ { "cpudata_20sec", 10, 0,
+    "Data about CPU usage per 20 sec last 400 seconds"},
+  {
+    {"node_id",                     Ndbinfo::Number, "node_id"},
+    {"measurement_id",              Ndbinfo::Number,
+       "Order of measurement, latest have lower id"},
+    {"cpu_no",                      Ndbinfo::Number, "Processor number"},
+    {"cpu_online",                  Ndbinfo::Number,
+       "Is Processor currently online, 1 if it is, 0 if it isn't"},
+    {"cpu_userspace_time",          Ndbinfo::Number,
+       "Time spent in userspace by CPU"},
+    {"cpu_idle_time",               Ndbinfo::Number,
+       "Time spent in idle state by CPU"},
+    {"cpu_system_time",             Ndbinfo::Number,
+       "Time spent in system time by CPU"},
+    {"cpu_interrupt_time",          Ndbinfo::Number,
+       "Time spent handling HW interrupts and soft interrupts"},
+    {"cpu_exec_vm_time",            Ndbinfo::Number,
+       "Time spent executing VM"},
+    {"elapsed_time",                Ndbinfo::Number,
+     "Elapsed time in microseconds for measurement" },
+  }
+};
+
+#define DBINFOTBL(x) { Ndbinfo::x##_TABLEID, (const Ndbinfo::Table*)&ndbinfo_##x }
 
 static
 struct ndbinfo_table_list_entry {
   Ndbinfo::TableId id;
-  Ndbinfo::Table * table;
+  const Ndbinfo::Table * table;
 } ndbinfo_tables[] = {
   // NOTE! the tables must be added to the list in the same order
   // as they are in "enum TableId"
@@ -918,7 +1161,18 @@ struct ndbinfo_table_list_entry {
   DBINFOTBL(TABLE_DIST_STATUS_ALL),
   DBINFOTBL(TABLE_FRAGMENTS_ALL),
   DBINFOTBL(TABLE_REPLICAS_ALL),
-  DBINFOTBL(STORED_TABLES)
+  DBINFOTBL(STORED_TABLES),
+  DBINFOTBL(PROCESSES),
+  DBINFOTBL(CONFIG_NODES),
+  DBINFOTBL(PGMAN_TIME_TRACK_STATS),
+  DBINFOTBL(DISKSTAT),
+  DBINFOTBL(DISKSTATS_1SEC),
+  DBINFOTBL(HWINFO),
+  DBINFOTBL(CPUINFO),
+  DBINFOTBL(CPUDATA),
+  DBINFOTBL(CPUDATA_50MS),
+  DBINFOTBL(CPUDATA_1SEC),
+  DBINFOTBL(CPUDATA_20SEC)
 };
 
 static int no_ndbinfo_tables =

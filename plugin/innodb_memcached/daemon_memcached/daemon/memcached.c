@@ -42,6 +42,8 @@
 #include "memcached_mysql.h"
 
 #define INNODB_MEMCACHED
+void my_thread_init();
+void my_thread_end();
 
 static inline void item_set_cas(const void *cookie, item *it, uint64_t cas) {
     settings.engine.v1->item_set_cas(settings.engine.v0, cookie, it, cas);
@@ -172,7 +174,7 @@ static void register_callback(ENGINE_HANDLE *eh,
 enum try_read_result {
     READ_DATA_RECEIVED,
     READ_NO_DATA_RECEIVED,
-    READ_ERROR,            /** an error occured (on the socket) (or client closed connection) */
+    READ_ERROR,            /** an error occurred (on the socket) (or client closed connection) */
     READ_MEMORY_ERROR      /** failed to allocate more memory */
 };
 
@@ -1716,7 +1718,7 @@ static void complete_update_bin(conn *c) {
 }
 
 static void process_bin_get(conn *c) {
-    item *it;
+    item *it = NULL;
 
     protocol_binary_response_get* rsp = (protocol_binary_response_get*)c->wbuf;
     char* key = binary_get_key(c);
@@ -3111,7 +3113,7 @@ static void process_bin_update(conn *c) {
     char *key;
     uint16_t nkey;
     uint32_t vlen;
-    item *it;
+    item *it = NULL;
     protocol_binary_request_set* req = binary_get_request(c);
 
     assert(c != NULL);
@@ -3234,7 +3236,7 @@ static void process_bin_append_prepend(conn *c) {
     char *key;
     int nkey;
     int vlen;
-    item *it;
+    item *it = NULL;
 
     assert(c != NULL);
 
@@ -3585,7 +3587,12 @@ static size_t tokenize_command(char *command, token_t *tokens, const size_t max_
     return ntokens;
 }
 
-static void detokenize(token_t *tokens, int ntokens, char **out, int *nbytes) {
+#ifdef INNODB_MEMCACHED
+static void detokenize(token_t *tokens, size_t ntokens, char **out, int *nbytes)
+#else
+static void detokenize(token_t *tokens, int ntokens, char **out, int *nbytes)
+#endif
+{
     int i, nb;
     char *buf, *p;
 
@@ -4045,7 +4052,7 @@ static inline char* process_get_command(conn *c, token_t *tokens, size_t ntokens
     char *key;
     size_t nkey;
     int i = c->ileft;
-    item *it;
+    item *it = NULL;
     token_t *key_token = &tokens[KEY_TOKEN];
     int range = false;
     assert(c != NULL);
@@ -4241,9 +4248,9 @@ static void process_update_command(conn *c, token_t *tokens, const size_t ntoken
     unsigned int flags;
     int32_t exptime_int = 0;
     time_t exptime;
-    int vlen;
+    int vlen = 0;
     uint64_t req_cas_id=0;
-    item *it;
+    item *it = NULL;
 
     assert(c != NULL);
 
@@ -4366,7 +4373,7 @@ static char* process_arithmetic_command(conn *c, token_t *tokens, const size_t n
     ENGINE_ERROR_CODE ret = c->aiostat;
     c->aiostat = ENGINE_SUCCESS;
     uint64_t cas;
-    uint64_t result;
+    uint64_t result = 0;
     if (ret == ENGINE_SUCCESS) {
         ret = settings.engine.v1->arithmetic(settings.engine.v0, c, key, nkey,
                                              incr, false, delta, 0, 0, &cas,
@@ -4682,7 +4689,7 @@ static char* process_command(conn *c, char *command) {
     } else if (settings.extensions.ascii != NULL) {
         EXTENSION_ASCII_PROTOCOL_DESCRIPTOR *cmd;
         size_t nbytes = 0;
-        char *ptr;
+        char *ptr = NULL;
 
         if (ntokens > 0) {
             if (ntokens == MAX_TOKENS) {
@@ -7852,11 +7859,21 @@ int main (int argc, char **argv) {
     ENGINE_HANDLE *engine_handle = NULL;
     if (!load_engine(engine,get_server_api,settings.extensions.logger,&engine_handle)) {
         /* Error already reported */
+#ifdef INNODB_MEMCACHED
+        shutdown_server();
+        goto func_exit;
+#else
         exit(EXIT_FAILURE);
+#endif
     }
+
+#ifdef INNODB_MEMCACHED
+    my_thread_init();
+#endif
 
     if(!init_engine(engine_handle,engine_config,settings.extensions.logger)) {
 #ifdef INNODB_MEMCACHED
+	my_thread_end();
         shutdown_server();
         goto func_exit;
 #else
@@ -7942,6 +7959,7 @@ int main (int argc, char **argv) {
                                             portnumber_file)) {
 		vperror("failed to listen on TCP port %d", settings.port);
 #ifdef INNODB_MEMCACHED
+		my_thread_end();
 		shutdown_server();
 		goto func_exit;
 #else
@@ -8007,6 +8025,7 @@ func_exit:
         event_base_free(main_base);
         main_base = NULL;
     }
+    my_thread_end();
 #endif
 
     memcached_shutdown = 2;

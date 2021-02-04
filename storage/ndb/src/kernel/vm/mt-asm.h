@@ -1,17 +1,24 @@
-/* Copyright (c) 2008, 2014, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2008, 2019, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA */
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 /**
  * Only memory barriers *must* be ported
@@ -19,6 +26,8 @@
  */
 #ifndef NDB_MT_ASM_H
 #define NDB_MT_ASM_H
+
+#include <config.h>
 
 /**
  * Remove comment on NDB_USE_SPINLOCK if it is desired to use spinlocks
@@ -58,6 +67,15 @@ xcng(volatile unsigned * addr, int val)
   return val;
 }
 
+#if defined(HAVE_PAUSE_INSTRUCTION)
+static
+inline
+void
+cpu_pause()
+{
+  __asm__ __volatile__ ("pause");
+}
+#else
 static
 inline
 void
@@ -65,6 +83,7 @@ cpu_pause()
 {
   asm volatile ("rep;nop");
 }
+#endif
 
 #elif defined(__sparc__)
 
@@ -94,11 +113,10 @@ xcng(volatile unsigned * addr, int val)
 }
 #define cpu_pause()
 #define NDB_HAVE_XCNG
-#define NDB_HAVE_CPU_PAUSE
 #else
+#define cpu_pause()
 /* link error if used incorrectly (i.e wo/ having NDB_HAVE_XCNG) */
 extern  int xcng(volatile unsigned * addr, int val);
-extern void cpu_pause();
 #endif
 
 #elif defined(__powerpc__)
@@ -131,6 +149,21 @@ xcng(volatile unsigned * addr, int val)
 
   return prev;
 }
+
+#elif defined(__aarch64__)
+#include <atomic>
+#define NDB_HAVE_MB
+#define NDB_HAVE_RMB
+#define NDB_HAVE_WMB
+#define NDB_HAVE_READ_BARRIER_DEPENDS
+//#define NDB_HAVE_XCNG
+
+#define mb() std::atomic_thread_fence(std::memory_order_seq_cst)
+#define rmb() std::atomic_thread_fence(std::memory_order_seq_cst)
+#define wmb() std::atomic_thread_fence(std::memory_order_seq_cst)
+#define read_barrier_depends() do {} while(0)
+
+#define cpu_pause()  __asm__ __volatile__ ("yield")
 
 #else
 #define NDB_NO_ASM "Unsupported architecture (gcc)"
@@ -184,7 +217,6 @@ xcng(volatile unsigned * addr, int val)
 
 #ifdef HAVE_ATOMIC_SWAP_32
 #define NDB_HAVE_XCNG
-#define NDB_HAVE_CPU_PAUSE
 #if defined(__sparc)
 static inline
 int
@@ -197,6 +229,7 @@ xcng(volatile unsigned * addr, int val)
 }
 #define cpu_pause()
 #elif defined(__x86_64) || defined (__i386)
+#define NDB_HAVE_CPU_PAUSE
 static inline
 int
 xcng(volatile unsigned * addr, int val)
@@ -217,9 +250,9 @@ cpu_pause()
 }
 #endif
 #else
+#define cpu_pause()
 /* link error if used incorrectly (i.e wo/ having NDB_HAVE_XCNG) */
 extern  int xcng(volatile unsigned * addr, int val);
-extern void cpu_pause();
 #endif
 #endif
 #elif defined (_MSC_VER)

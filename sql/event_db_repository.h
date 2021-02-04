@@ -2,16 +2,23 @@
 #define _EVENT_DB_REPOSITORY_H_
 
 /*
-   Copyright (c) 2006, 2017, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2006, 2019, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -20,16 +27,15 @@
 
 #include "lex_string.h"
 #include "my_inttypes.h"
-#include "mysql/mysql_lex_string.h"
 
 class Event_basic;
 class Event_parse_data;
 class THD;
-struct TABLE_LIST;
+
 typedef long my_time_t;
 
 namespace dd {
-  class Schema;
+class Schema;
 }
 
 /*
@@ -40,8 +46,7 @@ namespace dd {
   Note:  This enum should not be used for other purpose
          as it will be removed eventually.
 */
-enum enum_events_table_field
-{
+enum enum_events_table_field {
   ET_FIELD_DB = 0,
   ET_FIELD_NAME,
   ET_FIELD_BODY,
@@ -67,7 +72,6 @@ enum enum_events_table_field
   ET_FIELD_COUNT
 };
 
-
 /**
   @addtogroup Event_Scheduler
   @{
@@ -81,34 +85,34 @@ enum enum_events_table_field
   events.h and event_data_objects.h.
 */
 
-class Event_db_repository
-{
-public:
-  Event_db_repository(){}
+class Event_db_repository {
+  Event_db_repository() {}
 
-  bool create_event(THD *thd, Event_parse_data *parse_data,
-                    bool create_if_not, bool *event_already_exists);
+ public:
+  static bool create_event(THD *thd, Event_parse_data *parse_data,
+                           bool create_if_not, bool *event_already_exists);
 
-  bool update_event(THD *thd, Event_parse_data *parse_data,
-                    LEX_STRING *new_dbname, LEX_STRING *new_name);
+  static bool update_event(THD *thd, Event_parse_data *parse_data,
+                           const LEX_CSTRING *new_dbname,
+                           const LEX_CSTRING *new_name);
 
-  bool drop_event(THD *thd, LEX_STRING db, LEX_STRING name,
-                  bool drop_if_exists);
+  static bool drop_event(THD *thd, LEX_CSTRING db, LEX_CSTRING name,
+                         bool drop_if_exists, bool *event_exists);
 
-  bool drop_schema_events(THD *thd, const dd::Schema &schema);
+  static bool drop_schema_events(THD *thd, const dd::Schema &schema);
 
-  bool load_named_event(THD *thd, LEX_STRING dbname, LEX_STRING name,
-                        Event_basic *et);
+  static bool load_named_event(THD *thd, LEX_CSTRING dbname, LEX_CSTRING name,
+                               Event_basic *et);
 
-  bool update_timing_fields_for_event(THD *thd,
-                                      LEX_STRING event_db_name,
-                                      LEX_STRING event_name,
-                                      my_time_t last_executed,
-                                      ulonglong status);
+  static bool update_timing_fields_for_event(THD *thd,
+                                             LEX_CSTRING event_db_name,
+                                             LEX_CSTRING event_name,
+                                             my_time_t last_executed,
+                                             ulonglong status);
 
   // Disallow copy construction and assignment.
-  Event_db_repository(const Event_db_repository &)= delete;
-  void operator=(Event_db_repository &)= delete;
+  Event_db_repository(const Event_db_repository &) = delete;
+  void operator=(Event_db_repository &) = delete;
 };
 
 /**

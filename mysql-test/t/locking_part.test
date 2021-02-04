@@ -1,8 +1,6 @@
 # Test of SKIP LOCKED and NOWAIT on partitioned tables.
 # Must have same results as not partitioned tables.
 --source include/count_sessions.inc
-# should work with embedded server after mysqltest is fixed
---source include/not_embedded.inc
 
 set @start_read_only= @@global.read_only;
 set @start_autocommit= @@global.autocommit;
@@ -65,6 +63,7 @@ CREATE TABLE t3 SELECT * FROM t1;
 ALTER TABLE t3 ADD PRIMARY KEY (d);
 ALTER TABLE t3 ADD KEY (a);
 ALTER TABLE t3 ADD KEY (a, b);
+ANALYZE TABLE t3;
 #SELECT * FROM t3;
 
 --echo ########################################################################
@@ -92,7 +91,7 @@ SELECT d,a,b,c FROM t1 partition (p18);
 SELECT d,a,b,c FROM t1 partition (p19);
 
 SELECT * FROM t1 WHERE a='01' FOR UPDATE ;
-SELECT * FROM t3 WHERE a='01' FOR UPDATE ;
+SELECT * FROM t3 FORCE INDEX(a) WHERE a='01' FOR UPDATE ;
 
 connect (con2,localhost,test,,test);
 BEGIN;
@@ -109,8 +108,9 @@ SELECT a,count(b) FROM t1 GROUP BY a ORDER BY a FOR SHARE SKIP LOCKED;
 SELECT d,a,b,c FROM t1 partition (p1,p9,p11,p17) ORDER BY d 
    FOR SHARE SKIP LOCKED;
 SELECT d,a,b,c FROM t1 ORDER BY d FOR SHARE SKIP LOCKED;
+ANALYZE TABLE t3;
 SELECT d,a,b,c FROM t3 ORDER BY d FOR SHARE SKIP LOCKED;
-explain extended SELECT d,a,b,c FROM t3 ORDER BY d 
+explain SELECT d,a,b,c FROM t3 ORDER BY d 
    FOR SHARE SKIP LOCKED;
 
 --echo #
@@ -145,7 +145,7 @@ COMMIT;
 connection con1;
 BEGIN;
 SELECT * FROM t1 WHERE a='01' FOR SHARE ;
-SELECT * FROM t3 WHERE a='01' FOR SHARE ;
+SELECT * FROM t3 FORCE INDEX(a) WHERE a='01' FOR SHARE ;
 
 connection con2;
 BEGIN;
@@ -160,8 +160,9 @@ SELECT a,count(b) FROM t1 GROUP BY a ORDER BY a FOR SHARE SKIP LOCKED;
 SELECT d,a,b,c FROM t1 partition (p1,p9,p11,p17) ORDER BY d 
    FOR SHARE SKIP LOCKED;
 SELECT d,a,b,c FROM t1 ORDER BY d FOR SHARE SKIP LOCKED;
+ANALYZE TABLE t3;
 SELECT d,a,b,c FROM t3 ORDER BY d FOR SHARE SKIP LOCKED;
-explain extended SELECT d,a,b,c FROM t3 ORDER BY d 
+explain SELECT d,a,b,c FROM t3 ORDER BY d 
    FOR SHARE SKIP LOCKED;
 
 --echo #
@@ -179,10 +180,13 @@ SELECT d,a,b,c FROM t3 ORDER BY d FOR UPDATE SKIP LOCKED;
 
 --echo #
 --echo #  Dual locking clauses
+--sorted_result
 SELECT * FROM t1, t2 FOR SHARE OF t1 FOR UPDATE OF t2;
+--sorted_result
 SELECT * FROM t1, t2 FOR SHARE OF t1 FOR SHARE OF t2;
 SELECT * FROM t1 FOR SHARE OF t1 NOWAIT;
 SELECT * FROM t1 FOR SHARE OF t1 SKIP LOCKED;
+--sorted_result
 SELECT * FROM t1, t2 FOR SHARE OF t1 NOWAIT FOR SHARE OF t2 NOWAIT;
 COMMIT;
 

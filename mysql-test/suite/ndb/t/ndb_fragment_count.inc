@@ -235,7 +235,7 @@ drop table t1, t2, t3, t4, t5;
 
 create table t1 (a int primary key) engine ndb
   COMMENT="NDB_TABLE=NOLOGGING=1";
---error 1478
+--error ER_ALTER_OPERATION_NOT_SUPPORTED_REASON
 alter table t1 algorithm=inplace,
   COMMENT="NDB_TABLE=NOLOGGING=0";
 drop table t1;
@@ -321,9 +321,10 @@ show create table t1;
 drop table t1;
 
 #Verify that it isn't possible to create no logging table with disk fields
---error 3014
+--error ER_ILLEGAL_HA_CREATE_OPTION
 create table t1 (a bigint primary key, b bigint storage disk) engine ndb
   comment="NDB_TABLE=NOLOGGING=1";
+show warnings;
 
 #Verify that unique indexes gets also correct partition balance
 create table t2 (a bigint primary key, b bigint unique) engine ndb

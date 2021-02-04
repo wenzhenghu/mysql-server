@@ -1,17 +1,24 @@
-/* Copyright (c) 2016, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2016, 2020, Oracle and/or its affiliates. All rights reserved.
 
 This program is free software; you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation; version 2 of the License.
+it under the terms of the GNU General Public License, version 2.0,
+as published by the Free Software Foundation.
+
+This program is also distributed with certain software (including
+but not limited to OpenSSL) that is licensed under separate terms,
+as designated in a particular file or component or in included license
+documentation.  The authors of MySQL hereby grant you an additional
+permission to link the program and your derivative works with the
+separately licensed software that they have included with MySQL.
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+GNU General Public License, version 2.0, for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02111-1307  USA */
+Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 #ifndef SERVICE_IMPLEMENTATION_H
 #define SERVICE_IMPLEMENTATION_H
@@ -40,9 +47,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02111-1307  USA */
   @param service  Name of the service to create the implementation for.
 
 */
-#define SERVICE_IMPLEMENTATION(component, service) \
-  imp_ ## component ## _ ## service
-
+#define SERVICE_IMPLEMENTATION(component, service) imp_##component##_##service
 
 /**
   Declares a Service Implementation. It builds standard implementation
@@ -55,12 +60,10 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02111-1307  USA */
 */
 #define BEGIN_SERVICE_IMPLEMENTATION(component, service) \
   SERVICE_TYPE(service) SERVICE_IMPLEMENTATION(component, service) = {
-
 /**
   A macro to end the last declaration of a Service Implementation.
 */
-#define END_SERVICE_IMPLEMENTATION() \
-  } ;
+#define END_SERVICE_IMPLEMENTATION() }
 
 /**
   A macro to ensure method implementation has required properties, that is it
@@ -72,8 +75,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02111-1307  USA */
   @param name Method name.
   @param args a list of arguments in parenthesis.
 */
-#define DEFINE_METHOD(retval, name, args) \
-  retval name args noexcept
+#define DEFINE_METHOD(retval, name, args) retval name args noexcept
 
 /**
   A short macro to define method that returns bool, which is the most common

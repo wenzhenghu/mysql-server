@@ -1,21 +1,25 @@
 /*
- Copyright (c) 2013, 2016 Oracle and/or its affiliates. All rights
- reserved.
- 
- This program is free software; you can redistribute it and/or
- modify it under the terms of the GNU General Public License
- as published by the Free Software Foundation; version 2 of
- the License.
- 
+ Copyright (c) 2013, 2020, Oracle and/or its affiliates.
+
+ This program is free software; you can redistribute it and/or modify
+ it under the terms of the GNU General Public License, version 2.0,
+ as published by the Free Software Foundation.
+
+ This program is also distributed with certain software (including
+ but not limited to OpenSSL) that is licensed under separate terms,
+ as designated in a particular file or component or in included license
+ documentation.  The authors of MySQL hereby grant you an additional
+ permission to link the program and your derivative works with the
+ separately licensed software that they have included with MySQL.
+
  This program is distributed in the hope that it will be useful,
  but WITHOUT ANY WARRANTY; without even the implied warranty of
- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- GNU General Public License for more details.
- 
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License, version 2.0, for more details.
+
  You should have received a copy of the GNU General Public License
  along with this program; if not, write to the Free Software
- Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
- 02110-1301  USA
+ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
  */
 
 "use strict";
@@ -202,7 +206,7 @@ var DBOperation = function(opcode, tx, indexHandler, tableHandler) {
 
 function allocateKeyBuffer(op) {
   assert(op.buffers.key === null);
-  op.buffers.key = new Buffer(op.index.record.getBufferSize());	
+  op.buffers.key = Buffer.alloc(op.index.record.getBufferSize());
 }
 
 function releaseKeyBuffer(op) {
@@ -277,7 +281,7 @@ function defineBlobs(ncolumns, metadata, values) {
 
 function allocateRowBuffer(op) {
   assert(op.buffers.row === null);
-  op.buffers.row = new Buffer(op.tableHandler.resultRecord.getBufferSize());
+  op.buffers.row = Buffer.alloc(op.tableHandler.resultRecord.getBufferSize());
 }  
 
 function releaseRowBuffer(op) {
@@ -402,7 +406,7 @@ DBOperation.prototype.buildBoundHelpers = function(indexBounds) {
   n  = indexBounds.length;
   if(sz && n) {
     allHelpers = [];
-    mainBuffer = new Buffer(sz * n * 2);
+    mainBuffer = Buffer.alloc(sz * n * 2);
     offset = 0;
     this.scan.bound_param_buffer = mainBuffer; // maintain a reference!
     for(i = 0 ; i < n ; i++) {
@@ -668,7 +672,7 @@ function getScanResults(scanop, userCallback) {
   }
 
   function fetch() {
-    buffer = new Buffer(recordSize);
+    buffer = Buffer.alloc(recordSize);
     fetchResults(dbSession, scanop.scanOp, buffer);  // gather() is the callback
   }
 
@@ -686,7 +690,7 @@ function getScanResults(scanop, userCallback) {
     /* Gather more results. */
     while(status === 0 && results.length < maxRow) {
       pushNewResult();
-      buffer = new Buffer(recordSize);
+      buffer = Buffer.alloc(recordSize);
       status = scanop.scanOp.nextResult(buffer);
     }
     
@@ -947,7 +951,7 @@ function newProjectionOperation(sessionImpl, tx, indexHandler, keys, projection)
     op.result.error = new DBOperationError(op.query.error);
     op.result.success = false;
   } else {
-    op.scanOp = adapter.impl.QueryOperation.create(op.query, op.buffers.key, op.query.size);
+    op.scanOp = adapter.impl.QueryOperation.create(op.query, op.buffers.key, op.query.size, sessionImpl);
   }
   return op;
 }
@@ -1008,6 +1012,14 @@ function newScanOperation(tx, QueryTree, properties) {
 }
 
 
+function setLockMode(ndbSession, lockMode) {
+  if(doc.LockModes.indexOf(lockMode) !== -1) {
+    return new DBOperationError("Invalid Lock Mode");
+  }
+  ndbSession.lockMode = lockMode;
+  return null;
+}
+
 exports.DBOperation         = DBOperation;
 exports.DBOperationError    = DBOperationError;
 exports.newReadOperation    = newReadOperation;
@@ -1021,3 +1033,4 @@ exports.completeExecutedOps = completeExecutedOps;
 exports.getScanResults      = getScanResults;
 exports.prepareOperations   = prepareOperations;
 exports.getQueryResults     = getQueryResults;
+exports.setLockMode         = setLockMode;

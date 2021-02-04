@@ -2,8 +2,6 @@
 # wl#7277: InnoDB: Bulk Load for Create Index
 #
 
-# Not supported in embedded
--- source include/not_embedded.inc
 
 # This test case needs to crash the server. Needs a debug server.
 -- source include/have_debug.inc
@@ -121,7 +119,7 @@ DROP TABLE t1;
 # between SQL-layer DD and InnoDB DD.
 #
 
---disable_parsing
+--disable_testcase BUG#0000
 
 if ($row_format != 'COMPRESSED')
 {
@@ -219,7 +217,7 @@ SELECT CHAR_LENGTH(b) FROM t1;
 
 DROP TABLE t1;
 
---enable_parsing
+--enable_testcase
 
 # Restore global variables
 if ($row_format == 'COMPRESSED')

@@ -1,14 +1,21 @@
 /*
-   Copyright (c) 2003, 2016, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2003, 2020, Oracle and/or its affiliates.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -238,9 +245,9 @@ public:
   };
   typedef Ptr<AttributeRecord> AttributeRecordPtr;
   typedef ArrayPool<AttributeRecord> AttributeRecord_pool;
-  typedef DLMHashTable<AttributeRecord_pool, AttributeRecord> AttributeRecord_hash;
-  typedef DLFifoList<AttributeRecord, AttributeRecord_pool, AttributeRecord> AttributeRecord_list;
-  typedef LocalDLFifoList<AttributeRecord, AttributeRecord_pool, AttributeRecord> LocalAttributeRecord_list;
+  typedef DLMHashTable<AttributeRecord_pool> AttributeRecord_hash;
+  typedef DLFifoList<AttributeRecord_pool> AttributeRecord_list;
+  typedef LocalDLFifoList<AttributeRecord_pool> LocalAttributeRecord_list;
 
   AttributeRecord_pool c_attributeRecordPool;
   AttributeRecord_hash c_attributeRecordHash;
@@ -253,8 +260,8 @@ public:
   struct TableRecord;
   typedef Ptr<TableRecord> TableRecordPtr;
   typedef ArrayPool<TableRecord> TableRecord_pool;
-  typedef DLFifoList<TableRecord, TableRecord_pool, TableRecord> TableRecord_list;
-  typedef LocalDLFifoList<TableRecord, TableRecord_pool, TableRecord> LocalTableRecord_list;
+  typedef DLFifoList<TableRecord_pool> TableRecord_list;
+  typedef LocalDLFifoList<TableRecord_pool> LocalTableRecord_list;
 
   struct TableRecord {
     TableRecord(){
@@ -646,9 +653,9 @@ public:
     };
   };
   typedef Ptr<File> FilePtr;
-  typedef RecordPool<File, RWPool<File> > File_pool;
-  typedef DLList<File, File_pool> File_list;
-  typedef LocalDLList<File, File_pool> Local_file_list;
+  typedef RecordPool<RWPool<File> > File_pool;
+  typedef DLList<File_pool> File_list;
+  typedef LocalDLList<File_pool> Local_file_list;
 
   struct Filegroup {
     Filegroup(){}
@@ -680,7 +687,7 @@ public:
     };
   };
   typedef Ptr<Filegroup> FilegroupPtr;
-  typedef RecordPool<Filegroup, RWPool<Filegroup> > Filegroup_pool;
+  typedef RecordPool<RWPool<Filegroup> > Filegroup_pool;
 
   File_pool c_file_pool;
   Filegroup_pool c_filegroup_pool;
@@ -709,7 +716,7 @@ public:
     DictObject() {
       m_trans_key = 0;
       m_op_ref_count = 0;
-    };
+    }
     Uint32 m_id;
     Uint32 m_type;
     Uint32 m_object_ptr_i;
@@ -759,9 +766,9 @@ public:
 
   typedef Ptr<DictObject> DictObjectPtr;
   typedef ArrayPool<DictObject> DictObject_pool;
-  typedef DLMHashTable<DictObject_pool, DictObject, HashedByName<DictObject> > DictObjectName_hash;
-  typedef DLMHashTable<DictObject_pool, DictObject, HashedById<DictObject> > DictObjectId_hash;
-  typedef SLList<DictObject, DictObject_pool> DictObject_list;
+  typedef DLMHashTable<DictObject_pool, HashedByName<DictObject> > DictObjectName_hash;
+  typedef DLMHashTable<DictObject_pool, HashedById<DictObject> > DictObjectId_hash;
+  typedef SLList<DictObject_pool> DictObject_list;
 
   DictObjectName_hash c_obj_name_hash; // Name (not temporary TableRecords)
   DictObjectId_hash c_obj_id_hash; // Schema file id / Trigger id
@@ -863,7 +870,7 @@ public:
 
 public:
   Dbdict(Block_context& ctx);
-  virtual ~Dbdict();
+  ~Dbdict() override;
 
 private:
   BLOCK_DEFINES(Dbdict);
@@ -1332,7 +1339,7 @@ private:
       m_externalQueue(m_externalQueueHead,
                       m_externalSegmentPool),
       m_jamBuffer(0)
-      {};
+      {}
 
     bool init(EmulatedJamBuffer* jamBuff)
     {
@@ -1350,7 +1357,7 @@ private:
     {
       return (m_internalQueue.isEmpty() &&
               m_externalQueue.isEmpty());
-    };
+    }
 
     /**
      * tryEnqReq
@@ -1511,7 +1518,7 @@ private:
       Uint32 qWordLen = queue.getLen();
       assert((qWordLen % ElementLen) == 0);
       return qWordLen / ElementLen;
-    };
+    }
 
     /* Length of GetTabInfoReq queue elements */
     static const Uint32 ElementLen = GetTabInfoReq::SignalLength + 1 + 3 + 2;
@@ -1757,8 +1764,9 @@ private:
       errorObjectName[0] = 0;
     }
     void print(NdbOut&) const;
+    ErrorInfo(const ErrorInfo&) = default;
   private:
-    ErrorInfo& operator=(const ErrorInfo&);
+    ErrorInfo& operator=(const ErrorInfo&) = default;
   };
 
   void setError(ErrorInfo&,
@@ -2051,10 +2059,10 @@ private:
 #endif
   };
 
-  typedef RecordPool<SchemaOp,ArenaPool<SchemaOp> > SchemaOp_pool;
-  typedef DLMHashTable<SchemaOp_pool, SchemaOp> SchemaOp_hash;
-  typedef DLFifoList<SchemaOp, SchemaOp_pool>::Head  SchemaOp_head;
-  typedef LocalDLFifoList<SchemaOp, SchemaOp_pool> LocalSchemaOp_list;
+  typedef RecordPool<ArenaPool<SchemaOp> > SchemaOp_pool;
+  typedef DLMHashTable<SchemaOp_pool> SchemaOp_hash;
+  typedef DLFifoList<SchemaOp_pool>::Head  SchemaOp_head;
+  typedef LocalDLFifoList<SchemaOp_pool> LocalSchemaOp_list;
 
   SchemaOp_pool c_schemaOpPool;
   SchemaOp_hash c_schemaOpHash;
@@ -2089,7 +2097,7 @@ private:
   inline bool
   seizeOpRec(SchemaOpPtr op_ptr) {
     OpRecPtr& oprec_ptr = op_ptr.p->m_oprec_ptr;
-    RecordPool<T,ArenaPool<T> >& pool = T::getPool(this);
+    RecordPool<ArenaPool<T> >& pool = T::getPool(this);
     Ptr<T> t_ptr;
     if (pool.seize(op_ptr.p->m_trans_ptr.p->m_arena, t_ptr)) {
       new (t_ptr.p) T();
@@ -2104,7 +2112,7 @@ private:
   inline void
   releaseOpRec(SchemaOpPtr op_ptr) {
     OpRecPtr& oprec_ptr = op_ptr.p->m_oprec_ptr;
-    RecordPool<T,ArenaPool<T> >& pool = T::getPool(this);
+    RecordPool<ArenaPool<T> >& pool = T::getPool(this);
     Ptr<T> t_ptr;
     getOpRec<T>(op_ptr, t_ptr);
     pool.release(t_ptr);
@@ -2418,9 +2426,9 @@ private:
          SchemaFile::EntryState = SchemaFile::SF_UNUSED);
   Uint32 check_write_obj(Uint32, Uint32, SchemaFile::EntryState, ErrorInfo&);
 
-  typedef RecordPool<SchemaTrans,ArenaPool<SchemaTrans> > SchemaTrans_pool;
-  typedef DLMHashTable<SchemaTrans_pool, SchemaTrans> SchemaTrans_hash;
-  typedef DLFifoList<SchemaTrans, SchemaTrans_pool> SchemaTrans_list;
+  typedef RecordPool<ArenaPool<SchemaTrans> > SchemaTrans_pool;
+  typedef DLMHashTable<SchemaTrans_pool> SchemaTrans_hash;
+  typedef DLFifoList<SchemaTrans_pool> SchemaTrans_list;
 
   SchemaTrans_pool c_schemaTransPool;
   SchemaTrans_hash c_schemaTransHash;
@@ -2729,7 +2737,7 @@ private:
   };
 
   typedef ArrayPool<TxHandle> TxHandle_pool;
-  typedef DLMHashTable<TxHandle_pool, TxHandle> TxHandle_hash;
+  typedef DLMHashTable<TxHandle_pool> TxHandle_hash;
 
   TxHandle_pool c_txHandlePool;
   TxHandle_hash c_txHandleHash;
@@ -2757,7 +2765,7 @@ private:
   // MODULE: CreateTable
 
   struct CreateTableRec;
-  typedef RecordPool<CreateTableRec,ArenaPool<CreateTableRec> > CreateTableRec_pool;
+  typedef RecordPool<ArenaPool<CreateTableRec> > CreateTableRec_pool;
 
   struct CreateTableRec : public OpRec {
     static const OpInfo g_opInfo;
@@ -2852,7 +2860,7 @@ private:
   // MODULE: DropTable
 
   struct DropTableRec;
-  typedef RecordPool<DropTableRec,ArenaPool<DropTableRec> > DropTableRec_pool;
+  typedef RecordPool<ArenaPool<DropTableRec> > DropTableRec_pool;
 
   struct DropTableRec : public OpRec {
     static const OpInfo g_opInfo;
@@ -2925,7 +2933,7 @@ private:
   // MODULE: AlterTable
 
   struct AlterTableRec;
-  typedef RecordPool<AlterTableRec,ArenaPool<AlterTableRec> > AlterTableRec_pool;
+  typedef RecordPool<ArenaPool<AlterTableRec> > AlterTableRec_pool;
 
   struct AlterTableRec : public OpRec {
     static const OpInfo g_opInfo;
@@ -3070,7 +3078,7 @@ private:
   } AttributeMap[MAX_ATTRIBUTES_IN_INDEX];
 
   struct CreateIndexRec;
-  typedef RecordPool<CreateIndexRec,ArenaPool<CreateIndexRec> > CreateIndexRec_pool;
+  typedef RecordPool<ArenaPool<CreateIndexRec> > CreateIndexRec_pool;
 
   struct CreateIndexRec : public OpRec {
     CreateIndxImplReq m_request;
@@ -3140,7 +3148,7 @@ private:
   // MODULE: DropIndex
 
   struct DropIndexRec;
-  typedef RecordPool<DropIndexRec,ArenaPool<DropIndexRec> > DropIndexRec_pool;
+  typedef RecordPool<ArenaPool<DropIndexRec> > DropIndexRec_pool;
 
   struct DropIndexRec : public OpRec {
     DropIndxImplReq m_request;
@@ -3208,7 +3216,7 @@ private:
   static const TriggerTmpl g_fullyReplicatedTriggerTmp[1];
 
   struct AlterIndexRec;
-  typedef RecordPool<AlterIndexRec,ArenaPool<AlterIndexRec> > AlterIndexRec_pool;
+  typedef RecordPool<ArenaPool<AlterIndexRec> > AlterIndexRec_pool;
 
   struct AlterIndexRec : public OpRec {
     AlterIndxImplReq m_request;
@@ -3306,7 +3314,7 @@ private:
   typedef Id_array<1 + MAX_ATTRIBUTES_IN_INDEX> FragAttributeList;
 
   struct BuildIndexRec;
-  typedef RecordPool<BuildIndexRec,ArenaPool<BuildIndexRec> > BuildIndexRec_pool;
+  typedef RecordPool<ArenaPool<BuildIndexRec> > BuildIndexRec_pool;
 
   struct BuildIndexRec : public OpRec {
     static const OpInfo g_opInfo;
@@ -3385,7 +3393,7 @@ private:
   // MODULE: IndexStat
 
   struct IndexStatRec;
-  typedef RecordPool<IndexStatRec,ArenaPool<IndexStatRec> > IndexStatRec_pool;
+  typedef RecordPool<ArenaPool<IndexStatRec> > IndexStatRec_pool;
 
   struct IndexStatRec : public OpRec {
     static const OpInfo g_opInfo;
@@ -3479,7 +3487,7 @@ private:
   HashMapRecord_pool& get_pool(HashMapRecordPtr) { return c_hash_map_pool; }
 
   struct CreateHashMapRec;
-  typedef RecordPool<CreateHashMapRec,ArenaPool<CreateHashMapRec> > CreateHashMapRec_pool;
+  typedef RecordPool<ArenaPool<CreateHashMapRec> > CreateHashMapRec_pool;
 
   struct CreateHashMapRec : public OpRec {
     static const OpInfo g_opInfo;
@@ -3523,7 +3531,7 @@ private:
   // MODULE: CopyData
 
   struct CopyDataRec;
-  typedef RecordPool<CopyDataRec,ArenaPool<CopyDataRec> > CopyDataRec_pool;
+  typedef RecordPool<ArenaPool<CopyDataRec> > CopyDataRec_pool;
 
   struct CopyDataRec : public OpRec {
     static const OpInfo g_opInfo;
@@ -3689,7 +3697,7 @@ private:
   // MODULE: CreateTrigger
 
   struct CreateTriggerRec;
-  typedef RecordPool<CreateTriggerRec,ArenaPool<CreateTriggerRec> > CreateTriggerRec_pool;
+  typedef RecordPool<ArenaPool<CreateTriggerRec> > CreateTriggerRec_pool;
 
   struct CreateTriggerRec : public OpRec {
     static const OpInfo g_opInfo;
@@ -3753,7 +3761,7 @@ private:
   // MODULE: DropTrigger
 
   struct DropTriggerRec;
-  typedef RecordPool<DropTriggerRec,ArenaPool<DropTriggerRec> > DropTriggerRec_pool;
+  typedef RecordPool<ArenaPool<DropTriggerRec> > DropTriggerRec_pool;
 
   struct DropTriggerRec : public OpRec {
     static const OpInfo g_opInfo;
@@ -3812,7 +3820,7 @@ private:
   // MODULE: CreateFilegroup
 
   struct CreateFilegroupRec;
-  typedef RecordPool<CreateFilegroupRec,ArenaPool<CreateFilegroupRec> > CreateFilegroupRec_pool;
+  typedef RecordPool<ArenaPool<CreateFilegroupRec> > CreateFilegroupRec_pool;
 
   struct CreateFilegroupRec : public OpRec {
     bool m_parsed, m_prepared;
@@ -3860,7 +3868,7 @@ private:
   // MODULE: CreateFile
 
   struct CreateFileRec;
-  typedef RecordPool<CreateFileRec,ArenaPool<CreateFileRec> > CreateFileRec_pool;
+  typedef RecordPool<ArenaPool<CreateFileRec> > CreateFileRec_pool;
 
   struct CreateFileRec : public OpRec {
     bool m_parsed, m_prepared;
@@ -3908,7 +3916,7 @@ private:
   // MODULE: DropFilegroup
 
   struct DropFilegroupRec;
-  typedef RecordPool<DropFilegroupRec,ArenaPool<DropFilegroupRec> > DropFilegroupRec_pool;
+  typedef RecordPool<ArenaPool<DropFilegroupRec> > DropFilegroupRec_pool;
 
   struct DropFilegroupRec : public OpRec {
     bool m_parsed, m_prepared;
@@ -3953,7 +3961,7 @@ private:
   // MODULE: DropFile
 
   struct DropFileRec;
-  typedef RecordPool<DropFileRec,ArenaPool<DropFileRec> > DropFileRec_pool;
+  typedef RecordPool<ArenaPool<DropFileRec> > DropFileRec_pool;
 
   struct DropFileRec : public OpRec {
     bool m_parsed, m_prepared;
@@ -3998,7 +4006,7 @@ private:
   // MODULE: CreateNodegroup
 
   struct CreateNodegroupRec;
-  typedef RecordPool<CreateNodegroupRec,ArenaPool<CreateNodegroupRec> > CreateNodegroupRec_pool;
+  typedef RecordPool<ArenaPool<CreateNodegroupRec> > CreateNodegroupRec_pool;
 
   struct CreateNodegroupRec : public OpRec {
     bool m_map_created;
@@ -4069,7 +4077,7 @@ private:
   // MODULE: DropNodegroup
 
   struct DropNodegroupRec;
-  typedef RecordPool<DropNodegroupRec,ArenaPool<DropNodegroupRec> > DropNodegroupRec_pool;
+  typedef RecordPool<ArenaPool<DropNodegroupRec> > DropNodegroupRec_pool;
 
   struct DropNodegroupRec : public OpRec {
     DropNodegroupImplReq m_request;
@@ -4133,7 +4141,7 @@ private:
 
   // MODULE: CreateFK
   struct CreateFKRec;
-  typedef RecordPool<CreateFKRec,ArenaPool<CreateFKRec> > CreateFKRec_pool;
+  typedef RecordPool<ArenaPool<CreateFKRec> > CreateFKRec_pool;
 
   struct CreateFKRec : public OpRec {
     bool m_parsed;
@@ -4197,7 +4205,7 @@ private:
 
   // MODULE: BuildFK
   struct BuildFKRec;
-  typedef RecordPool<BuildFKRec,ArenaPool<BuildFKRec> > BuildFKRec_pool;
+  typedef RecordPool<ArenaPool<BuildFKRec> > BuildFKRec_pool;
 
   struct BuildFKRec : public OpRec {
     bool m_parsed, m_prepared;
@@ -4247,7 +4255,7 @@ private:
 
   // MODULE: DropFK
   struct DropFKRec;
-  typedef RecordPool<DropFKRec,ArenaPool<DropFKRec> > DropFKRec_pool;
+  typedef RecordPool<ArenaPool<DropFKRec> > DropFKRec_pool;
 
   struct DropFKRec : public OpRec {
     bool m_parsed;
@@ -4349,7 +4357,7 @@ private:
   };
 
   typedef Ptr<ForeignKeyRec> ForeignKeyRecPtr;
-  typedef RecordPool<ForeignKeyRec, RWPool<ForeignKeyRec> > ForeignKeyRec_pool;
+  typedef RecordPool<RWPool<ForeignKeyRec> > ForeignKeyRec_pool;
 
   ForeignKeyRec_pool c_fk_pool;
 
@@ -4378,10 +4386,10 @@ private:
   OpRecordUnion_pool c_opRecordPool;
 
   // Operation records
-  typedef KeyTable2C<OpRecordUnion_pool, OpCreateEvent, OpRecordUnion> OpCreateEvent_keyhash;
-  typedef KeyTable2C<OpRecordUnion_pool, OpSubEvent, OpRecordUnion> OpSubEvent_keyhash;
-  typedef KeyTable2C<OpRecordUnion_pool, OpDropEvent, OpRecordUnion> OpDropEvent_keyhash;
-  typedef KeyTable2C<OpRecordUnion_pool, OpSignalUtil, OpRecordUnion> OpSignalUtil_keyhash;
+  typedef KeyTable2C<OpRecordUnion_pool, OpCreateEvent> OpCreateEvent_keyhash;
+  typedef KeyTable2C<OpRecordUnion_pool, OpSubEvent> OpSubEvent_keyhash;
+  typedef KeyTable2C<OpRecordUnion_pool, OpDropEvent> OpDropEvent_keyhash;
+  typedef KeyTable2C<OpRecordUnion_pool, OpSignalUtil> OpSignalUtil_keyhash;
   OpCreateEvent_keyhash c_opCreateEvent;
   OpSubEvent_keyhash c_opSubEvent;
   OpDropEvent_keyhash c_opDropEvent;
@@ -4655,7 +4663,6 @@ private:
 			  LinearSectionPtr dataPtr);
 
   void parseReadEventSys(Signal *signal, sysTab_NDBEVENTS_0& m_eventRec);
-  bool upgrade_suma_NotStarted(Uint32 err, Uint32 ref) const;
 
   // support
   void getTableKeyList(TableRecordPtr,
@@ -4787,7 +4794,6 @@ public:
                            Uint32& parentObjectType,
                            Uint32& parentObjectId);
 
-  void sendOLD_LIST_TABLES_CONF(Signal *signal, ListTablesReq*);
   void sendLIST_TABLES_CONF(Signal *signal, ListTablesReq*);
 
   Uint32 c_outstanding_sub_startstop;
@@ -4815,11 +4821,21 @@ public:
   void startNextGetTabInfoReq(Signal*);
 
 protected:
-  virtual bool getParam(const char * param, Uint32 * retVal);
+  bool getParam(const char * param, Uint32 * retVal) override;
 private:
   ArenaAllocator c_arenaAllocator;
   Uint32 c_noOfMetaTables;
   Uint32 c_default_hashmap_size;
+  Uint32 m_use_checksum;
+  
+  /**
+   * Pool of SafeCounters reserved for use with schema
+   * transactions which currently must not fail to seize
+   * a safecounter.
+   * Other usage should use the generic c_counterMgr pool
+   * and handle failure-to-seize
+   */
+  SafeCounterManager c_reservedCounterMgr;
 };
 
 inline bool

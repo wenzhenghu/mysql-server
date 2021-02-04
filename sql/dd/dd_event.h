@@ -1,13 +1,20 @@
 /* Copyright (c) 2016, 2017, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -16,25 +23,20 @@
 #ifndef DD_EVENT_INCLUDED
 #define DD_EVENT_INCLUDED
 
-#include "dd/string_type.h"      // dd::String_type
-#include "dd/types/event.h"      // dd::Event::enum_event_status
 #include "my_inttypes.h"
 #include "my_time.h"             // interval_type
+#include "sql/dd/string_type.h"  // dd::String_type
+#include "sql/dd/types/event.h"  // dd::Event::enum_event_status
 
 class Event_parse_data;
-class sp_head;
 class THD;
-typedef struct st_lex_user LEX_USER;
 
-using sql_mode_t= ulonglong;
+struct LEX_USER;
 
-namespace dd
-{
-  class Schema;
-namespace cache
-{
-  class Dictionary_client;
-}
+using sql_mode_t = ulonglong;
+
+namespace dd {
+class Schema;
 
 /**
    Convert new DD Event::enum_event_status to status type used in
@@ -81,8 +83,8 @@ interval_type get_old_interval_type(Event::enum_interval_field interval_field);
    @retval true  Event creation failed.
    @retval false Event creation succeeded.
 */
-bool create_event(THD *thd, const Schema &schema,
-                  const String_type &event_name, const String_type &event_body,
+bool create_event(THD *thd, const Schema &schema, const String_type &event_name,
+                  const String_type &event_body,
                   const String_type &event_body_utf8, const LEX_USER *definer,
                   Event_parse_data *event_data);
 
@@ -92,7 +94,9 @@ bool create_event(THD *thd, const Schema &schema,
 
   @param thd                 Thread handle
   @param event               Event to update.
-  @param new_schema          New Schema or nullptr if the schema does not change.
+  @param schema              Schema currently containing the event.
+  @param new_schema          New Schema or nullptr if the schema does not
+  change.
   @param new_event_name      Updated Event name.
   @param new_event_body      Updated Event body.
   @param new_event_body_utf8 Updated Event body in utf8 format.
@@ -102,13 +106,12 @@ bool create_event(THD *thd, const Schema &schema,
   @retval true  Event updation failed.
   @retval false Event updation succeeded.
 */
-bool update_event(THD *thd, Event *event,
+bool update_event(THD *thd, Event *event, const dd::Schema &schema,
                   const dd::Schema *new_schema,
                   const String_type &new_event_name,
                   const String_type &new_event_body,
                   const String_type &new_event_body_utf8,
-                  const LEX_USER *definer,
-                  Event_parse_data *event_data);
+                  const LEX_USER *definer, Event_parse_data *event_data);
 
 /**
   Update time related fields of Event object.
@@ -122,8 +125,7 @@ bool update_event(THD *thd, Event *event,
   @retval false false if update succeeded.
 */
 bool update_event_time_and_status(THD *thd, Event *event,
-                                  my_time_t last_executed,
-                                  ulonglong status);
+                                  my_time_t last_executed, ulonglong status);
 
-} // namespace dd
-#endif // DD_EVENT_INCLUDED
+}  // namespace dd
+#endif  // DD_EVENT_INCLUDED

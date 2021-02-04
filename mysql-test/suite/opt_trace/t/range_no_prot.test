@@ -1,8 +1,13 @@
-#Start server with MyISAM
+# Start server with MyISAM
 --source include/force_myisam_default.inc
+
+# Skip the test if MyISAM is not available
+--source include/have_myisam.inc
 
 # Test requires: sp-protocol/ps-protocol/view-protocol/cursor-protocol disabled
 --source include/no_protocol.inc
+
+--source include/not_hypergraph.inc  # Does not output the same optimizer trace.
 
 # The main testing script
 --source suite/opt_trace/include/range.inc
@@ -33,7 +38,7 @@ drop table t;
 # Must be an engine that supports spatial indexes
 CREATE TABLE t1(
  pk INT AUTO_INCREMENT PRIMARY KEY,
- col_geom GEOMETRY NOT NULL
+ col_geom GEOMETRY NOT NULL SRID 0
 ) ENGINE=MyISAM;
 
 INSERT INTO t1 VALUES (1, ST_GeomFromText('POINT(10 10)'));

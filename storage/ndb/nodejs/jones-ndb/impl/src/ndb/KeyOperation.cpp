@@ -1,30 +1,32 @@
 /*
- Copyright (c) 2014, 2016 , Oracle and/or its affiliates. All rights
- reserved.
+ Copyright (c) 2014, 2020 Oracle and/or its affiliates.
  
- This program is free software; you can redistribute it and/or
- modify it under the terms of the GNU General Public License
- as published by the Free Software Foundation; version 2 of
- the License.
- 
+ This program is free software; you can redistribute it and/or modify
+ it under the terms of the GNU General Public License, version 2.0,
+ as published by the Free Software Foundation.
+
+ This program is also distributed with certain software (including
+ but not limited to OpenSSL) that is licensed under separate terms,
+ as designated in a particular file or component or in included license
+ documentation.  The authors of MySQL hereby grant you an additional
+ permission to link the program and your derivative works with the
+ separately licensed software that they have included with MySQL.
+
  This program is distributed in the hope that it will be useful,
  but WITHOUT ANY WARRANTY; without even the implied warranty of
- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- GNU General Public License for more details.
- 
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License, version 2.0, for more details.
+
  You should have received a copy of the GNU General Public License
  along with this program; if not, write to the Free Software
- Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
- 02110-1301  USA
+ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
  */
-
-#include <node_buffer.h>
 
 #include "adapter_global.h"
 #include "unified_debug.h"
 #include "KeyOperation.h"
+#include "JsValueAccess.h"
 
-using namespace v8;
 
 const char * opcode_strings[17] = 
  { 0, "read  ", "insert", 0, "update", 0, 0, 0, "write ",
@@ -130,15 +132,15 @@ int KeyOperation::createBlobReadHandles(const Record * rowRecord) {
 }
 
 
-int KeyOperation::createBlobWriteHandles(Handle<Object> blobsArray,
+int KeyOperation::createBlobWriteHandles(Local<Object> blobsArray,
                                          const Record * rowRecord) {
   DEBUG_MARKER(UDEB_DEBUG);
   int ncreated = 0;
   int ncol = rowRecord->getNoOfColumns();
   for(int i = 0 ; i < ncol ; i++) {
-    if(blobsArray->Get(i)->IsObject()) {
-      Local<Object> blobValue = blobsArray->Get(i)->ToObject();
-      assert(node::Buffer::HasInstance(blobValue));
+    if(Get(blobsArray, i)->IsObject()) {
+      Local<Object> blobValue = ElementToObject(blobsArray, i);
+      assert(IsJsBuffer(blobValue));
       const NdbDictionary::Column * col = rowRecord->getColumn(i);
       assert( (col->getType() ==  NdbDictionary::Column::Blob) ||
               (col->getType() ==  NdbDictionary::Column::Text));
@@ -164,7 +166,7 @@ void KeyOperation::readBlobResults(const Arguments & args) {
       if(buffer.IsEmpty()) {
         buffer = Null(isolate);
       }
-      results->ToObject()->Set(readHandler->getFieldNumber(), buffer);
+      SetProp(results, readHandler->getFieldNumber(), buffer);
       readHandler = static_cast<BlobReadHandler *>(readHandler->getNext());
     }
     args.GetReturnValue().Set(scope.Escape(results));

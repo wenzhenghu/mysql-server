@@ -1,3 +1,4 @@
+call mtr.add_suppression("Statement is unsafe because it is being used inside a XA transaction");
 include/master-slave.inc
 Warnings:
 Note	####	Sending passwords in plain text without SSL/TLS is extremely insecure.
@@ -7,8 +8,9 @@ Note	####	Storing MySQL user name or password information in the master info rep
 call mtr.add_suppression("An unexpected event sequence was detected by the IO thread");
 call mtr.add_suppression("GTID_LOG_EVENT .* is not expected in an event stream");
 call mtr.add_suppression("QUERY.* is not expected in an event stream");
+CALL mtr.add_suppression("Unsafe statement written to the binary log using statement format since*");
 include/stop_slave.inc
-CHANGE MASTER TO MASTER_AUTO_POSITION= 0;
+CHANGE REPLICATION SOURCE TO SOURCE_AUTO_POSITION= 0;
 [connection master]
 SET @var= 10;
 CREATE EVENT ev1 ON SCHEDULE EVERY @var HOUR DO INSERT INTO t1 VALUES (0);
@@ -18,6 +20,8 @@ CREATE TABLE t2 (c1 INT) ENGINE= MyISAM;
 INSERT INTO t2 VALUES (1);
 XA START 'xa_trx';
 INSERT INTO t1 VALUES(2);
+Warnings:
+Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. Statement is unsafe because it is being used inside a XA transaction. Concurrent XA transactions may deadlock on slaves when replicated using statements.
 XA END 'xa_trx';
 XA PREPARE 'xa_trx';
 XA ROLLBACK 'xa_trx';
@@ -49,6 +53,8 @@ master-bin.000001	#	Query	#	#	XA ROLLBACK X'78615f747278',X'',1
 [connection slave]
 # Adding debug point 'pause_on_queuing_event' to @@GLOBAL.debug
 START SLAVE IO_THREAD;
+Warnings:
+Warning	1287	'START SLAVE' is deprecated and will be removed in a future release. Please use START REPLICA instead
 # This is the event #3 of current slave relay log file
 include/show_relaylog_events.inc
 Log_name	Pos	Event_type	Server_id	End_log_pos	Info
@@ -154,8 +160,12 @@ slave-relay-bin.000002	#	Query	#	#	XA ROLLBACK X'78615f747278',X'',1
 #
 # Cleaning up and reseting the slave
 include/stop_slave.inc
+Warnings:
+Warning	1287	'RESET SLAVE' is deprecated and will be removed in a future release. Please use RESET REPLICA instead
 # Adding debug point 'pause_on_queuing_event' to @@GLOBAL.debug
 START SLAVE IO_THREAD;
+Warnings:
+Warning	1287	'START SLAVE' is deprecated and will be removed in a future release. Please use START REPLICA instead
 # Removing debug point 'pause_on_queuing_event' from @@GLOBAL.debug
 # Adding debug point 'stop_io_after_queuing_event' to @@GLOBAL.debug
 include/wait_for_slave_io_to_stop.inc
@@ -179,8 +189,12 @@ include/assert_grep.inc [Case 1 found the expected warning line in the error log
 #
 # Cleaning up and reseting the slave
 include/stop_slave.inc
+Warnings:
+Warning	1287	'RESET SLAVE' is deprecated and will be removed in a future release. Please use RESET REPLICA instead
 # Adding debug point 'pause_on_queuing_event' to @@GLOBAL.debug
 START SLAVE IO_THREAD;
+Warnings:
+Warning	1287	'START SLAVE' is deprecated and will be removed in a future release. Please use START REPLICA instead
 # Removing debug point 'pause_on_queuing_event' from @@GLOBAL.debug
 # Adding debug point 'stop_io_after_queuing_event' to @@GLOBAL.debug
 include/wait_for_slave_io_to_stop.inc
@@ -204,8 +218,12 @@ include/assert_grep.inc [Case 2 found the expected warning line in the error log
 #
 # Cleaning up and reseting the slave
 include/stop_slave.inc
+Warnings:
+Warning	1287	'RESET SLAVE' is deprecated and will be removed in a future release. Please use RESET REPLICA instead
 # Adding debug point 'pause_on_queuing_event' to @@GLOBAL.debug
 START SLAVE IO_THREAD;
+Warnings:
+Warning	1287	'START SLAVE' is deprecated and will be removed in a future release. Please use START REPLICA instead
 # Removing debug point 'pause_on_queuing_event' from @@GLOBAL.debug
 # Adding debug point 'stop_io_after_queuing_event' to @@GLOBAL.debug
 include/wait_for_slave_io_to_stop.inc
@@ -229,8 +247,12 @@ include/assert_grep.inc [Case 3 found the expected warning line in the error log
 #
 # Cleaning up and reseting the slave
 include/stop_slave.inc
+Warnings:
+Warning	1287	'RESET SLAVE' is deprecated and will be removed in a future release. Please use RESET REPLICA instead
 # Adding debug point 'pause_on_queuing_event' to @@GLOBAL.debug
 START SLAVE IO_THREAD;
+Warnings:
+Warning	1287	'START SLAVE' is deprecated and will be removed in a future release. Please use START REPLICA instead
 # Removing debug point 'pause_on_queuing_event' from @@GLOBAL.debug
 # Adding debug point 'stop_io_after_queuing_event' to @@GLOBAL.debug
 include/wait_for_slave_io_to_stop.inc
@@ -254,8 +276,12 @@ include/assert_grep.inc [Case 4 found the expected warning line in the error log
 #
 # Cleaning up and reseting the slave
 include/stop_slave.inc
+Warnings:
+Warning	1287	'RESET SLAVE' is deprecated and will be removed in a future release. Please use RESET REPLICA instead
 # Adding debug point 'pause_on_queuing_event' to @@GLOBAL.debug
 START SLAVE IO_THREAD;
+Warnings:
+Warning	1287	'START SLAVE' is deprecated and will be removed in a future release. Please use START REPLICA instead
 # Removing debug point 'pause_on_queuing_event' from @@GLOBAL.debug
 # Adding debug point 'stop_io_after_queuing_event' to @@GLOBAL.debug
 include/wait_for_slave_io_to_stop.inc
@@ -279,8 +305,12 @@ include/assert_grep.inc [Case 5 found the expected warning line in the error log
 #
 # Cleaning up and reseting the slave
 include/stop_slave.inc
+Warnings:
+Warning	1287	'RESET SLAVE' is deprecated and will be removed in a future release. Please use RESET REPLICA instead
 # Adding debug point 'pause_on_queuing_event' to @@GLOBAL.debug
 START SLAVE IO_THREAD;
+Warnings:
+Warning	1287	'START SLAVE' is deprecated and will be removed in a future release. Please use START REPLICA instead
 # Removing debug point 'pause_on_queuing_event' from @@GLOBAL.debug
 # Adding debug point 'stop_io_after_queuing_event' to @@GLOBAL.debug
 include/wait_for_slave_io_to_stop.inc
@@ -304,8 +334,12 @@ include/assert_grep.inc [Case 6.a found the expected warning line in the error l
 #
 # Cleaning up and reseting the slave
 include/stop_slave.inc
+Warnings:
+Warning	1287	'RESET SLAVE' is deprecated and will be removed in a future release. Please use RESET REPLICA instead
 # Adding debug point 'pause_on_queuing_event' to @@GLOBAL.debug
 START SLAVE IO_THREAD;
+Warnings:
+Warning	1287	'START SLAVE' is deprecated and will be removed in a future release. Please use START REPLICA instead
 # Removing debug point 'pause_on_queuing_event' from @@GLOBAL.debug
 # Adding debug point 'stop_io_after_queuing_event' to @@GLOBAL.debug
 include/wait_for_slave_io_to_stop.inc
@@ -329,8 +363,12 @@ include/assert_grep.inc [Case 6.b found the expected warning line in the error l
 #
 # Cleaning up and reseting the slave
 include/stop_slave.inc
+Warnings:
+Warning	1287	'RESET SLAVE' is deprecated and will be removed in a future release. Please use RESET REPLICA instead
 # Adding debug point 'pause_on_queuing_event' to @@GLOBAL.debug
 START SLAVE IO_THREAD;
+Warnings:
+Warning	1287	'START SLAVE' is deprecated and will be removed in a future release. Please use START REPLICA instead
 # Removing debug point 'pause_on_queuing_event' from @@GLOBAL.debug
 # Adding debug point 'stop_io_after_queuing_event' to @@GLOBAL.debug
 include/wait_for_slave_io_to_stop.inc
@@ -354,8 +392,12 @@ include/assert_grep.inc [Case 7.a found the expected warning line in the error l
 #
 # Cleaning up and reseting the slave
 include/stop_slave.inc
+Warnings:
+Warning	1287	'RESET SLAVE' is deprecated and will be removed in a future release. Please use RESET REPLICA instead
 # Adding debug point 'pause_on_queuing_event' to @@GLOBAL.debug
 START SLAVE IO_THREAD;
+Warnings:
+Warning	1287	'START SLAVE' is deprecated and will be removed in a future release. Please use START REPLICA instead
 # Removing debug point 'pause_on_queuing_event' from @@GLOBAL.debug
 # Adding debug point 'stop_io_after_queuing_event' to @@GLOBAL.debug
 include/wait_for_slave_io_to_stop.inc
@@ -379,8 +421,12 @@ include/assert_grep.inc [Case 7.b found the expected warning line in the error l
 #
 # Cleaning up and reseting the slave
 include/stop_slave.inc
+Warnings:
+Warning	1287	'RESET SLAVE' is deprecated and will be removed in a future release. Please use RESET REPLICA instead
 # Adding debug point 'pause_on_queuing_event' to @@GLOBAL.debug
 START SLAVE IO_THREAD;
+Warnings:
+Warning	1287	'START SLAVE' is deprecated and will be removed in a future release. Please use START REPLICA instead
 # Removing debug point 'pause_on_queuing_event' from @@GLOBAL.debug
 # Adding debug point 'stop_io_after_queuing_event' to @@GLOBAL.debug
 include/wait_for_slave_io_to_stop.inc
@@ -404,8 +450,12 @@ include/assert_grep.inc [Case 8.a found the expected warning line in the error l
 #
 # Cleaning up and reseting the slave
 include/stop_slave.inc
+Warnings:
+Warning	1287	'RESET SLAVE' is deprecated and will be removed in a future release. Please use RESET REPLICA instead
 # Adding debug point 'pause_on_queuing_event' to @@GLOBAL.debug
 START SLAVE IO_THREAD;
+Warnings:
+Warning	1287	'START SLAVE' is deprecated and will be removed in a future release. Please use START REPLICA instead
 # Removing debug point 'pause_on_queuing_event' from @@GLOBAL.debug
 # Adding debug point 'stop_io_after_queuing_event' to @@GLOBAL.debug
 include/wait_for_slave_io_to_stop.inc
@@ -429,8 +479,12 @@ include/assert_grep.inc [Case 8.b found the expected warning line in the error l
 #
 # Cleaning up and reseting the slave
 include/stop_slave.inc
+Warnings:
+Warning	1287	'RESET SLAVE' is deprecated and will be removed in a future release. Please use RESET REPLICA instead
 # Adding debug point 'pause_on_queuing_event' to @@GLOBAL.debug
 START SLAVE IO_THREAD;
+Warnings:
+Warning	1287	'START SLAVE' is deprecated and will be removed in a future release. Please use START REPLICA instead
 # Removing debug point 'pause_on_queuing_event' from @@GLOBAL.debug
 # Adding debug point 'stop_io_after_queuing_event' to @@GLOBAL.debug
 include/wait_for_slave_io_to_stop.inc
@@ -454,8 +508,12 @@ include/assert_grep.inc [Case 9.a found the expected warning line in the error l
 #
 # Cleaning up and reseting the slave
 include/stop_slave.inc
+Warnings:
+Warning	1287	'RESET SLAVE' is deprecated and will be removed in a future release. Please use RESET REPLICA instead
 # Adding debug point 'pause_on_queuing_event' to @@GLOBAL.debug
 START SLAVE IO_THREAD;
+Warnings:
+Warning	1287	'START SLAVE' is deprecated and will be removed in a future release. Please use START REPLICA instead
 # Removing debug point 'pause_on_queuing_event' from @@GLOBAL.debug
 # Adding debug point 'stop_io_after_queuing_event' to @@GLOBAL.debug
 include/wait_for_slave_io_to_stop.inc
@@ -486,6 +544,8 @@ Note	3084	Replication thread(s) for channel '' are already stopped.
 DROP TABLE IF EXISTS t1, t2;
 RESET MASTER;
 RESET SLAVE;
+Warnings:
+Warning	1287	'RESET SLAVE' is deprecated and will be removed in a future release. Please use RESET REPLICA instead
 include/start_slave.inc
 [connection master]
 DROP TABLE t1, t2;

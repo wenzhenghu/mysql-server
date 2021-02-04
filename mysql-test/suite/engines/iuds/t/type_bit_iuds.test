@@ -3,6 +3,8 @@
 DROP TABLE IF EXISTS t1,t2,t3,t4,t5,t6,t7;
 --enable_warnings
 
+# Set max_error_count to contain number of warnings in result file
+SET @@session.max_error_count = 64;
 ####Checking the bit values####
 SELECT 0 + b'0'; 
 SELECT 0 + (0<<1);
@@ -150,6 +152,7 @@ SELECT hex(c1),hex(c2) FROM t5 WHERE c1 IS NOT NULL ORDER BY c1 DESC LIMIT 2 ;
 #Inserting different charachers
 CREATE TABLE t7(c1  BIT(1));
 INSERT INTO t7 VALUES('a'),('A'),('z'),('Z'),('!'),('`'),('@'),('#'),('~'),('$'),('%'),('^'),('&'),('*'),('('),(')'),('-'),('_'),('+'),('='),('1'),('9');
+--replace_regex /[^[:print:]]/#/
 --sorted_result
 SELECT * FROM t7;
 ############# UPDATE ###########
@@ -193,7 +196,7 @@ UPDATE t5 SET c1=NULL WHERE c1<>0;
 UPDATE IGNORE t5 SET c1=NULL WHERE c1>100;
 --sorted_result
 SELECT hex(c1),hex(c2) FROM t5;
-SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
 
 #Multi table update
 --disable_warnings
@@ -438,6 +441,7 @@ SELECT hex(c1),hex(c2) FROM t5 WHERE c1 IS NOT NULL ORDER BY c1 DESC LIMIT 2 ;
 #Inserting different charachers
 CREATE TABLE t7(c1  BIT(2));
 INSERT INTO t7 VALUES('a'),('A'),('z'),('Z'),('!'),('`'),('@'),('#'),('~'),('$'),('%'),('^'),('&'),('*'),('('),(')'),('-'),('_'),('+'),('='),('1'),('9');
+--replace_regex /[^[:print:]]/#/
 --sorted_result
 SELECT * FROM t7;
 ############# UPDATE ###########
@@ -481,7 +485,7 @@ UPDATE t5 SET c1=NULL WHERE c1<>0;
 UPDATE IGNORE t5 SET c1=NULL WHERE c1>100;
 --sorted_result
 SELECT hex(c1),hex(c2) FROM t5;
-SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
 
 #Multi table update
 --disable_warnings
@@ -726,6 +730,7 @@ SELECT hex(c1),hex(c2) FROM t5 WHERE c1 IS NOT NULL ORDER BY c1 DESC LIMIT 2 ;
 #Inserting different charachers
 CREATE TABLE t7(c1  BIT(4));
 INSERT INTO t7 VALUES('a'),('A'),('z'),('Z'),('!'),('`'),('@'),('#'),('~'),('$'),('%'),('^'),('&'),('*'),('('),(')'),('-'),('_'),('+'),('='),('1'),('9');
+--replace_regex /[^[:print:]]/#/
 --sorted_result
 SELECT * FROM t7;
 ############# UPDATE ###########
@@ -769,7 +774,7 @@ UPDATE t5 SET c1=NULL WHERE c1<>0;
 UPDATE IGNORE t5 SET c1=NULL WHERE c1>100;
 --sorted_result
 SELECT hex(c1),hex(c2) FROM t5;
-SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
 
 #Multi table update
 --disable_warnings
@@ -1014,6 +1019,7 @@ SELECT hex(c1),hex(c2) FROM t5 WHERE c1 IS NOT NULL ORDER BY c1 DESC LIMIT 2 ;
 #Inserting different charachers
 CREATE TABLE t7(c1  BIT(8));
 INSERT INTO t7 VALUES('a'),('A'),('z'),('Z'),('!'),('`'),('@'),('#'),('~'),('$'),('%'),('^'),('&'),('*'),('('),(')'),('-'),('_'),('+'),('='),('1'),('9');
+--replace_regex /[^[:print:]]/#/
 --sorted_result
 SELECT * FROM t7;
 ############# UPDATE ###########
@@ -1057,7 +1063,7 @@ UPDATE t5 SET c1=NULL WHERE c1<>0;
 UPDATE IGNORE t5 SET c1=NULL WHERE c1>100;
 --sorted_result
 SELECT hex(c1),hex(c2) FROM t5;
-SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
 
 #Multi table update
 --disable_warnings
@@ -1302,6 +1308,7 @@ SELECT hex(c1),hex(c2) FROM t5 WHERE c1 IS NOT NULL ORDER BY c1 DESC LIMIT 2 ;
 #Inserting different charachers
 CREATE TABLE t7(c1  BIT(16));
 INSERT INTO t7 VALUES('a'),('A'),('z'),('Z'),('!'),('`'),('@'),('#'),('~'),('$'),('%'),('^'),('&'),('*'),('('),(')'),('-'),('_'),('+'),('='),('1'),('9');
+--replace_regex /[^[:print:]]/#/
 --sorted_result
 SELECT * FROM t7;
 ############# UPDATE ###########
@@ -1345,7 +1352,7 @@ UPDATE t5 SET c1=NULL WHERE c1<>0;
 UPDATE IGNORE t5 SET c1=NULL WHERE c1>100;
 --sorted_result
 SELECT hex(c1),hex(c2) FROM t5;
-SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
 
 #Multi table update
 --disable_warnings
@@ -1590,6 +1597,7 @@ SELECT hex(c1),hex(c2) FROM t5 WHERE c1 IS NOT NULL ORDER BY c1 DESC LIMIT 2 ;
 #Inserting different charachers
 CREATE TABLE t7(c1  BIT(32));
 INSERT INTO t7 VALUES('a'),('A'),('z'),('Z'),('!'),('`'),('@'),('#'),('~'),('$'),('%'),('^'),('&'),('*'),('('),(')'),('-'),('_'),('+'),('='),('1'),('9');
+--replace_regex /[^[:print:]]/#/
 --sorted_result
 SELECT * FROM t7;
 ############# UPDATE ###########
@@ -1633,7 +1641,7 @@ UPDATE t5 SET c1=NULL WHERE c1<>0;
 UPDATE IGNORE t5 SET c1=NULL WHERE c1>100;
 --sorted_result
 SELECT hex(c1),hex(c2) FROM t5;
-SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
 
 #Multi table update
 --disable_warnings
@@ -1878,6 +1886,7 @@ SELECT hex(c1),hex(c2) FROM t5 WHERE c1 IS NOT NULL ORDER BY c1 DESC LIMIT 2 ;
 #Inserting different charachers
 CREATE TABLE t7(c1  BIT(64));
 INSERT INTO t7 VALUES('a'),('A'),('z'),('Z'),('!'),('`'),('@'),('#'),('~'),('$'),('%'),('^'),('&'),('*'),('('),(')'),('-'),('_'),('+'),('='),('1'),('9');
+--replace_regex /[^[:print:]]/#/
 --sorted_result
 SELECT * FROM t7;
 ############# UPDATE ###########
@@ -1921,7 +1930,7 @@ UPDATE t5 SET c1=NULL WHERE c1<>0;
 UPDATE IGNORE t5 SET c1=NULL WHERE c1>100;
 --sorted_result
 SELECT hex(c1),hex(c2) FROM t5;
-SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
 
 #Multi table update
 --disable_warnings
@@ -2166,6 +2175,7 @@ SELECT hex(c1),hex(c2) FROM t5 WHERE c1 IS NOT NULL ORDER BY c1 DESC LIMIT 2 ;
 #Inserting different charachers
 CREATE TABLE t7(c1  BIT(1));
 INSERT INTO t7 VALUES('a'),('A'),('z'),('Z'),('!'),('`'),('@'),('#'),('~'),('$'),('%'),('^'),('&'),('*'),('('),(')'),('-'),('_'),('+'),('='),('1'),('9');
+--replace_regex /[^[:print:]]/#/
 --sorted_result
 SELECT * FROM t7;
 ############# UPDATE ###########
@@ -2209,7 +2219,7 @@ UPDATE t5 SET c1=NULL WHERE c1<>0;
 UPDATE IGNORE t5 SET c1=NULL WHERE c1>100;
 --sorted_result
 SELECT hex(c1),hex(c2) FROM t5;
-SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
 
 #Multi table update
 --disable_warnings
@@ -2454,6 +2464,7 @@ SELECT hex(c1),hex(c2) FROM t5 WHERE c1 IS NOT NULL ORDER BY c1 DESC LIMIT 2 ;
 #Inserting different charachers
 CREATE TABLE t7(c1  BIT(2));
 INSERT INTO t7 VALUES('a'),('A'),('z'),('Z'),('!'),('`'),('@'),('#'),('~'),('$'),('%'),('^'),('&'),('*'),('('),(')'),('-'),('_'),('+'),('='),('1'),('9');
+--replace_regex /[^[:print:]]/#/
 --sorted_result
 SELECT * FROM t7;
 ############# UPDATE ###########
@@ -2497,7 +2508,7 @@ UPDATE t5 SET c1=NULL WHERE c1<>0;
 UPDATE IGNORE t5 SET c1=NULL WHERE c1>100;
 --sorted_result
 SELECT hex(c1),hex(c2) FROM t5;
-SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
 
 #Multi table update
 --disable_warnings
@@ -2742,6 +2753,7 @@ SELECT hex(c1),hex(c2) FROM t5 WHERE c1 IS NOT NULL ORDER BY c1 DESC LIMIT 2 ;
 #Inserting different charachers
 CREATE TABLE t7(c1  BIT(4));
 INSERT INTO t7 VALUES('a'),('A'),('z'),('Z'),('!'),('`'),('@'),('#'),('~'),('$'),('%'),('^'),('&'),('*'),('('),(')'),('-'),('_'),('+'),('='),('1'),('9');
+--replace_regex /[^[:print:]]/#/
 --sorted_result
 SELECT * FROM t7;
 ############# UPDATE ###########
@@ -2785,7 +2797,7 @@ UPDATE t5 SET c1=NULL WHERE c1<>0;
 UPDATE IGNORE t5 SET c1=NULL WHERE c1>100;
 --sorted_result
 SELECT hex(c1),hex(c2) FROM t5;
-SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
 
 #Multi table update
 --disable_warnings
@@ -3030,6 +3042,7 @@ SELECT hex(c1),hex(c2) FROM t5 WHERE c1 IS NOT NULL ORDER BY c1 DESC LIMIT 2 ;
 #Inserting different charachers
 CREATE TABLE t7(c1  BIT(8));
 INSERT INTO t7 VALUES('a'),('A'),('z'),('Z'),('!'),('`'),('@'),('#'),('~'),('$'),('%'),('^'),('&'),('*'),('('),(')'),('-'),('_'),('+'),('='),('1'),('9');
+--replace_regex /[^[:print:]]/#/
 --sorted_result
 SELECT * FROM t7;
 ############# UPDATE ###########
@@ -3073,7 +3086,7 @@ UPDATE t5 SET c1=NULL WHERE c1<>0;
 UPDATE IGNORE t5 SET c1=NULL WHERE c1>100;
 --sorted_result
 SELECT hex(c1),hex(c2) FROM t5;
-SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
 
 #Multi table update
 --disable_warnings
@@ -3318,6 +3331,7 @@ SELECT hex(c1),hex(c2) FROM t5 WHERE c1 IS NOT NULL ORDER BY c1 DESC LIMIT 2 ;
 #Inserting different charachers
 CREATE TABLE t7(c1  BIT(16));
 INSERT INTO t7 VALUES('a'),('A'),('z'),('Z'),('!'),('`'),('@'),('#'),('~'),('$'),('%'),('^'),('&'),('*'),('('),(')'),('-'),('_'),('+'),('='),('1'),('9');
+--replace_regex /[^[:print:]]/#/
 --sorted_result
 SELECT * FROM t7;
 ############# UPDATE ###########
@@ -3361,7 +3375,7 @@ UPDATE t5 SET c1=NULL WHERE c1<>0;
 UPDATE IGNORE t5 SET c1=NULL WHERE c1>100;
 --sorted_result
 SELECT hex(c1),hex(c2) FROM t5;
-SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
 
 #Multi table update
 --disable_warnings
@@ -3606,6 +3620,7 @@ SELECT hex(c1),hex(c2) FROM t5 WHERE c1 IS NOT NULL ORDER BY c1 DESC LIMIT 2 ;
 #Inserting different charachers
 CREATE TABLE t7(c1  BIT(32));
 INSERT INTO t7 VALUES('a'),('A'),('z'),('Z'),('!'),('`'),('@'),('#'),('~'),('$'),('%'),('^'),('&'),('*'),('('),(')'),('-'),('_'),('+'),('='),('1'),('9');
+--replace_regex /[^[:print:]]/#/
 --sorted_result
 SELECT * FROM t7;
 ############# UPDATE ###########
@@ -3649,7 +3664,7 @@ UPDATE t5 SET c1=NULL WHERE c1<>0;
 UPDATE IGNORE t5 SET c1=NULL WHERE c1>100;
 --sorted_result
 SELECT hex(c1),hex(c2) FROM t5;
-SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
 
 #Multi table update
 --disable_warnings
@@ -3894,6 +3909,7 @@ SELECT hex(c1),hex(c2) FROM t5 WHERE c1 IS NOT NULL ORDER BY c1 DESC LIMIT 2 ;
 #Inserting different charachers
 CREATE TABLE t7(c1  BIT(64));
 INSERT INTO t7 VALUES('a'),('A'),('z'),('Z'),('!'),('`'),('@'),('#'),('~'),('$'),('%'),('^'),('&'),('*'),('('),(')'),('-'),('_'),('+'),('='),('1'),('9');
+--replace_regex /[^[:print:]]/#/
 --sorted_result
 SELECT * FROM t7;
 ############# UPDATE ###########
@@ -3937,7 +3953,7 @@ UPDATE t5 SET c1=NULL WHERE c1<>0;
 UPDATE IGNORE t5 SET c1=NULL WHERE c1>100;
 --sorted_result
 SELECT hex(c1),hex(c2) FROM t5;
-SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
 
 #Multi table update
 --disable_warnings
@@ -4182,6 +4198,7 @@ SELECT hex(c1),hex(c2) FROM t5 WHERE c1 IS NOT NULL ORDER BY c1 DESC LIMIT 2 ;
 #Inserting different charachers
 CREATE TABLE t7(c1  BIT(1));
 INSERT INTO t7 VALUES('a'),('A'),('z'),('Z'),('!'),('`'),('@'),('#'),('~'),('$'),('%'),('^'),('&'),('*'),('('),(')'),('-'),('_'),('+'),('='),('1'),('9');
+--replace_regex /[^[:print:]]/#/
 --sorted_result
 SELECT * FROM t7;
 ############# UPDATE ###########
@@ -4225,7 +4242,7 @@ UPDATE t5 SET c1=NULL WHERE c1<>0;
 UPDATE IGNORE t5 SET c1=NULL WHERE c1>100;
 --sorted_result
 SELECT hex(c1),hex(c2) FROM t5;
-SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
 
 #Multi table update
 --disable_warnings
@@ -4470,6 +4487,7 @@ SELECT hex(c1),hex(c2) FROM t5 WHERE c1 IS NOT NULL ORDER BY c1 DESC LIMIT 2 ;
 #Inserting different charachers
 CREATE TABLE t7(c1  BIT(2));
 INSERT INTO t7 VALUES('a'),('A'),('z'),('Z'),('!'),('`'),('@'),('#'),('~'),('$'),('%'),('^'),('&'),('*'),('('),(')'),('-'),('_'),('+'),('='),('1'),('9');
+--replace_regex /[^[:print:]]/#/
 --sorted_result
 SELECT * FROM t7;
 ############# UPDATE ###########
@@ -4513,7 +4531,7 @@ UPDATE t5 SET c1=NULL WHERE c1<>0;
 UPDATE IGNORE t5 SET c1=NULL WHERE c1>100;
 --sorted_result
 SELECT hex(c1),hex(c2) FROM t5;
-SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
 
 #Multi table update
 --disable_warnings
@@ -4758,6 +4776,7 @@ SELECT hex(c1),hex(c2) FROM t5 WHERE c1 IS NOT NULL ORDER BY c1 DESC LIMIT 2 ;
 #Inserting different charachers
 CREATE TABLE t7(c1  BIT(4));
 INSERT INTO t7 VALUES('a'),('A'),('z'),('Z'),('!'),('`'),('@'),('#'),('~'),('$'),('%'),('^'),('&'),('*'),('('),(')'),('-'),('_'),('+'),('='),('1'),('9');
+--replace_regex /[^[:print:]]/#/
 --sorted_result
 SELECT * FROM t7;
 ############# UPDATE ###########
@@ -4801,7 +4820,7 @@ UPDATE t5 SET c1=NULL WHERE c1<>0;
 UPDATE IGNORE t5 SET c1=NULL WHERE c1>100;
 --sorted_result
 SELECT hex(c1),hex(c2) FROM t5;
-SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
 
 #Multi table update
 --disable_warnings
@@ -5046,6 +5065,7 @@ SELECT hex(c1),hex(c2) FROM t5 WHERE c1 IS NOT NULL ORDER BY c1 DESC LIMIT 2 ;
 #Inserting different charachers
 CREATE TABLE t7(c1  BIT(8));
 INSERT INTO t7 VALUES('a'),('A'),('z'),('Z'),('!'),('`'),('@'),('#'),('~'),('$'),('%'),('^'),('&'),('*'),('('),(')'),('-'),('_'),('+'),('='),('1'),('9');
+--replace_regex /[^[:print:]]/#/
 --sorted_result
 SELECT * FROM t7;
 ############# UPDATE ###########
@@ -5089,7 +5109,7 @@ UPDATE t5 SET c1=NULL WHERE c1<>0;
 UPDATE IGNORE t5 SET c1=NULL WHERE c1>100;
 --sorted_result
 SELECT hex(c1),hex(c2) FROM t5;
-SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
 
 #Multi table update
 --disable_warnings
@@ -5334,6 +5354,7 @@ SELECT hex(c1),hex(c2) FROM t5 WHERE c1 IS NOT NULL ORDER BY c1 DESC LIMIT 2 ;
 #Inserting different charachers
 CREATE TABLE t7(c1  BIT(16));
 INSERT INTO t7 VALUES('a'),('A'),('z'),('Z'),('!'),('`'),('@'),('#'),('~'),('$'),('%'),('^'),('&'),('*'),('('),(')'),('-'),('_'),('+'),('='),('1'),('9');
+--replace_regex /[^[:print:]]/#/
 --sorted_result
 SELECT * FROM t7;
 ############# UPDATE ###########
@@ -5377,7 +5398,7 @@ UPDATE t5 SET c1=NULL WHERE c1<>0;
 UPDATE IGNORE t5 SET c1=NULL WHERE c1>100;
 --sorted_result
 SELECT hex(c1),hex(c2) FROM t5;
-SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
 
 #Multi table update
 --disable_warnings
@@ -5622,6 +5643,7 @@ SELECT hex(c1),hex(c2) FROM t5 WHERE c1 IS NOT NULL ORDER BY c1 DESC LIMIT 2 ;
 #Inserting different charachers
 CREATE TABLE t7(c1  BIT(32));
 INSERT INTO t7 VALUES('a'),('A'),('z'),('Z'),('!'),('`'),('@'),('#'),('~'),('$'),('%'),('^'),('&'),('*'),('('),(')'),('-'),('_'),('+'),('='),('1'),('9');
+--replace_regex /[^[:print:]]/#/
 --sorted_result
 SELECT * FROM t7;
 ############# UPDATE ###########
@@ -5665,7 +5687,7 @@ UPDATE t5 SET c1=NULL WHERE c1<>0;
 UPDATE IGNORE t5 SET c1=NULL WHERE c1>100;
 --sorted_result
 SELECT hex(c1),hex(c2) FROM t5;
-SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
 
 #Multi table update
 --disable_warnings
@@ -5910,6 +5932,7 @@ SELECT hex(c1),hex(c2) FROM t5 WHERE c1 IS NOT NULL ORDER BY c1 DESC LIMIT 2 ;
 #Inserting different charachers
 CREATE TABLE t7(c1  BIT(64));
 INSERT INTO t7 VALUES('a'),('A'),('z'),('Z'),('!'),('`'),('@'),('#'),('~'),('$'),('%'),('^'),('&'),('*'),('('),(')'),('-'),('_'),('+'),('='),('1'),('9');
+--replace_regex /[^[:print:]]/#/
 --sorted_result
 SELECT * FROM t7;
 ############# UPDATE ###########
@@ -5953,7 +5976,7 @@ UPDATE t5 SET c1=NULL WHERE c1<>0;
 UPDATE IGNORE t5 SET c1=NULL WHERE c1>100;
 --sorted_result
 SELECT hex(c1),hex(c2) FROM t5;
-SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
 
 #Multi table update
 --disable_warnings
@@ -6198,6 +6221,7 @@ SELECT hex(c1),hex(c2) FROM t5 WHERE c1 IS NOT NULL ORDER BY c1 DESC LIMIT 2 ;
 #Inserting different charachers
 CREATE TABLE t7(c1  BIT(1));
 INSERT INTO t7 VALUES('a'),('A'),('z'),('Z'),('!'),('`'),('@'),('#'),('~'),('$'),('%'),('^'),('&'),('*'),('('),(')'),('-'),('_'),('+'),('='),('1'),('9');
+--replace_regex /[^[:print:]]/#/
 --sorted_result
 SELECT * FROM t7;
 ############# UPDATE ###########
@@ -6241,7 +6265,7 @@ UPDATE t5 SET c1=NULL WHERE c1<>0;
 UPDATE IGNORE t5 SET c1=NULL WHERE c1>100;
 --sorted_result
 SELECT hex(c1),hex(c2) FROM t5;
-SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
 
 #Multi table update
 --disable_warnings
@@ -6486,6 +6510,7 @@ SELECT hex(c1),hex(c2) FROM t5 WHERE c1 IS NOT NULL ORDER BY c1 DESC LIMIT 2 ;
 #Inserting different charachers
 CREATE TABLE t7(c1  BIT(2));
 INSERT INTO t7 VALUES('a'),('A'),('z'),('Z'),('!'),('`'),('@'),('#'),('~'),('$'),('%'),('^'),('&'),('*'),('('),(')'),('-'),('_'),('+'),('='),('1'),('9');
+--replace_regex /[^[:print:]]/#/
 --sorted_result
 SELECT * FROM t7;
 ############# UPDATE ###########
@@ -6529,7 +6554,7 @@ UPDATE t5 SET c1=NULL WHERE c1<>0;
 UPDATE IGNORE t5 SET c1=NULL WHERE c1>100;
 --sorted_result
 SELECT hex(c1),hex(c2) FROM t5;
-SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
 
 #Multi table update
 --disable_warnings
@@ -6774,6 +6799,7 @@ SELECT hex(c1),hex(c2) FROM t5 WHERE c1 IS NOT NULL ORDER BY c1 DESC LIMIT 2 ;
 #Inserting different charachers
 CREATE TABLE t7(c1  BIT(4));
 INSERT INTO t7 VALUES('a'),('A'),('z'),('Z'),('!'),('`'),('@'),('#'),('~'),('$'),('%'),('^'),('&'),('*'),('('),(')'),('-'),('_'),('+'),('='),('1'),('9');
+--replace_regex /[^[:print:]]/#/
 --sorted_result
 SELECT * FROM t7;
 ############# UPDATE ###########
@@ -6817,7 +6843,7 @@ UPDATE t5 SET c1=NULL WHERE c1<>0;
 UPDATE IGNORE t5 SET c1=NULL WHERE c1>100;
 --sorted_result
 SELECT hex(c1),hex(c2) FROM t5;
-SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
 
 #Multi table update
 --disable_warnings
@@ -7062,6 +7088,7 @@ SELECT hex(c1),hex(c2) FROM t5 WHERE c1 IS NOT NULL ORDER BY c1 DESC LIMIT 2 ;
 #Inserting different charachers
 CREATE TABLE t7(c1  BIT(8));
 INSERT INTO t7 VALUES('a'),('A'),('z'),('Z'),('!'),('`'),('@'),('#'),('~'),('$'),('%'),('^'),('&'),('*'),('('),(')'),('-'),('_'),('+'),('='),('1'),('9');
+--replace_regex /[^[:print:]]/#/
 --sorted_result
 SELECT * FROM t7;
 ############# UPDATE ###########
@@ -7105,7 +7132,7 @@ UPDATE t5 SET c1=NULL WHERE c1<>0;
 UPDATE IGNORE t5 SET c1=NULL WHERE c1>100;
 --sorted_result
 SELECT hex(c1),hex(c2) FROM t5;
-SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
 
 #Multi table update
 --disable_warnings
@@ -7350,6 +7377,7 @@ SELECT hex(c1),hex(c2) FROM t5 WHERE c1 IS NOT NULL ORDER BY c1 DESC LIMIT 2 ;
 #Inserting different charachers
 CREATE TABLE t7(c1  BIT(16));
 INSERT INTO t7 VALUES('a'),('A'),('z'),('Z'),('!'),('`'),('@'),('#'),('~'),('$'),('%'),('^'),('&'),('*'),('('),(')'),('-'),('_'),('+'),('='),('1'),('9');
+--replace_regex /[^[:print:]]/#/
 --sorted_result
 SELECT * FROM t7;
 ############# UPDATE ###########
@@ -7393,7 +7421,7 @@ UPDATE t5 SET c1=NULL WHERE c1<>0;
 UPDATE IGNORE t5 SET c1=NULL WHERE c1>100;
 --sorted_result
 SELECT hex(c1),hex(c2) FROM t5;
-SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
 
 #Multi table update
 --disable_warnings
@@ -7638,6 +7666,7 @@ SELECT hex(c1),hex(c2) FROM t5 WHERE c1 IS NOT NULL ORDER BY c1 DESC LIMIT 2 ;
 #Inserting different charachers
 CREATE TABLE t7(c1  BIT(32));
 INSERT INTO t7 VALUES('a'),('A'),('z'),('Z'),('!'),('`'),('@'),('#'),('~'),('$'),('%'),('^'),('&'),('*'),('('),(')'),('-'),('_'),('+'),('='),('1'),('9');
+--replace_regex /[^[:print:]]/#/
 --sorted_result
 SELECT * FROM t7;
 ############# UPDATE ###########
@@ -7681,7 +7710,7 @@ UPDATE t5 SET c1=NULL WHERE c1<>0;
 UPDATE IGNORE t5 SET c1=NULL WHERE c1>100;
 --sorted_result
 SELECT hex(c1),hex(c2) FROM t5;
-SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
 
 #Multi table update
 --disable_warnings
@@ -7926,6 +7955,7 @@ SELECT hex(c1),hex(c2) FROM t5 WHERE c1 IS NOT NULL ORDER BY c1 DESC LIMIT 2 ;
 #Inserting different charachers
 CREATE TABLE t7(c1  BIT(64));
 INSERT INTO t7 VALUES('a'),('A'),('z'),('Z'),('!'),('`'),('@'),('#'),('~'),('$'),('%'),('^'),('&'),('*'),('('),(')'),('-'),('_'),('+'),('='),('1'),('9');
+--replace_regex /[^[:print:]]/#/
 --sorted_result
 SELECT * FROM t7;
 ############# UPDATE ###########
@@ -7969,7 +7999,7 @@ UPDATE t5 SET c1=NULL WHERE c1<>0;
 UPDATE IGNORE t5 SET c1=NULL WHERE c1>100;
 --sorted_result
 SELECT hex(c1),hex(c2) FROM t5;
-SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
 
 #Multi table update
 --disable_warnings
@@ -8214,6 +8244,7 @@ SELECT hex(c1),hex(c2) FROM t5 WHERE c1 IS NOT NULL ORDER BY c1 DESC LIMIT 2 ;
 #Inserting different charachers
 CREATE TABLE t7(c1  BIT(1));
 INSERT INTO t7 VALUES('a'),('A'),('z'),('Z'),('!'),('`'),('@'),('#'),('~'),('$'),('%'),('^'),('&'),('*'),('('),(')'),('-'),('_'),('+'),('='),('1'),('9');
+--replace_regex /[^[:print:]]/#/
 --sorted_result
 SELECT * FROM t7;
 ############# UPDATE ###########
@@ -8257,7 +8288,7 @@ UPDATE t5 SET c1=NULL WHERE c1<>0;
 UPDATE IGNORE t5 SET c1=NULL WHERE c1>100;
 --sorted_result
 SELECT hex(c1),hex(c2) FROM t5;
-SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
 
 #Multi table update
 --disable_warnings
@@ -8502,6 +8533,7 @@ SELECT hex(c1),hex(c2) FROM t5 WHERE c1 IS NOT NULL ORDER BY c1 DESC LIMIT 2 ;
 #Inserting different charachers
 CREATE TABLE t7(c1  BIT(2));
 INSERT INTO t7 VALUES('a'),('A'),('z'),('Z'),('!'),('`'),('@'),('#'),('~'),('$'),('%'),('^'),('&'),('*'),('('),(')'),('-'),('_'),('+'),('='),('1'),('9');
+--replace_regex /[^[:print:]]/#/
 --sorted_result
 SELECT * FROM t7;
 ############# UPDATE ###########
@@ -8545,7 +8577,7 @@ UPDATE t5 SET c1=NULL WHERE c1<>0;
 UPDATE IGNORE t5 SET c1=NULL WHERE c1>100;
 --sorted_result
 SELECT hex(c1),hex(c2) FROM t5;
-SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
 
 #Multi table update
 --disable_warnings
@@ -8790,6 +8822,7 @@ SELECT hex(c1),hex(c2) FROM t5 WHERE c1 IS NOT NULL ORDER BY c1 DESC LIMIT 2 ;
 #Inserting different charachers
 CREATE TABLE t7(c1  BIT(4));
 INSERT INTO t7 VALUES('a'),('A'),('z'),('Z'),('!'),('`'),('@'),('#'),('~'),('$'),('%'),('^'),('&'),('*'),('('),(')'),('-'),('_'),('+'),('='),('1'),('9');
+--replace_regex /[^[:print:]]/#/
 --sorted_result
 SELECT * FROM t7;
 ############# UPDATE ###########
@@ -8833,7 +8866,7 @@ UPDATE t5 SET c1=NULL WHERE c1<>0;
 UPDATE IGNORE t5 SET c1=NULL WHERE c1>100;
 --sorted_result
 SELECT hex(c1),hex(c2) FROM t5;
-SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
 
 #Multi table update
 --disable_warnings
@@ -9078,6 +9111,7 @@ SELECT hex(c1),hex(c2) FROM t5 WHERE c1 IS NOT NULL ORDER BY c1 DESC LIMIT 2 ;
 #Inserting different charachers
 CREATE TABLE t7(c1  BIT(8));
 INSERT INTO t7 VALUES('a'),('A'),('z'),('Z'),('!'),('`'),('@'),('#'),('~'),('$'),('%'),('^'),('&'),('*'),('('),(')'),('-'),('_'),('+'),('='),('1'),('9');
+--replace_regex /[^[:print:]]/#/
 --sorted_result
 SELECT * FROM t7;
 ############# UPDATE ###########
@@ -9121,7 +9155,7 @@ UPDATE t5 SET c1=NULL WHERE c1<>0;
 UPDATE IGNORE t5 SET c1=NULL WHERE c1>100;
 --sorted_result
 SELECT hex(c1),hex(c2) FROM t5;
-SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
 
 #Multi table update
 --disable_warnings
@@ -9366,6 +9400,7 @@ SELECT hex(c1),hex(c2) FROM t5 WHERE c1 IS NOT NULL ORDER BY c1 DESC LIMIT 2 ;
 #Inserting different charachers
 CREATE TABLE t7(c1  BIT(16));
 INSERT INTO t7 VALUES('a'),('A'),('z'),('Z'),('!'),('`'),('@'),('#'),('~'),('$'),('%'),('^'),('&'),('*'),('('),(')'),('-'),('_'),('+'),('='),('1'),('9');
+--replace_regex /[^[:print:]]/#/
 --sorted_result
 SELECT * FROM t7;
 ############# UPDATE ###########
@@ -9409,7 +9444,7 @@ UPDATE t5 SET c1=NULL WHERE c1<>0;
 UPDATE IGNORE t5 SET c1=NULL WHERE c1>100;
 --sorted_result
 SELECT hex(c1),hex(c2) FROM t5;
-SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
 
 #Multi table update
 --disable_warnings
@@ -9654,6 +9689,7 @@ SELECT hex(c1),hex(c2) FROM t5 WHERE c1 IS NOT NULL ORDER BY c1 DESC LIMIT 2 ;
 #Inserting different charachers
 CREATE TABLE t7(c1  BIT(32));
 INSERT INTO t7 VALUES('a'),('A'),('z'),('Z'),('!'),('`'),('@'),('#'),('~'),('$'),('%'),('^'),('&'),('*'),('('),(')'),('-'),('_'),('+'),('='),('1'),('9');
+--replace_regex /[^[:print:]]/#/
 --sorted_result
 SELECT * FROM t7;
 ############# UPDATE ###########
@@ -9697,7 +9733,7 @@ UPDATE t5 SET c1=NULL WHERE c1<>0;
 UPDATE IGNORE t5 SET c1=NULL WHERE c1>100;
 --sorted_result
 SELECT hex(c1),hex(c2) FROM t5;
-SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
 
 #Multi table update
 --disable_warnings
@@ -9942,6 +9978,7 @@ SELECT hex(c1),hex(c2) FROM t5 WHERE c1 IS NOT NULL ORDER BY c1 DESC LIMIT 2 ;
 #Inserting different charachers
 CREATE TABLE t7(c1  BIT(64));
 INSERT INTO t7 VALUES('a'),('A'),('z'),('Z'),('!'),('`'),('@'),('#'),('~'),('$'),('%'),('^'),('&'),('*'),('('),(')'),('-'),('_'),('+'),('='),('1'),('9');
+--replace_regex /[^[:print:]]/#/
 --sorted_result
 SELECT * FROM t7;
 ############# UPDATE ###########
@@ -9985,7 +10022,7 @@ UPDATE t5 SET c1=NULL WHERE c1<>0;
 UPDATE IGNORE t5 SET c1=NULL WHERE c1>100;
 --sorted_result
 SELECT hex(c1),hex(c2) FROM t5;
-SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
 
 #Multi table update
 --disable_warnings
@@ -10230,6 +10267,7 @@ SELECT hex(c1),hex(c2) FROM t5 WHERE c1 IS NOT NULL ORDER BY c1 DESC LIMIT 2 ;
 #Inserting different charachers
 CREATE TABLE t7(c1  BIT(1));
 INSERT INTO t7 VALUES('a'),('A'),('z'),('Z'),('!'),('`'),('@'),('#'),('~'),('$'),('%'),('^'),('&'),('*'),('('),(')'),('-'),('_'),('+'),('='),('1'),('9');
+--replace_regex /[^[:print:]]/#/
 --sorted_result
 SELECT * FROM t7;
 ############# UPDATE ###########
@@ -10273,7 +10311,7 @@ UPDATE t5 SET c1=NULL WHERE c1<>0;
 UPDATE IGNORE t5 SET c1=NULL WHERE c1>100;
 --sorted_result
 SELECT hex(c1),hex(c2) FROM t5;
-SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
 
 #Multi table update
 --disable_warnings
@@ -10518,6 +10556,7 @@ SELECT hex(c1),hex(c2) FROM t5 WHERE c1 IS NOT NULL ORDER BY c1 DESC LIMIT 2 ;
 #Inserting different charachers
 CREATE TABLE t7(c1  BIT(2));
 INSERT INTO t7 VALUES('a'),('A'),('z'),('Z'),('!'),('`'),('@'),('#'),('~'),('$'),('%'),('^'),('&'),('*'),('('),(')'),('-'),('_'),('+'),('='),('1'),('9');
+--replace_regex /[^[:print:]]/#/
 --sorted_result
 SELECT * FROM t7;
 ############# UPDATE ###########
@@ -10561,7 +10600,7 @@ UPDATE t5 SET c1=NULL WHERE c1<>0;
 UPDATE IGNORE t5 SET c1=NULL WHERE c1>100;
 --sorted_result
 SELECT hex(c1),hex(c2) FROM t5;
-SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
 
 #Multi table update
 --disable_warnings
@@ -10806,6 +10845,7 @@ SELECT hex(c1),hex(c2) FROM t5 WHERE c1 IS NOT NULL ORDER BY c1 DESC LIMIT 2 ;
 #Inserting different charachers
 CREATE TABLE t7(c1  BIT(4));
 INSERT INTO t7 VALUES('a'),('A'),('z'),('Z'),('!'),('`'),('@'),('#'),('~'),('$'),('%'),('^'),('&'),('*'),('('),(')'),('-'),('_'),('+'),('='),('1'),('9');
+--replace_regex /[^[:print:]]/#/
 --sorted_result
 SELECT * FROM t7;
 ############# UPDATE ###########
@@ -10849,7 +10889,7 @@ UPDATE t5 SET c1=NULL WHERE c1<>0;
 UPDATE IGNORE t5 SET c1=NULL WHERE c1>100;
 --sorted_result
 SELECT hex(c1),hex(c2) FROM t5;
-SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
 
 #Multi table update
 --disable_warnings
@@ -11094,6 +11134,7 @@ SELECT hex(c1),hex(c2) FROM t5 WHERE c1 IS NOT NULL ORDER BY c1 DESC LIMIT 2 ;
 #Inserting different charachers
 CREATE TABLE t7(c1  BIT(8));
 INSERT INTO t7 VALUES('a'),('A'),('z'),('Z'),('!'),('`'),('@'),('#'),('~'),('$'),('%'),('^'),('&'),('*'),('('),(')'),('-'),('_'),('+'),('='),('1'),('9');
+--replace_regex /[^[:print:]]/#/
 --sorted_result
 SELECT * FROM t7;
 ############# UPDATE ###########
@@ -11137,7 +11178,7 @@ UPDATE t5 SET c1=NULL WHERE c1<>0;
 UPDATE IGNORE t5 SET c1=NULL WHERE c1>100;
 --sorted_result
 SELECT hex(c1),hex(c2) FROM t5;
-SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
 
 #Multi table update
 --disable_warnings
@@ -11382,6 +11423,7 @@ SELECT hex(c1),hex(c2) FROM t5 WHERE c1 IS NOT NULL ORDER BY c1 DESC LIMIT 2 ;
 #Inserting different charachers
 CREATE TABLE t7(c1  BIT(16));
 INSERT INTO t7 VALUES('a'),('A'),('z'),('Z'),('!'),('`'),('@'),('#'),('~'),('$'),('%'),('^'),('&'),('*'),('('),(')'),('-'),('_'),('+'),('='),('1'),('9');
+--replace_regex /[^[:print:]]/#/
 --sorted_result
 SELECT * FROM t7;
 ############# UPDATE ###########
@@ -11425,7 +11467,7 @@ UPDATE t5 SET c1=NULL WHERE c1<>0;
 UPDATE IGNORE t5 SET c1=NULL WHERE c1>100;
 --sorted_result
 SELECT hex(c1),hex(c2) FROM t5;
-SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
 
 #Multi table update
 --disable_warnings
@@ -11670,6 +11712,7 @@ SELECT hex(c1),hex(c2) FROM t5 WHERE c1 IS NOT NULL ORDER BY c1 DESC LIMIT 2 ;
 #Inserting different charachers
 CREATE TABLE t7(c1  BIT(32));
 INSERT INTO t7 VALUES('a'),('A'),('z'),('Z'),('!'),('`'),('@'),('#'),('~'),('$'),('%'),('^'),('&'),('*'),('('),(')'),('-'),('_'),('+'),('='),('1'),('9');
+--replace_regex /[^[:print:]]/#/
 --sorted_result
 SELECT * FROM t7;
 ############# UPDATE ###########
@@ -11713,7 +11756,7 @@ UPDATE t5 SET c1=NULL WHERE c1<>0;
 UPDATE IGNORE t5 SET c1=NULL WHERE c1>100;
 --sorted_result
 SELECT hex(c1),hex(c2) FROM t5;
-SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
 
 #Multi table update
 --disable_warnings
@@ -11958,6 +12001,7 @@ SELECT hex(c1),hex(c2) FROM t5 WHERE c1 IS NOT NULL ORDER BY c1 DESC LIMIT 2 ;
 #Inserting different charachers
 CREATE TABLE t7(c1  BIT(64));
 INSERT INTO t7 VALUES('a'),('A'),('z'),('Z'),('!'),('`'),('@'),('#'),('~'),('$'),('%'),('^'),('&'),('*'),('('),(')'),('-'),('_'),('+'),('='),('1'),('9');
+--replace_regex /[^[:print:]]/#/
 --sorted_result
 SELECT * FROM t7;
 ############# UPDATE ###########
@@ -12001,7 +12045,7 @@ UPDATE t5 SET c1=NULL WHERE c1<>0;
 UPDATE IGNORE t5 SET c1=NULL WHERE c1>100;
 --sorted_result
 SELECT hex(c1),hex(c2) FROM t5;
-SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
 
 #Multi table update
 --disable_warnings
@@ -12247,6 +12291,7 @@ SELECT hex(c1),hex(c2) FROM t5 WHERE c1 IS NOT NULL ORDER BY c1 DESC LIMIT 2 ;
 #Inserting different charachers
 CREATE TABLE t7(c1  BIT(1));
 INSERT INTO t7 VALUES('a'),('A'),('z'),('Z'),('!'),('`'),('@'),('#'),('~'),('$'),('%'),('^'),('&'),('*'),('('),(')'),('-'),('_'),('+'),('='),('1'),('9');
+--replace_regex /[^[:print:]]/#/
 --sorted_result
 SELECT * FROM t7;
 ############# UPDATE ###########
@@ -12290,7 +12335,7 @@ UPDATE t5 SET c1=NULL WHERE c1<>0;
 UPDATE IGNORE t5 SET c1=NULL WHERE c1>100;
 --sorted_result
 SELECT hex(c1),hex(c2) FROM t5;
-SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
 
 #Multi table update
 --disable_warnings
@@ -12536,6 +12581,7 @@ SELECT hex(c1),hex(c2) FROM t5 WHERE c1 IS NOT NULL ORDER BY c1 DESC LIMIT 2 ;
 #Inserting different charachers
 CREATE TABLE t7(c1  BIT(2));
 INSERT INTO t7 VALUES('a'),('A'),('z'),('Z'),('!'),('`'),('@'),('#'),('~'),('$'),('%'),('^'),('&'),('*'),('('),(')'),('-'),('_'),('+'),('='),('1'),('9');
+--replace_regex /[^[:print:]]/#/
 --sorted_result
 SELECT * FROM t7;
 ############# UPDATE ###########
@@ -12579,7 +12625,7 @@ UPDATE t5 SET c1=NULL WHERE c1<>0;
 UPDATE IGNORE t5 SET c1=NULL WHERE c1>100;
 --sorted_result
 SELECT hex(c1),hex(c2) FROM t5;
-SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
 
 #Multi table update
 --disable_warnings
@@ -12825,6 +12871,7 @@ SELECT hex(c1),hex(c2) FROM t5 WHERE c1 IS NOT NULL ORDER BY c1 DESC LIMIT 2 ;
 #Inserting different charachers
 CREATE TABLE t7(c1  BIT(4));
 INSERT INTO t7 VALUES('a'),('A'),('z'),('Z'),('!'),('`'),('@'),('#'),('~'),('$'),('%'),('^'),('&'),('*'),('('),(')'),('-'),('_'),('+'),('='),('1'),('9');
+--replace_regex /[^[:print:]]/#/
 --sorted_result
 SELECT * FROM t7;
 ############# UPDATE ###########
@@ -12868,7 +12915,7 @@ UPDATE t5 SET c1=NULL WHERE c1<>0;
 UPDATE IGNORE t5 SET c1=NULL WHERE c1>100;
 --sorted_result
 SELECT hex(c1),hex(c2) FROM t5;
-SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
 
 #Multi table update
 --disable_warnings
@@ -13114,6 +13161,7 @@ SELECT hex(c1),hex(c2) FROM t5 WHERE c1 IS NOT NULL ORDER BY c1 DESC LIMIT 2 ;
 #Inserting different charachers
 CREATE TABLE t7(c1  BIT(8));
 INSERT INTO t7 VALUES('a'),('A'),('z'),('Z'),('!'),('`'),('@'),('#'),('~'),('$'),('%'),('^'),('&'),('*'),('('),(')'),('-'),('_'),('+'),('='),('1'),('9');
+--replace_regex /[^[:print:]]/#/
 --sorted_result
 SELECT * FROM t7;
 ############# UPDATE ###########
@@ -13157,7 +13205,7 @@ UPDATE t5 SET c1=NULL WHERE c1<>0;
 UPDATE IGNORE t5 SET c1=NULL WHERE c1>100;
 --sorted_result
 SELECT hex(c1),hex(c2) FROM t5;
-SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
 
 #Multi table update
 --disable_warnings
@@ -13403,6 +13451,7 @@ SELECT hex(c1),hex(c2) FROM t5 WHERE c1 IS NOT NULL ORDER BY c1 DESC LIMIT 2 ;
 #Inserting different charachers
 CREATE TABLE t7(c1  BIT(16));
 INSERT INTO t7 VALUES('a'),('A'),('z'),('Z'),('!'),('`'),('@'),('#'),('~'),('$'),('%'),('^'),('&'),('*'),('('),(')'),('-'),('_'),('+'),('='),('1'),('9');
+--replace_regex /[^[:print:]]/#/
 --sorted_result
 SELECT * FROM t7;
 ############# UPDATE ###########
@@ -13446,7 +13495,7 @@ UPDATE t5 SET c1=NULL WHERE c1<>0;
 UPDATE IGNORE t5 SET c1=NULL WHERE c1>100;
 --sorted_result
 SELECT hex(c1),hex(c2) FROM t5;
-SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
 
 #Multi table update
 --disable_warnings
@@ -13692,6 +13741,7 @@ SELECT hex(c1),hex(c2) FROM t5 WHERE c1 IS NOT NULL ORDER BY c1 DESC LIMIT 2 ;
 #Inserting different charachers
 CREATE TABLE t7(c1  BIT(32));
 INSERT INTO t7 VALUES('a'),('A'),('z'),('Z'),('!'),('`'),('@'),('#'),('~'),('$'),('%'),('^'),('&'),('*'),('('),(')'),('-'),('_'),('+'),('='),('1'),('9');
+--replace_regex /[^[:print:]]/#/
 --sorted_result
 SELECT * FROM t7;
 ############# UPDATE ###########
@@ -13735,7 +13785,7 @@ UPDATE t5 SET c1=NULL WHERE c1<>0;
 UPDATE IGNORE t5 SET c1=NULL WHERE c1>100;
 --sorted_result
 SELECT hex(c1),hex(c2) FROM t5;
-SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
 
 #Multi table update
 --disable_warnings
@@ -13981,6 +14031,7 @@ SELECT hex(c1),hex(c2) FROM t5 WHERE c1 IS NOT NULL ORDER BY c1 DESC LIMIT 2 ;
 #Inserting different charachers
 CREATE TABLE t7(c1  BIT(64));
 INSERT INTO t7 VALUES('a'),('A'),('z'),('Z'),('!'),('`'),('@'),('#'),('~'),('$'),('%'),('^'),('&'),('*'),('('),(')'),('-'),('_'),('+'),('='),('1'),('9');
+--replace_regex /[^[:print:]]/#/
 --sorted_result
 SELECT * FROM t7;
 ############# UPDATE ###########
@@ -14024,7 +14075,7 @@ UPDATE t5 SET c1=NULL WHERE c1<>0;
 UPDATE IGNORE t5 SET c1=NULL WHERE c1>100;
 --sorted_result
 SELECT hex(c1),hex(c2) FROM t5;
-SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
 
 #Multi table update
 --disable_warnings
@@ -14270,6 +14321,7 @@ SELECT hex(c1),hex(c2) FROM t5 WHERE c1 IS NOT NULL ORDER BY c1 DESC LIMIT 2 ;
 #Inserting different charachers
 CREATE TABLE t7(c1  BIT(1));
 INSERT INTO t7 VALUES('a'),('A'),('z'),('Z'),('!'),('`'),('@'),('#'),('~'),('$'),('%'),('^'),('&'),('*'),('('),(')'),('-'),('_'),('+'),('='),('1'),('9');
+--replace_regex /[^[:print:]]/#/
 --sorted_result
 SELECT * FROM t7;
 ############# UPDATE ###########
@@ -14313,7 +14365,7 @@ UPDATE t5 SET c1=NULL WHERE c1<>0;
 UPDATE IGNORE t5 SET c1=NULL WHERE c1>100;
 --sorted_result
 SELECT hex(c1),hex(c2) FROM t5;
-SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
 
 #Multi table update
 --disable_warnings
@@ -14559,6 +14611,7 @@ SELECT hex(c1),hex(c2) FROM t5 WHERE c1 IS NOT NULL ORDER BY c1 DESC LIMIT 2 ;
 #Inserting different charachers
 CREATE TABLE t7(c1  BIT(2));
 INSERT INTO t7 VALUES('a'),('A'),('z'),('Z'),('!'),('`'),('@'),('#'),('~'),('$'),('%'),('^'),('&'),('*'),('('),(')'),('-'),('_'),('+'),('='),('1'),('9');
+--replace_regex /[^[:print:]]/#/
 --sorted_result
 SELECT * FROM t7;
 ############# UPDATE ###########
@@ -14602,7 +14655,7 @@ UPDATE t5 SET c1=NULL WHERE c1<>0;
 UPDATE IGNORE t5 SET c1=NULL WHERE c1>100;
 --sorted_result
 SELECT hex(c1),hex(c2) FROM t5;
-SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
 
 #Multi table update
 --disable_warnings
@@ -14848,6 +14901,7 @@ SELECT hex(c1),hex(c2) FROM t5 WHERE c1 IS NOT NULL ORDER BY c1 DESC LIMIT 2 ;
 #Inserting different charachers
 CREATE TABLE t7(c1  BIT(4));
 INSERT INTO t7 VALUES('a'),('A'),('z'),('Z'),('!'),('`'),('@'),('#'),('~'),('$'),('%'),('^'),('&'),('*'),('('),(')'),('-'),('_'),('+'),('='),('1'),('9');
+--replace_regex /[^[:print:]]/#/
 --sorted_result
 SELECT * FROM t7;
 ############# UPDATE ###########
@@ -14891,7 +14945,7 @@ UPDATE t5 SET c1=NULL WHERE c1<>0;
 UPDATE IGNORE t5 SET c1=NULL WHERE c1>100;
 --sorted_result
 SELECT hex(c1),hex(c2) FROM t5;
-SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
 
 #Multi table update
 --disable_warnings
@@ -15137,6 +15191,7 @@ SELECT hex(c1),hex(c2) FROM t5 WHERE c1 IS NOT NULL ORDER BY c1 DESC LIMIT 2 ;
 #Inserting different charachers
 CREATE TABLE t7(c1  BIT(8));
 INSERT INTO t7 VALUES('a'),('A'),('z'),('Z'),('!'),('`'),('@'),('#'),('~'),('$'),('%'),('^'),('&'),('*'),('('),(')'),('-'),('_'),('+'),('='),('1'),('9');
+--replace_regex /[^[:print:]]/#/
 --sorted_result
 SELECT * FROM t7;
 ############# UPDATE ###########
@@ -15180,7 +15235,7 @@ UPDATE t5 SET c1=NULL WHERE c1<>0;
 UPDATE IGNORE t5 SET c1=NULL WHERE c1>100;
 --sorted_result
 SELECT hex(c1),hex(c2) FROM t5;
-SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
 
 #Multi table update
 --disable_warnings
@@ -15426,6 +15481,7 @@ SELECT hex(c1),hex(c2) FROM t5 WHERE c1 IS NOT NULL ORDER BY c1 DESC LIMIT 2 ;
 #Inserting different charachers
 CREATE TABLE t7(c1  BIT(16));
 INSERT INTO t7 VALUES('a'),('A'),('z'),('Z'),('!'),('`'),('@'),('#'),('~'),('$'),('%'),('^'),('&'),('*'),('('),(')'),('-'),('_'),('+'),('='),('1'),('9');
+--replace_regex /[^[:print:]]/#/
 --sorted_result
 SELECT * FROM t7;
 ############# UPDATE ###########
@@ -15469,7 +15525,7 @@ UPDATE t5 SET c1=NULL WHERE c1<>0;
 UPDATE IGNORE t5 SET c1=NULL WHERE c1>100;
 --sorted_result
 SELECT hex(c1),hex(c2) FROM t5;
-SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
 
 #Multi table update
 --disable_warnings
@@ -15715,6 +15771,7 @@ SELECT hex(c1),hex(c2) FROM t5 WHERE c1 IS NOT NULL ORDER BY c1 DESC LIMIT 2 ;
 #Inserting different charachers
 CREATE TABLE t7(c1  BIT(32));
 INSERT INTO t7 VALUES('a'),('A'),('z'),('Z'),('!'),('`'),('@'),('#'),('~'),('$'),('%'),('^'),('&'),('*'),('('),(')'),('-'),('_'),('+'),('='),('1'),('9');
+--replace_regex /[^[:print:]]/#/
 --sorted_result
 SELECT * FROM t7;
 ############# UPDATE ###########
@@ -15758,7 +15815,7 @@ UPDATE t5 SET c1=NULL WHERE c1<>0;
 UPDATE IGNORE t5 SET c1=NULL WHERE c1>100;
 --sorted_result
 SELECT hex(c1),hex(c2) FROM t5;
-SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
 
 #Multi table update
 --disable_warnings
@@ -16004,6 +16061,7 @@ SELECT hex(c1),hex(c2) FROM t5 WHERE c1 IS NOT NULL ORDER BY c1 DESC LIMIT 2 ;
 #Inserting different charachers
 CREATE TABLE t7(c1  BIT(64));
 INSERT INTO t7 VALUES('a'),('A'),('z'),('Z'),('!'),('`'),('@'),('#'),('~'),('$'),('%'),('^'),('&'),('*'),('('),(')'),('-'),('_'),('+'),('='),('1'),('9');
+--replace_regex /[^[:print:]]/#/
 --sorted_result
 SELECT * FROM t7;
 ############# UPDATE ###########
@@ -16047,7 +16105,7 @@ UPDATE t5 SET c1=NULL WHERE c1<>0;
 UPDATE IGNORE t5 SET c1=NULL WHERE c1>100;
 --sorted_result
 SELECT hex(c1),hex(c2) FROM t5;
-SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET SQL_MODE='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
 
 #Multi table update
 --disable_warnings
@@ -16144,4 +16202,4 @@ DELETE t5,t6 FROM t5,t6 WHERE  t5.c1=t6.c1 AND t5.c2=t6.c2;
 
 # Droping the tables
 DROP TABLE IF EXISTS t1,t2,t3,t4,t5,t6,t7;
-
+SET @@session.max_error_count = default;

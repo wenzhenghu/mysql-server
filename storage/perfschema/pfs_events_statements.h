@@ -1,13 +1,20 @@
-/* Copyright (c) 2010, 2017, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2010, 2020, Oracle and/or its affiliates. All rights reserved.
 
   This program is free software; you can redistribute it and/or modify
-  it under the terms of the GNU General Public License as published by
-  the Free Software Foundation; version 2 of the License.
+  it under the terms of the GNU General Public License, version 2.0,
+  as published by the Free Software Foundation.
+
+  This program is also distributed with certain software (including
+  but not limited to OpenSSL) that is licensed under separate terms,
+  as designated in a particular file or component or in included license
+  documentation.  The authors of MySQL hereby grant you an additional
+  permission to link the program and your derivative works with the
+  separately licensed software that they have included with MySQL.
 
   This program is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  GNU General Public License for more details.
+  GNU General Public License, version 2.0, for more details.
 
   You should have received a copy of the GNU General Public License
   along with this program; if not, write to the Free Software
@@ -22,11 +29,12 @@
 */
 
 #include <sys/types.h>
+#include <atomic>
 
 #include "my_inttypes.h"
-#include "pfs_column_types.h"
-#include "pfs_digest.h"
-#include "pfs_events.h"
+#include "storage/perfschema/pfs_column_types.h"
+#include "storage/perfschema/pfs_digest.h"
+#include "storage/perfschema/pfs_events.h"
 
 struct PFS_thread;
 struct PFS_account;
@@ -34,8 +42,16 @@ struct PFS_user;
 struct PFS_host;
 
 /** A statement record. */
-struct PFS_events_statements : public PFS_events
-{
+struct PFS_events_statements : public PFS_events {
+  /*
+   MAINTAINER:
+   See pointer arithmetic in copy_events_statements(),
+   attribute here are copied in block.
+  */
+
+  /** STATEMENT_ID, from the SQL layer QUERY_ID. */
+  ulonglong m_statement_id;
+
   enum_object_type m_sp_type;
   char m_schema_name[NAME_LEN];
   uint m_schema_name_length;
@@ -126,12 +142,12 @@ extern bool flag_events_statements_history;
 extern bool flag_events_statements_history_long;
 
 extern bool events_statements_history_long_full;
-extern PFS_ALIGNED PFS_cacheline_uint32 events_statements_history_long_index;
+extern PFS_cacheline_atomic_uint32 events_statements_history_long_index;
 extern PFS_events_statements *events_statements_history_long_array;
 extern size_t events_statements_history_long_size;
 
 int init_events_statements_history_long(
-  size_t events_statements_history_long_sizing);
+    size_t events_statements_history_long_sizing);
 void cleanup_events_statements_history_long();
 
 void reset_events_statements_current();

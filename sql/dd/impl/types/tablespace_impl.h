@@ -1,155 +1,173 @@
-/* Copyright (c) 2014, 2017, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2014, 2020, Oracle and/or its affiliates.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software Foundation,
-   51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 #ifndef DD__TABLESPACE_IMPL_INCLUDED
 #define DD__TABLESPACE_IMPL_INCLUDED
 
-#include <memory>   // std::unique_ptr
+#include <memory>  // std::unique_ptr
 #include <new>
 #include <string>
 
-#include "dd/impl/raw/raw_record.h"
-#include "dd/impl/types/entity_object_impl.h" // dd::Entity_object_impl
-#include "dd/impl/types/weak_object_impl.h"
-#include "dd/object_id.h"
-#include "dd/sdi_fwd.h"
-#include "dd/types/dictionary_object_table.h" // dd::Dictionary_object_table
-#include "dd/types/object_type.h"             // dd::Object_type
-#include "dd/types/tablespace.h"              // dd::Tablespace
-#include "dd/types/tablespace_file.h"         // dd::Tablespace_file
+#include "sql/dd/impl/properties_impl.h"
+#include "sql/dd/impl/raw/raw_record.h"
+#include "sql/dd/impl/types/entity_object_impl.h"  // dd::Entity_object_impl
+#include "sql/dd/impl/types/weak_object_impl.h"
+#include "sql/dd/object_id.h"
+#include "sql/dd/sdi_fwd.h"
+#include "sql/dd/string_type.h"
+#include "sql/dd/types/tablespace.h"       // dd::Tablespace
+#include "sql/dd/types/tablespace_file.h"  // dd::Tablespace_file
+#include "sql/strfunc.h"
+
+class THD;
 
 namespace dd {
 
 ///////////////////////////////////////////////////////////////////////////
 
+class Object_table;
 class Open_dictionary_tables_ctx;
 class Properties;
 class Sdi_rcontext;
 class Sdi_wcontext;
 class Tablespace_file;
 class Weak_object;
+class Object_table;
 
-class Tablespace_impl : public Entity_object_impl,
-                        public Tablespace
-{
-public:
+class Tablespace_impl : public Entity_object_impl, public Tablespace {
+ public:
   Tablespace_impl();
 
-  virtual ~Tablespace_impl();
+  ~Tablespace_impl() override;
 
-public:
-  virtual const Dictionary_object_table &object_table() const
-  { return Tablespace::OBJECT_TABLE(); }
+ public:
+  const Object_table &object_table() const override;
 
-  virtual bool validate() const;
+  bool validate() const override;
 
-  virtual bool restore_children(Open_dictionary_tables_ctx *otx);
+  bool restore_children(Open_dictionary_tables_ctx *otx) override;
 
-  virtual bool store_children(Open_dictionary_tables_ctx *otx);
+  bool store_children(Open_dictionary_tables_ctx *otx) override;
 
-  virtual bool drop_children(Open_dictionary_tables_ctx *otx) const;
+  bool drop_children(Open_dictionary_tables_ctx *otx) const override;
 
-  virtual bool store_attributes(Raw_record *r);
+  bool store_attributes(Raw_record *r) override;
 
-  virtual bool restore_attributes(const Raw_record &r);
+  bool restore_attributes(const Raw_record &r) override;
 
-  void serialize(Sdi_wcontext *wctx, Sdi_writer *w) const;
+  void serialize(Sdi_wcontext *wctx, Sdi_writer *w) const override;
 
-  bool deserialize(Sdi_rcontext *rctx, const RJ_Value &val);
+  bool deserialize(Sdi_rcontext *rctx, const RJ_Value &val) override;
 
-  virtual void debug_print(String_type &outb) const;
+  void debug_print(String_type &outb) const override;
 
-  virtual bool is_empty(THD *thd, bool *empty) const;
+  bool is_empty(THD *thd, bool *empty) const override;
 
-public:
+ public:
+  static void register_tables(Open_dictionary_tables_ctx *otx);
+
   /////////////////////////////////////////////////////////////////////////
   // comment.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual const String_type &comment() const
-  { return m_comment; }
+  const String_type &comment() const override { return m_comment; }
 
-  virtual void set_comment(const String_type &comment)
-  { m_comment= comment; }
+  void set_comment(const String_type &comment) override { m_comment = comment; }
 
   /////////////////////////////////////////////////////////////////////////
   // options.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual const Properties &options() const
-  { return *m_options; }
+  const Properties &options() const override { return m_options; }
 
-  virtual Properties &options()
-  { return *m_options; }
+  Properties &options() override { return m_options; }
 
-  virtual bool set_options_raw(const String_type &options_raw);
+  bool set_options(const String_type &options_raw) override {
+    return m_options.insert_values(options_raw);
+  }
 
   /////////////////////////////////////////////////////////////////////////
   // se_private_data.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual const Properties &se_private_data() const
-  { return *m_se_private_data; }
+  const Properties &se_private_data() const override {
+    return m_se_private_data;
+  }
 
-  virtual Properties &se_private_data()
-  { return *m_se_private_data; }
+  Properties &se_private_data() override { return m_se_private_data; }
 
-  virtual bool set_se_private_data_raw(const String_type &se_private_data_raw);
+  bool set_se_private_data(const String_type &se_private_data_raw) override {
+    return m_se_private_data.insert_values(se_private_data_raw);
+  }
 
   /////////////////////////////////////////////////////////////////////////
   // m_engine.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual const String_type &engine() const
-  { return m_engine; }
+  const String_type &engine() const override { return m_engine; }
 
-  virtual void set_engine(const String_type &engine)
-  { m_engine= engine; }
+  void set_engine(const String_type &engine) override { m_engine = engine; }
+
+  LEX_CSTRING engine_attribute() const override {
+    return lex_cstring_handle(m_engine_attribute);
+  }
+  void set_engine_attribute(LEX_CSTRING a) override {
+    m_engine_attribute.assign(a.str, a.length);
+  }
 
   /////////////////////////////////////////////////////////////////////////
   // Tablespace file collection.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual Tablespace_file *add_file();
+  Tablespace_file *add_file() override;
 
-  virtual bool remove_file(String_type data_file);
+  bool remove_file(String_type data_file) override;
 
-  virtual const Tablespace_file_collection &files() const
-  { return m_files; }
+  const Tablespace_file_collection &files() const override { return m_files; }
 
   // Fix "inherits ... via dominance" warnings
-  virtual Weak_object_impl *impl()
-  { return Weak_object_impl::impl(); }
-  virtual const Weak_object_impl *impl() const
-  { return Weak_object_impl::impl(); }
-  virtual Object_id id() const
-  { return Entity_object_impl::id(); }
-  virtual bool is_persistent() const
-  { return Entity_object_impl::is_persistent(); }
-  virtual const String_type &name() const
-  { return Entity_object_impl::name(); }
-  virtual void set_name(const String_type &name)
-  { Entity_object_impl::set_name(name); }
+  Entity_object_impl *impl() override { return Entity_object_impl::impl(); }
+  const Entity_object_impl *impl() const override {
+    return Entity_object_impl::impl();
+  }
+  Object_id id() const override { return Entity_object_impl::id(); }
+  bool is_persistent() const override {
+    return Entity_object_impl::is_persistent();
+  }
+  const String_type &name() const override {
+    return Entity_object_impl::name();
+  }
+  void set_name(const String_type &name) override {
+    Entity_object_impl::set_name(name);
+  }
 
-private:
+ private:
   // Fields
 
   String_type m_comment;
-  std::unique_ptr<Properties> m_options;
-  std::unique_ptr<Properties> m_se_private_data;
+  Properties_impl m_options;
+  Properties_impl m_se_private_data;
   String_type m_engine;
+  String_type m_engine_attribute;
 
   // Collections.
 
@@ -157,25 +175,11 @@ private:
 
   Tablespace_impl(const Tablespace_impl &src);
 
-  Tablespace *clone() const
-  {
-    return new Tablespace_impl(*this);
-  }
+  Tablespace *clone() const override { return new Tablespace_impl(*this); }
 };
 
 ///////////////////////////////////////////////////////////////////////////
 
-class Tablespace_type : public Object_type
-{
-public:
-  virtual void register_tables(Open_dictionary_tables_ctx *otx) const;
+}  // namespace dd
 
-  virtual Weak_object *create_object() const
-  { return new (std::nothrow) Tablespace_impl(); }
-};
-
-///////////////////////////////////////////////////////////////////////////
-
-}
-
-#endif // DD__TABLESPACE_IMPL_INCLUDED
+#endif  // DD__TABLESPACE_IMPL_INCLUDED

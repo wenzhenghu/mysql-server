@@ -23,7 +23,7 @@
 #
 # $rpl_after_received_events_action
 #   Specifies what to do after receiving the events:
-#   stop  - Issue STOP SLAVE IO_THREAD and wait for it to stop.
+#   stop  - Issue STOP REPLICA IO_THREAD and wait for it to stop.
 #   flush - Issue FLUSH RELAY LOG and then continue to replicate.
 #   hang  - Leave the receiver thread hanging on a debug sync point.
 #           The caller must later release the receiver thread using:
@@ -137,7 +137,7 @@ if ($slave_timeout)
 
 if (!$rpl_continue_event_count_after_hanging)
 {
-  --eval START SLAVE IO_THREAD $_for_channel;
+  --eval START REPLICA IO_THREAD $_for_channel;
 }
 if ($rpl_continue_event_count_after_hanging)
 {
@@ -277,11 +277,10 @@ while ($_rrec_counted_events < $rpl_event_count)
   }
 }
 
---source include/remove_debug_point.inc
-
 # Execute the required action.
 if ($rpl_after_received_events_action == 'flush')
 {
+  --source include/remove_debug_point.inc
   FLUSH LOCAL RELAY LOGS;
   SET DEBUG_SYNC= 'now SIGNAL continue_after_queue_event';
 }
@@ -293,10 +292,11 @@ if ($rpl_after_received_events_action == 'stop')
   --connect (_rrec_other_connection,127.0.0.1,root,,test,$_rrec_port,)
 
   --connection _rrec_other_connection
-  --send
-  eval STOP SLAVE IO_THREAD $_for_channel;
+  --send_eval STOP REPLICA IO_THREAD $_for_channel;
   --connection $_rrec_connection
 
+  SET DEBUG_SYNC= 'now WAIT_FOR reached_stopping_io_thread';
+  --source include/remove_debug_point.inc
   SET DEBUG_SYNC= 'now SIGNAL continue_after_queue_event';
 
   --connection _rrec_other_connection
@@ -305,6 +305,14 @@ if ($rpl_after_received_events_action == 'stop')
 
   --disconnect _rrec_other_connection
   --source include/wait_for_slave_io_to_stop.inc
+}
+
+if ($rpl_after_received_events_action != 'flush')
+{
+  if ($rpl_after_received_events_action != 'stop')
+  {
+    --source include/remove_debug_point.inc
+  }
 }
 
 --let $include_filename= rpl_receive_event_count.inc

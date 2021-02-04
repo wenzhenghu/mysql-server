@@ -1,25 +1,38 @@
-/* Copyright (c) 2014, 2017, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2014, 2020, Oracle and/or its affiliates.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software Foundation,
-   51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 #ifndef DD__COLUMN_INCLUDED
 #define DD__COLUMN_INCLUDED
 
-#include "dd/collection.h"           // dd::Collection
-#include "dd/sdi_fwd.h"              // RJ_Document
-#include "dd/types/entity_object.h"  // dd::Entity_object
+#include "lex_string.h"  // LEX_CSTRING
 #include "my_inttypes.h"
+#include "nullable.h"
+#include "sql/dd/collection.h"           // dd::Collection
+#include "sql/dd/sdi_fwd.h"              // RJ_Document
+#include "sql/dd/types/entity_object.h"  // dd::Entity_object
+
+#include "sql/gis/srid.h"
+
+using Mysql::Nullable;
 
 namespace dd {
 
@@ -28,67 +41,72 @@ namespace dd {
 class Abstract_table;
 class Column_impl;
 class Column_type_element;
-class Object_table;
-class Object_type;
 class Properties;
+
+namespace tables {
+class Columns;
+}
 
 ///////////////////////////////////////////////////////////////////////////
 
 // Redefined enum_field_types here. We can remove some old types ?
-enum class enum_column_types
-{
-    DECIMAL= 1, // This is 1 > than MYSQL_TYPE_DECIMAL
-    TINY,
-    SHORT,
-    LONG,
-    FLOAT,
-    DOUBLE,
-    TYPE_NULL,
-    TIMESTAMP,
-    LONGLONG,
-    INT24,
-    DATE,
-    TIME,
-    DATETIME,
-    YEAR,
-    NEWDATE,
-    VARCHAR,
-    BIT,
-    TIMESTAMP2,
-    DATETIME2,
-    TIME2,
-    NEWDECIMAL,
-    ENUM,
-    SET,
-    TINY_BLOB,
-    MEDIUM_BLOB,
-    LONG_BLOB,
-    BLOB,
-    VAR_STRING,
-    STRING,
-    GEOMETRY,
-    JSON
-  };
+enum class enum_column_types {
+  DECIMAL = 1,  // This is 1 > than MYSQL_TYPE_DECIMAL
+  TINY,
+  SHORT,
+  LONG,
+  FLOAT,
+  DOUBLE,
+  TYPE_NULL,
+  TIMESTAMP,
+  LONGLONG,
+  INT24,
+  DATE,
+  TIME,
+  DATETIME,
+  YEAR,
+  NEWDATE,
+  VARCHAR,
+  BIT,
+  TIMESTAMP2,
+  DATETIME2,
+  TIME2,
+  NEWDECIMAL,
+  ENUM,
+  SET,
+  TINY_BLOB,
+  MEDIUM_BLOB,
+  LONG_BLOB,
+  BLOB,
+  VAR_STRING,
+  STRING,
+  GEOMETRY,
+  JSON
+};
 
-class Column : virtual public Entity_object
-{
-public:
-  static const Object_type &TYPE();
-  static const Object_table &OBJECT_TABLE();
-  typedef Collection<Column_type_element*> Column_type_element_collection;
+class Column : virtual public Entity_object {
+ public:
+  typedef Collection<Column_type_element *> Column_type_element_collection;
   typedef Column_impl Impl;
+  typedef tables::Columns DD_table;
 
-  enum enum_column_key
-  {
-    CK_NONE= 1,
-    CK_PRIMARY,
-    CK_UNIQUE,
-    CK_MULTIPLE
+  enum enum_column_key { CK_NONE = 1, CK_PRIMARY, CK_UNIQUE, CK_MULTIPLE };
+
+  enum class enum_hidden_type {
+    /// The column is visible (a normal column)
+    HT_VISIBLE = 1,
+    /// The column is completely invisible to the server
+    HT_HIDDEN_SE = 2,
+    /// The column is visible to the server, but hidden from the user.
+    /// This is used for i.e. implementing functional indexes.
+    HT_HIDDEN_SQL = 3,
+    /// User table column marked as INVISIBLE by using the column visibility
+    /// attribute. Column is hidden from the user unless it is explicitly
+    /// referenced in the statement. Column is visible to the server.
+    HT_HIDDEN_USER = 4
   };
 
-public:
-  virtual ~Column()
-  { };
+  ~Column() override {}
 
   /////////////////////////////////////////////////////////////////////////
   // Table.
@@ -104,6 +122,9 @@ public:
 
   virtual Object_id collation_id() const = 0;
   virtual void set_collation_id(Object_id collation_id) = 0;
+
+  virtual void set_is_explicit_collation(bool is_explicit_collation) = 0;
+  virtual bool is_explicit_collation() const = 0;
 
   /////////////////////////////////////////////////////////////////////////
   // type.
@@ -161,6 +182,13 @@ public:
   virtual void set_numeric_precision(uint numeric_precision) = 0;
 
   /////////////////////////////////////////////////////////////////////////
+  // srid
+  /////////////////////////////////////////////////////////////////////////
+
+  virtual void set_srs_id(Nullable<gis::srid_t> srs_id) = 0;
+  virtual Nullable<gis::srid_t> srs_id() const = 0;
+
+  /////////////////////////////////////////////////////////////////////////
   // numeric_scale.
   /////////////////////////////////////////////////////////////////////////
 
@@ -200,7 +228,7 @@ public:
 
   virtual const String_type &default_value_utf8() const = 0;
   virtual void set_default_value_utf8(
-                 const String_type &default_value_utf8) = 0;
+      const String_type &default_value_utf8) = 0;
   virtual void set_default_value_utf8_null(bool is_null) = 0;
   virtual bool is_default_value_utf8_null() const = 0;
 
@@ -218,8 +246,8 @@ public:
 
   virtual const String_type &generation_expression() const = 0;
 
-  virtual void set_generation_expression(const String_type
-                                         &generation_expression) = 0;
+  virtual void set_generation_expression(
+      const String_type &generation_expression) = 0;
 
   virtual bool is_generation_expression_null() const = 0;
 
@@ -229,8 +257,8 @@ public:
 
   virtual const String_type &generation_expression_utf8() const = 0;
 
-  virtual void set_generation_expression_utf8(const String_type
-                                              &generation_expression_utf8) = 0;
+  virtual void set_generation_expression_utf8(
+      const String_type &generation_expression_utf8) = 0;
 
   virtual bool is_generation_expression_utf8_null() const = 0;
 
@@ -259,8 +287,11 @@ public:
   // hidden.
   /////////////////////////////////////////////////////////////////////////
 
-  virtual bool is_hidden() const = 0;
-  virtual void set_hidden(bool hidden) = 0;
+  virtual enum_hidden_type hidden() const = 0;
+  virtual void set_hidden(enum_hidden_type hidden) = 0;
+  bool is_se_hidden() const {
+    return hidden() == enum_hidden_type::HT_HIDDEN_SE;
+  }
 
   /////////////////////////////////////////////////////////////////////////
   // Options.
@@ -269,7 +300,7 @@ public:
   virtual const Properties &options() const = 0;
 
   virtual Properties &options() = 0;
-  virtual bool set_options_raw(const String_type &options_raw) = 0;
+  virtual bool set_options(const String_type &options_raw) = 0;
 
   /////////////////////////////////////////////////////////////////////////
   // se_private_data.
@@ -278,7 +309,18 @@ public:
   virtual const Properties &se_private_data() const = 0;
 
   virtual Properties &se_private_data() = 0;
-  virtual bool set_se_private_data_raw(const String_type &se_private_data_raw) = 0;
+  virtual bool set_se_private_data(const Properties &se_private_data) = 0;
+  virtual bool set_se_private_data(const String_type &se_private_data_raw) = 0;
+
+  /////////////////////////////////////////////////////////////////////////
+  // SE-specific json attributes
+  /////////////////////////////////////////////////////////////////////////
+
+  virtual LEX_CSTRING engine_attribute() const = 0;
+  virtual void set_engine_attribute(LEX_CSTRING attrs) = 0;
+
+  virtual LEX_CSTRING secondary_engine_attribute() const = 0;
+  virtual void set_secondary_engine_attribute(LEX_CSTRING attrs) = 0;
 
   /////////////////////////////////////////////////////////////////////////
   // Column key type.
@@ -320,7 +362,6 @@ public:
 
   virtual void serialize(Sdi_wcontext *wctx, Sdi_writer *w) const = 0;
 
-
   /**
     Re-establishes the state of *this by reading sdi information from
     the rapidjson DOM subobject provided.
@@ -336,10 +377,12 @@ public:
   */
 
   virtual bool deserialize(Sdi_rcontext *rctx, const RJ_Value &val) = 0;
+
+  virtual bool is_array() const = 0;
 };
 
 ///////////////////////////////////////////////////////////////////////////
 
-}
+}  // namespace dd
 
-#endif // DD__COLUMN_INCLUDED
+#endif  // DD__COLUMN_INCLUDED

@@ -1,15 +1,21 @@
 /*
-   Copyright (C) 2003-2006, 2008 MySQL AB, 2008 Sun Microsystems, Inc.
-    All rights reserved. Use is subject to license terms.
+   Copyright (c) 2003, 2020, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -52,7 +58,7 @@ public:
    */
   virtual ~LogHandler();
 
-  virtual const char* handler_type() {return "NONE";};
+  virtual const char* handler_type() {return "NONE";}
 
   /**
    * Opens/initializes the log handler.
@@ -86,9 +92,9 @@ public:
    * @param pMsg the log message.
    */
   void append(const char* pCategory, Logger::LoggerLevel level,
-	      const char* pMsg);
+	      const char* pMsg, time_t now);
   void append_impl(const char* pCategory, Logger::LoggerLevel level,
-		   const char* pMsg);
+		   const char* pMsg, time_t now);
 
   /**
    * Returns a default formatted header. It currently has the
@@ -100,7 +106,7 @@ public:
    * @return the header.
    */
   const char* getDefaultHeader(char* pStr, const char* pCategory, 
-			       Logger::LoggerLevel level) const;
+			       Logger::LoggerLevel level, time_t now) const;
   
   /**
    * Returns a default formatted footer. Currently only returns a newline.
@@ -169,28 +175,30 @@ public:
    *
    * @param config where to store parameters
    */
-  virtual bool getParams(BaseString &config) {return false;};
+  virtual bool getParams(BaseString &config) {return false;}
 
-  virtual off_t getCurrentSize() {return -1;};
-  virtual off_t getMaxSize() {return -1;};
+  virtual off_t getCurrentSize() {return -1;}
+  virtual off_t getMaxSize() {return -1;}
 
-protected:
   /** Max length of the header the log. */
   STATIC_CONST( MAX_HEADER_LENGTH = 128 );
+
+protected:
   /** Max lenght of footer in the log. */
   STATIC_CONST( MAX_FOOTER_LENGTH = 128 );
 
   /**
    * Write the header to the log.
-   * 
+   *
    * @param pCategory the category to tag the log with.
    * @param level the log level.
    */
-  virtual void writeHeader(const char* category, Logger::LoggerLevel level) = 0;
+  virtual void writeHeader(const char* pCategory, Logger::LoggerLevel level,
+                           time_t now) = 0;
 
   /**
    * Write the message to the log.
-   * 
+   *
    * @param pMsg the message to log.
    */
   virtual void writeMessage(const char* pMsg) = 0;
@@ -202,7 +210,6 @@ protected:
   virtual void writeFooter() = 0;
   
 private: 
-  time_t m_now;
 
   /** Prohibit */
   LogHandler(const LogHandler&);

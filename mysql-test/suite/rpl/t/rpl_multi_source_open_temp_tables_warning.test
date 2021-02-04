@@ -22,7 +22,11 @@
 #               USING MULTI-SOURCE
 
 
---source include/have_binlog_format_mixed.inc
+--source include/have_binlog_format_statement.inc
+# Test requires master-info-repository=TABLE, relay-log-info-repository=TABLE
+--source include/have_slave_repository_type_table.inc
+
+--source include/not_have_privilege_checks_user.inc
 
 --let $rpl_multi_source= 1
 --let $rpl_topology= 1->2, 3->2, 4->2
@@ -87,7 +91,7 @@ RESET SLAVE FOR CHANNEL 'channel_1';
 
 # CHANGE MASTER TO generates a warning because there are open temp tables in the channel.
 --disable_query_log
-eval CHANGE MASTER TO MASTER_PORT = $SERVER_MYPORT_3 FOR CHANNEL 'channel_3';
+eval CHANGE REPLICATION SOURCE TO SOURCE_PORT = $SERVER_MYPORT_3 FOR CHANNEL 'channel_3';
 --enable_query_log
 
 # Dropping the table that is still open will decrease the value to zero.
@@ -112,7 +116,7 @@ DROP TEMPORARY TABLE t3;
 
 # CHANGE MASTER TO will not generate a warning because there are no open temp tables in
 # the channel.
-CHANGE MASTER TO MASTER_PORT = 4711 FOR CHANNEL 'channel_3';
+CHANGE REPLICATION SOURCE TO SOURCE_PORT = 4711 FOR CHANNEL 'channel_3';
 
 RESET SLAVE ALL;
 --let $rpl_skip_sync= 1
@@ -120,6 +124,3 @@ RESET SLAVE ALL;
 --let $rpl_only_running_threads= 1
 --let $rpl_group_replication= 1
 --source include/rpl_end.inc
-
-# Remove this line after Bug#24700334 is fixed.
---source include/force_restart.inc

@@ -1,31 +1,39 @@
 /*
-  Copyright (c) 2017, Oracle and/or its affiliates. All rights reserved.
+  Copyright (c) 2017, 2020, Oracle and/or its affiliates.
 
   This program is free software; you can redistribute it and/or modify
-  it under the terms of the GNU General Public License as published by
-  the Free Software Foundation; version 2 of the License.
+  it under the terms of the GNU General Public License, version 2.0,
+  as published by the Free Software Foundation.
+
+  This program is also distributed with certain software (including
+  but not limited to OpenSSL) that is licensed under separate terms,
+  as designated in a particular file or component or in included license
+  documentation.  The authors of MySQL hereby grant you an additional
+  permission to link the program and your derivative works with the
+  separately licensed software that they have included with MySQL.
 
   This program is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  GNU General Public License for more details.
+  GNU General Public License, version 2.0, for more details.
 
   You should have received a copy of the GNU General Public License
-  along with this program; if not, write to the Free Software Foundation,
-  51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA
+  along with this program; if not, write to the Free Software
+  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
 */
 
 #include "my_config.h"
-#include "gis/geometries.h"
-#include "gis/geometries_cs.h"
-#include "gis/geometry_visitor.h"
+
 #include <gtest/gtest.h>
-#include <memory>           // unique_ptr
+#include <memory>  // unique_ptr
+
+#include "sql/gis/geometries.h"
+#include "sql/gis/geometries_cs.h"
+#include "sql/gis/geometry_visitor.h"
 
 namespace geometries_unittest {
 
-struct Cartesian_types
-{
+struct Cartesian_types {
   typedef gis::Cartesian_point Point;
   typedef gis::Cartesian_linestring Linestring;
   typedef gis::Cartesian_linearring Linearring;
@@ -35,14 +43,12 @@ struct Cartesian_types
   typedef gis::Cartesian_multilinestring Multilinestring;
   typedef gis::Cartesian_multipolygon Multipolygon;
 
-  static gis::Coordinate_system coordinate_system()
-  {
+  static gis::Coordinate_system coordinate_system() {
     return gis::Coordinate_system::kCartesian;
   }
 };
 
-struct Geographic_types
-{
+struct Geographic_types {
   typedef gis::Geographic_point Point;
   typedef gis::Geographic_linestring Linestring;
   typedef gis::Geographic_linearring Linearring;
@@ -52,30 +58,23 @@ struct Geographic_types
   typedef gis::Geographic_multilinestring Multilinestring;
   typedef gis::Geographic_multipolygon Multipolygon;
 
-  static gis::Coordinate_system coordinate_system()
-  {
+  static gis::Coordinate_system coordinate_system() {
     return gis::Coordinate_system::kGeographic;
   }
 };
 
 template <typename Types>
-class GeometriesTest : public ::testing::Test
-{
+class GeometriesTest : public ::testing::Test {
  public:
-  GeometriesTest()
-  {
-  }
+  GeometriesTest() {}
 
-  ~GeometriesTest()
-  {
-  }
+  ~GeometriesTest() override {}
 };
 
 typedef ::testing::Types<Cartesian_types, Geographic_types> Types;
-TYPED_TEST_CASE(GeometriesTest, Types);
+TYPED_TEST_SUITE(GeometriesTest, Types);
 
-TYPED_TEST(GeometriesTest, Point)
-{
+TYPED_TEST(GeometriesTest, Point) {
   typename TypeParam::Point pt;
   EXPECT_EQ(gis::Geometry_type::kPoint, pt.type());
   EXPECT_EQ(TypeParam::coordinate_system(), pt.coordinate_system());
@@ -107,12 +106,9 @@ TYPED_TEST(GeometriesTest, Point)
   EXPECT_EQ(-1.7976931348623157e308, pt.y());
 }
 
-TYPED_TEST(GeometriesTest, Curve)
-{
-}
+TYPED_TEST(GeometriesTest, Curve) {}
 
-TYPED_TEST(GeometriesTest, Linestring)
-{
+TYPED_TEST(GeometriesTest, Linestring) {
   typename TypeParam::Linestring ls;
   EXPECT_EQ(gis::Geometry_type::kLinestring, ls.type());
   EXPECT_EQ(TypeParam::coordinate_system(), ls.coordinate_system());
@@ -135,16 +131,9 @@ TYPED_TEST(GeometriesTest, Linestring)
   EXPECT_EQ(0.0, ls[0].y());
   EXPECT_EQ(30.0, ls[3].x());
   EXPECT_EQ(10.0, ls[3].y());
-
-  ls.flip();
-  EXPECT_EQ(30.0, ls[0].x());
-  EXPECT_EQ(10.0, ls[0].y());
-  EXPECT_EQ(0.0, ls[3].x());
-  EXPECT_EQ(0.0, ls[3].y());
 }
 
-TYPED_TEST(GeometriesTest, Linearring)
-{
+TYPED_TEST(GeometriesTest, Linearring) {
   typename TypeParam::Linearring lr;
   EXPECT_EQ(gis::Geometry_type::kLinestring, lr.type());
   EXPECT_EQ(TypeParam::coordinate_system(), lr.coordinate_system());
@@ -167,20 +156,11 @@ TYPED_TEST(GeometriesTest, Linearring)
   EXPECT_EQ(10.0, lr[1].y());
   EXPECT_EQ(20.0, lr[2].x());
   EXPECT_EQ(0.0, lr[2].y());
-
-  lr.flip();
-  EXPECT_EQ(20.0, lr[1].x());
-  EXPECT_EQ(0.0, lr[1].y());
-  EXPECT_EQ(10.0, lr[2].x());
-  EXPECT_EQ(10.0, lr[2].y());
 }
 
-TYPED_TEST(GeometriesTest, Surface)
-{
-}
+TYPED_TEST(GeometriesTest, Surface) {}
 
-TYPED_TEST(GeometriesTest, Polygon)
-{
+TYPED_TEST(GeometriesTest, Polygon) {
   typename TypeParam::Polygon py;
   EXPECT_EQ(gis::Geometry_type::kPolygon, py.type());
   EXPECT_EQ(TypeParam::coordinate_system(), py.coordinate_system());
@@ -194,17 +174,16 @@ TYPED_TEST(GeometriesTest, Polygon)
   exterior.push_back(typename TypeParam::Point(10.0, 10.0));
   exterior.push_back(typename TypeParam::Point(0.0, 10.0));
   exterior.push_back(typename TypeParam::Point(0.0, 0.0));
-  py.push_back(std::move(exterior));
+  py.push_back(exterior);
   EXPECT_FALSE(py.empty());
   EXPECT_FALSE(py.is_empty());
 
   typename TypeParam::Linearring interior;
   interior.push_back(typename TypeParam::Point(2.0, 2.0));
-  interior.push_back(typename TypeParam::Point(8.0, 2.0));
-  interior.push_back(typename TypeParam::Point(8.0, 8.0));
   interior.push_back(typename TypeParam::Point(2.0, 8.0));
+  interior.push_back(typename TypeParam::Point(8.0, 8.0));
+  interior.push_back(typename TypeParam::Point(8.0, 2.0));
   interior.push_back(typename TypeParam::Point(2.0, 2.0));
-  interior.flip();
   py.push_back(std::move(interior));
 
   EXPECT_EQ(2U, py.size());
@@ -216,8 +195,7 @@ TYPED_TEST(GeometriesTest, Polygon)
   EXPECT_FALSE(py.accept(&visitor));
 }
 
-TYPED_TEST(GeometriesTest, Geometrycollection)
-{
+TYPED_TEST(GeometriesTest, Geometrycollection) {
   typename TypeParam::Geometrycollection gc;
   EXPECT_EQ(gis::Geometry_type::kGeometrycollection, gc.type());
   EXPECT_EQ(TypeParam::coordinate_system(), gc.coordinate_system());
@@ -273,7 +251,7 @@ TYPED_TEST(GeometriesTest, Geometrycollection)
 
   typename TypeParam::Geometrycollection inner_gc;
   gc.push_back(std::move(inner_gc));
-  
+
   EXPECT_EQ(13U, gc.size());
   EXPECT_FALSE(gc.empty());
   EXPECT_FALSE(gc.is_empty());
@@ -287,8 +265,7 @@ TYPED_TEST(GeometriesTest, Geometrycollection)
   EXPECT_FALSE(gc.is_empty());
 }
 
-TYPED_TEST(GeometriesTest, Multipoint)
-{
+TYPED_TEST(GeometriesTest, Multipoint) {
   typename TypeParam::Multipoint mpt;
   EXPECT_EQ(gis::Geometry_type::kMultipoint, mpt.type());
   EXPECT_EQ(TypeParam::coordinate_system(), mpt.coordinate_system());
@@ -307,10 +284,9 @@ TYPED_TEST(GeometriesTest, Multipoint)
   EXPECT_FALSE(mpt.accept(&visitor));
 }
 
-TYPED_TEST(GeometriesTest, Multicurve)
-{
-  std::unique_ptr<gis::Multicurve>
-    mc(new typename TypeParam::Multilinestring());
+TYPED_TEST(GeometriesTest, Multicurve) {
+  std::unique_ptr<gis::Multicurve> mc(new
+                                      typename TypeParam::Multilinestring());
   EXPECT_EQ(0U, mc->size());
   EXPECT_TRUE(mc->empty());
   EXPECT_TRUE(mc->is_empty());
@@ -319,8 +295,7 @@ TYPED_TEST(GeometriesTest, Multicurve)
   EXPECT_FALSE(mc->accept(&visitor));
 }
 
-TYPED_TEST(GeometriesTest, Multilinestring)
-{
+TYPED_TEST(GeometriesTest, Multilinestring) {
   typename TypeParam::Multilinestring mls;
   EXPECT_EQ(gis::Geometry_type::kMultilinestring, mls.type());
   EXPECT_EQ(TypeParam::coordinate_system(), mls.coordinate_system());
@@ -348,8 +323,7 @@ TYPED_TEST(GeometriesTest, Multilinestring)
   EXPECT_FALSE(mls.accept(&visitor));
 }
 
-TYPED_TEST(GeometriesTest, Multisurface)
-{
+TYPED_TEST(GeometriesTest, Multisurface) {
   std::unique_ptr<gis::Multisurface> ms(new typename TypeParam::Multipolygon());
   EXPECT_EQ(0U, ms->size());
   EXPECT_TRUE(ms->empty());
@@ -359,8 +333,7 @@ TYPED_TEST(GeometriesTest, Multisurface)
   EXPECT_FALSE(ms->accept(&visitor));
 }
 
-TYPED_TEST(GeometriesTest, Multipolygon)
-{
+TYPED_TEST(GeometriesTest, Multipolygon) {
   typename TypeParam::Multipolygon mpy;
   EXPECT_EQ(gis::Geometry_type::kMultipolygon, mpy.type());
   EXPECT_EQ(TypeParam::coordinate_system(), mpy.coordinate_system());
@@ -376,11 +349,10 @@ TYPED_TEST(GeometriesTest, Multipolygon)
 
   typename TypeParam::Linearring interior;
   interior.push_back(typename TypeParam::Point(2.0, 2.0));
-  interior.push_back(typename TypeParam::Point(8.0, 2.0));
-  interior.push_back(typename TypeParam::Point(8.0, 8.0));
   interior.push_back(typename TypeParam::Point(2.0, 8.0));
+  interior.push_back(typename TypeParam::Point(8.0, 8.0));
+  interior.push_back(typename TypeParam::Point(8.0, 2.0));
   interior.push_back(typename TypeParam::Point(2.0, 2.0));
-  interior.flip();
 
   typename TypeParam::Polygon py;
   py.push_back(std::move(exterior));
@@ -397,4 +369,4 @@ TYPED_TEST(GeometriesTest, Multipolygon)
   EXPECT_FALSE(mpy.accept(&visitor));
 }
 
-} // namespace geometries_unittest
+}  // namespace geometries_unittest

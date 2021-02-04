@@ -1,3 +1,6 @@
+CALL mtr.add_suppression("Incorrect information in file");
+CALL mtr.add_suppression("NDB: Failed to setup events for 'mysql.ndb_schema' table");
+CALL mtr.add_suppression("NDB: Failed to setup binlogging for table 'mysql.ndb_schema'");
 CREATE TABLE t1(a int primary key, b varchar(255), c int) engine=ndb;
 select * from t1;
 a	b	c
@@ -56,5 +59,3 @@ CREATE TRIGGER trg2 BEFORE UPDATE ON t2 FOR EACH ROW BEGIN
 SET new.c = '1901-01-01 01:01:01';
 End //
 drop table t1, t2;
-create table information_schema.t1(a int, b varchar(10), c date) engine=ndb;
-ERROR 42000: Access denied for user 'root'@'localhost' to database 'information_schema'

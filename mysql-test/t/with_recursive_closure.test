@@ -2,6 +2,8 @@
 # Takes too long in Valgrind, for pushbuild2:
 --source include/not_valgrind.inc
 
+set cte_max_recursion_depth = 1000000;
+
 # This builds a graph of randomly connected nodes (random number
 # generator is using a seed for repeatability). Then it computes the
 # transitive closure of a node. The result has been validated against
@@ -23,8 +25,8 @@ where d<@edge_count
 )
 select s,e from tmp;
 
-create index on edges (s);
-create index on edges (e);
+create index idx1 on edges (s);
+create index idx2 on edges (e);
 
 flush status;
 
@@ -46,16 +48,20 @@ with recursive closure as (select @start_node as n union select case when s=clos
 
 with recursive closure as (select @start_node as n union select e from edges, closure where s=closure.n union select s from edges, closure where e=closure.n) select count(*),sum(n),sum(floor(n/20)*(n%20)) from closure;
 
+--skip_if_hypergraph
 show status like 'Created_tmp_disk_tables';
 
 # uni-directional edges, again, just to test overflow-to-disk: we
 # start with a low limit on the MEMORY table.
 
 set @@tmp_table_size=1024,@@max_heap_table_size=16384;
+set session internal_tmp_mem_storage_engine='memory';
 with recursive closure as
 (select @start_node as n union select e from edges, closure where s=closure.n)
 select count(*),sum(n),sum(floor(n/20)*(n%20)) from closure;
 
+--skip_if_hypergraph
 show status like 'Created_tmp_disk_tables';
 
+set session internal_tmp_mem_storage_engine=default;
 drop table edges;

@@ -65,20 +65,18 @@
 # HELPER include/event_aggregate_setup.inc
 # ========================================
 
---source include/not_embedded.inc
 # Test requires: sp-protocol/ps-protocol/view-protocol/cursor-protocol disabled
 --source include/no_protocol.inc
 --source ../include/wait_for_pfs_thread_count.inc
 
 --disable_query_log
 
-set @orig_sql_mode= @@sql_mode;
-set sql_mode= (select replace(@@sql_mode,'NO_AUTO_CREATE_USER',''));
+create user user1@localhost, user2@localhost,
+            user3@localhost, user4@localhost;
 grant ALL on *.* to user1@localhost;
 grant ALL on *.* to user2@localhost;
 grant ALL on *.* to user3@localhost;
 grant ALL on *.* to user4@localhost;
-set sql_mode= @orig_sql_mode;
 
 flush privileges;
 
@@ -95,11 +93,15 @@ drop table if exists test.t1;
 --enable_warnings
 
 create table test.t1(a varchar(64));
-# Warm up DD cache
-select count(*) into @dummy from test.t1;
 
 create function test.f(a int, b int) returns int
 return a+b;
+
+# Warm-up data-dictionary cache
+--disable_result_log
+show create table test.t1;
+show create function test.f;
+--enable_result_log
 
 create table test.setup_actors as
   select * from performance_schema.setup_actors;

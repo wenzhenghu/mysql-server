@@ -1,14 +1,21 @@
 /*
-   Copyright (c) 2003, 2017, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2003, 2019, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -21,6 +28,7 @@
 #include <my_default.h>
 #include <mysql_version.h>
 #include <ndb_version.h>
+#include "my_alloc.h"
 
 #include "CPCD.hpp"
 #include "APIService.hpp"
@@ -33,11 +41,14 @@
 
 #include "common.hpp"
 
+#define CPCD_VERSION_NUMBER 2
+
 static const char *work_dir = CPCD_DEFAULT_WORK_DIR;
 static int unsigned port;
+static int unsigned show_version = 0;
 static int use_syslog;
-static const char *logfile = NULL;
-static const char *user = 0;
+static char *logfile = NULL;
+static char *user = 0;
 
 static struct my_option my_long_options[] =
 {
@@ -55,6 +66,9 @@ static struct my_option my_long_options[] =
     GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0 },
   { "debug", 'D', "Enable debug mode",
     (uchar**) &debug, (uchar**) &debug, 0,
+    GET_BOOL, NO_ARG, 0, 0, 0, 0, 0, 0 },
+  { "version", 'V', "Output version information and exit",
+    (uchar**) &show_version, (uchar**) &show_version, 0,
     GET_BOOL, NO_ARG, 0, 0, 0, 0, 0, 0 },
   { "user", 'u', "Run as user",
     (uchar**) &user, (uchar**) &user, 0,
@@ -76,7 +90,8 @@ int main(int argc, char** argv){
   const char *load_default_groups[]= { "ndb_cpcd",0 };
   NDB_INIT(argv[0]);
 
-  load_defaults("ndb_cpcd",load_default_groups,&argc,&argv);
+  MEM_ROOT alloc{PSI_NOT_INSTRUMENTED, 512};
+  load_defaults("ndb_cpcd",load_default_groups,&argc,&argv,&alloc);
   if (handle_options(&argc, &argv, my_long_options, get_one_option)) {
     print_defaults(MYSQL_CONFIG_NAME,load_default_groups);
     puts("");
@@ -87,6 +102,11 @@ int main(int argc, char** argv){
 
   logger.setCategory("ndb_cpcd");
   logger.enable(Logger::LL_ALL);
+
+  if (show_version) {
+    ndbout << getCpcdVersion().c_str() << endl;
+    exit(0);
+  }
 
   if(debug)
     logger.createConsoleHandler();
@@ -111,7 +131,7 @@ int main(int argc, char** argv){
     logger.addHandler(new SysLogHandler());
 #endif
 
-  logger.info("Starting");
+  logger.info("Starting CPCD version : %s", getCpcdVersion().c_str());
 
 #if defined SIGPIPE && !defined _WIN32
   (void)signal(SIGPIPE, SIG_IGN);
@@ -167,4 +187,13 @@ int main(int argc, char** argv){
 
   delete ss;
   return 0;
+}
+
+std::string getCpcdVersion() {
+  int mysql_version = ndbGetOwnVersion();
+  std::string version = std::to_string(ndbGetMajor(mysql_version)) + "." +
+                        std::to_string(ndbGetMinor(mysql_version)) + "." +
+                        std::to_string(ndbGetBuild(mysql_version)) + "." +
+                        std::to_string(CPCD_VERSION_NUMBER);
+  return version;
 }

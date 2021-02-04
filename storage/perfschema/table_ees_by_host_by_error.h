@@ -1,17 +1,24 @@
-/* Copyright (c) 2016, 2017, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2016, 2020, Oracle and/or its affiliates.
 
   This program is free software; you can redistribute it and/or modify
-  it under the terms of the GNU General Public License as published by
-  the Free Software Foundation; version 2 of the License.
+  it under the terms of the GNU General Public License, version 2.0,
+  as published by the Free Software Foundation.
+
+  This program is also distributed with certain software (including
+  but not limited to OpenSSL) that is licensed under separate terms,
+  as designated in a particular file or component or in included license
+  documentation.  The authors of MySQL hereby grant you an additional
+  permission to link the program and your derivative works with the
+  separately licensed software that they have included with MySQL.
 
   This program is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  GNU General Public License for more details.
+  GNU General Public License, version 2.0, for more details.
 
   You should have received a copy of the GNU General Public License
   along with this program; if not, write to the Free Software
-  Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA 02110-1335 USA */
+  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 #ifndef TABLE_EES_BY_HOST_BY_ERROR_H
 #define TABLE_EES_BY_HOST_BY_ERROR_H
@@ -23,37 +30,35 @@
 
 #include <sys/types.h>
 
-#include "pfs_column_types.h"
-#include "pfs_engine_table.h"
-#include "pfs_error.h"
-#include "pfs_host.h"
-#include "pfs_instr.h"
-#include "pfs_instr_class.h"
-#include "table_helper.h"
+#include "my_base.h"
+#include "storage/perfschema/pfs_engine_table.h"
+#include "storage/perfschema/pfs_error.h"
+#include "storage/perfschema/table_helper.h"
+
+class Field;
+class Plugin_table;
+struct PFS_host;
+struct TABLE;
+struct THR_LOCK;
 
 /**
   @addtogroup Performance_schema_tables
   @{
 */
 
-class PFS_index_ees_by_host_by_error : public PFS_engine_index
-{
-public:
+class PFS_index_ees_by_host_by_error : public PFS_engine_index {
+ public:
   PFS_index_ees_by_host_by_error()
-    : PFS_engine_index(&m_key_1, &m_key_2),
-      m_key_1("HOST"),
-      m_key_2("ERROR_NUMBER")
-  {
-  }
+      : PFS_engine_index(&m_key_1, &m_key_2),
+        m_key_1("HOST"),
+        m_key_2("ERROR_NUMBER") {}
 
-  ~PFS_index_ees_by_host_by_error()
-  {
-  }
+  ~PFS_index_ees_by_host_by_error() override {}
 
   virtual bool match(PFS_host *pfs);
   virtual bool match_error_index(uint error_index);
 
-private:
+ private:
   PFS_key_host m_key_1;
   PFS_key_error_number m_key_2;
 };
@@ -62,8 +67,7 @@ private:
   A row of table
   PERFORMANCE_SCHEMA.EVENTS_ERRORS_SUMMARY_BY_HOST_BY_ERROR.
 */
-struct row_ees_by_host_by_error
-{
+struct row_ees_by_host_by_error {
   /** Column HOST */
   PFS_host_row m_host;
   /** Columns ERROR_NUMBER, ERROR_NAME, COUNT_STAR. */
@@ -76,79 +80,61 @@ struct row_ees_by_host_by_error
   Index 1 on host (0 based)
   Index 2 on error (0 based)
 */
-struct pos_ees_by_host_by_error : public PFS_double_index
-{
-  pos_ees_by_host_by_error() : PFS_double_index(0, 0)
-  {
-  }
+struct pos_ees_by_host_by_error : public PFS_double_index {
+  pos_ees_by_host_by_error() : PFS_double_index(0, 0) {}
 
-  inline void
-  reset(void)
-  {
+  inline void reset(void) {
     m_index_1 = 0;
     m_index_2 = 0;
   }
 
-  inline void
-  next_host(void)
-  {
+  inline void next_host(void) {
     m_index_1++;
     m_index_2 = 0;
   }
 
-  inline bool
-  has_more_error(void)
-  {
-    return (m_index_2 < max_server_errors);
+  inline bool has_more_error(void) {
+    return (m_index_2 < max_session_server_errors);
   }
 
-  inline void
-  next_error(void)
-  {
-    m_index_2++;
-  }
+  inline void next_error(void) { m_index_2++; }
 };
 
 /** Table PERFORMANCE_SCHEMA.EVENTS_ERRORS_SUMMARY_BY_HOST_BY_ERROR. */
-class table_ees_by_host_by_error : public PFS_engine_table
-{
-public:
+class table_ees_by_host_by_error : public PFS_engine_table {
+ public:
   /** Table share */
   static PFS_engine_table_share m_share;
-  static PFS_engine_table *create();
+  static PFS_engine_table *create(PFS_engine_table_share *);
   static int delete_all_rows();
   static ha_rows get_row_count();
 
-  virtual void reset_position(void);
+  void reset_position(void) override;
 
-  virtual int rnd_init(bool scan);
-  virtual int rnd_next();
-  virtual int rnd_pos(const void *pos);
+  int rnd_init(bool scan) override;
+  int rnd_next() override;
+  int rnd_pos(const void *pos) override;
 
-  virtual int index_init(uint idx, bool sorted);
-  virtual int index_next();
+  int index_init(uint idx, bool sorted) override;
+  int index_next() override;
 
-protected:
-  virtual int read_row_values(TABLE *table,
-                              unsigned char *buf,
-                              Field **fields,
-                              bool read_all);
+ protected:
+  int read_row_values(TABLE *table, unsigned char *buf, Field **fields,
+                      bool read_all) override;
 
   table_ees_by_host_by_error();
 
-public:
-  ~table_ees_by_host_by_error()
-  {
-  }
+ public:
+  ~table_ees_by_host_by_error() override {}
 
-protected:
+ protected:
   int make_row(PFS_host *host, int error_index);
 
-private:
+ private:
   /** Table share lock. */
   static THR_LOCK m_table_lock;
-  /** Fields definition. */
-  static TABLE_FIELD_DEF m_field_def;
+  /** Table definition. */
+  static Plugin_table m_table_def;
 
   /** Current row. */
   row_ees_by_host_by_error m_row;

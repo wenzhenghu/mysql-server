@@ -5,15 +5,8 @@
 # This test needs MyISAM for some sub tests
 --source include/have_myisam.inc
 
-########################################
-##### WL#7554 Force schema `test` to character set latin1
-##### This test should be migrated to utf8mb4
---disable_query_log
-let $testdbcs236=`select default_character_set_name from information_schema.schemata where schema_name='test'`;
-alter schema default character set latin1;
-use test;
---enable_query_log
-########################################
+# Different number of warnings with/without ps-protocol
+--source include/no_ps_protocol.inc
 
 --disable_warnings
 drop table if exists t1, t2;
@@ -1635,7 +1628,7 @@ create table t1 (a bigint unsigned)
 partition by range (a)
 (partition p0 values less than (-1));
 #
-# Bug 18198 Partitions: Verify that erroneus partition functions doesn't work
+# Bug 18198 Partitions: Verify that erroneus partition functions does not work
 #
 -- error ER_PARTITION_FUNCTION_IS_NOT_ALLOWED
 create table t1 (v varchar(12))
@@ -2049,6 +2042,7 @@ SUBPARTITION BY HASH (a) SUBPARTITIONS 2
  (SUBPARTITION p2spFirst COMMENT "SubPartition comment in p2spFirst",
   SUBPARTITION p2spSecond COMMENT "SubPartition comment in p2spSecond"));
 SHOW CREATE TABLE t1;
+--sorted_result
 SELECT PARTITION_NAME, SUBPARTITION_NAME, PARTITION_COMMENT FROM INFORMATION_SCHEMA.PARTITIONS
 WHERE TABLE_NAME = 't1' AND TABLE_SCHEMA = 'test';
 DROP TABLE t1;
@@ -2063,6 +2057,7 @@ SUBPARTITION BY HASH (a) SUBPARTITIONS 2
  (SUBPARTITION p2spFirst,
   SUBPARTITION p2spSecond COMMENT "SubPartition comment in p2spSecond"));
 SHOW CREATE TABLE t1;
+--sorted_result
 SELECT PARTITION_NAME, SUBPARTITION_NAME, PARTITION_COMMENT FROM INFORMATION_SCHEMA.PARTITIONS
 WHERE TABLE_NAME = 't1' AND TABLE_SCHEMA = 'test';
 DROP TABLE t1;
@@ -2081,7 +2076,7 @@ SUBPARTITION BY HASH (a) SUBPARTITIONS 2
 
 SHOW CREATE TABLE t1;
 SELECT PARTITION_NAME, SUBPARTITION_NAME, PARTITION_COMMENT FROM INFORMATION_SCHEMA.PARTITIONS
-WHERE TABLE_NAME = 't1' AND TABLE_SCHEMA = 'test';
+WHERE TABLE_NAME = 't1' AND TABLE_SCHEMA = 'test' ORDER BY PARTITION_NAME, SUBPARTITION_NAME DESC;
 
 DROP TABLE t1;
 SET sql_mode = default;
@@ -2125,9 +2120,15 @@ DELETE FROM t1 PARTITION (p1,p6) WHERE (a % 7) > 5;
 DELETE FROM t1 WHERE a > 0;
 DROP TABLE t1, t2;
 
-########################################
-##### WL#7554 set schema `test` back to what it was
---disable_query_log
---eval alter schema test default character set $testdbcs236;
---enable_query_log
-########################################
+--echo #
+--echo # Bug #30455845 ASSERTION "!CHECK_DATETIME_RANGE.MY_TIME"
+--echo #
+
+CREATE TABLE t1(a DATETIME)
+PARTITION BY HASH (EXTRACT(HOUR_MICROSECOND FROM a));
+SET sql_mode='';
+SELECT FROM_DAYS(3652499), FROM_DAYS(3652500), FROM_DAYS(3652501);
+SELECT FROM_DAYS(4294967660), FROM_DAYS(4294967661), FROM_DAYS(4294967663);
+INSERT t1 VALUES(ADDTIME(0,0)), (FROM_DAYS(3652499));
+DROP TABLE t1;
+SET sql_mode=default;

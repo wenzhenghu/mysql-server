@@ -8,15 +8,15 @@
 # Gtid_log_events or Anonymous_gtid_log_event.  In order to set
 # gtid_next correctly also for this case, we use a special mechanism:
 # when any Format_description_log_event is applied, it sets
-# thd->variables.gtid_next.type=NOT_YET_DETERMINED_GROUP.  The next
+# thd->variables.gtid_next.type=NOT_YET_DETERMINED_GTID.  The next
 # statement to execute then sets the real value for gtid_next: if the
 # next statement is SET GTID_NEXT, then gtid_next is set
 # accordingly. If the next statement is anything else, it assumes that
-# this is an old binary log and changes NOT_YET_DETERMINED_GROUP to
-# ANONYMOUS_GROUP (which causes an error to be generated if
+# this is an old binary log and changes NOT_YET_DETERMINED_GTID to
+# ANONYMOUS_GTID (which causes an error to be generated if
 # GTID_MODE=ON).
 #
-# The code that changes NOT_YET_DETERMINED_GROUP to ANONYMOUS_GROUP
+# The code that changes NOT_YET_DETERMINED_GTID to ANONYMOUS_GTID
 # invoked for SQL statements (from mysql_parse). This normally covers
 # also the RBR case, because RBR transactions begin with a
 # query_log_event(BEGIN), so it will set gtid_next=ANONYMOUS for the
@@ -24,14 +24,14 @@
 #
 # However, if the applier thread begins execution in the middle of a
 # transaction, it is possible that a row event is processed when
-# gtid_next.type is NOT_YET_DETERMINED_GROUP.  This can happen if
+# gtid_next.type is NOT_YET_DETERMINED_GTID.  This can happen if
 # an explicit CHANGE MASTER TO RELAY_LOG_POS statement positions the
 # applier thread after the BEGIN statement, or if an explicit CHANGE
 # MASTER TO MASTER_LOG_POS statement positions the receiver thread in
 # the middle of a transaction.
 #
 # Therefore, even Rows_log_events need to upgrade
-# NOT_YET_DETERMINED_GROUP to ANONYMOUS.  This test verifies that this
+# NOT_YET_DETERMINED_GTID to ANONYMOUS.  This test verifies that this
 # logic works correctly.
 #
 # ==== Implementation ====
@@ -70,11 +70,21 @@
 # Test mixed mode to verify that SQL statements convert NOT_YET_DETERMINED
 # to ANONYMOUS. Test row mode to verify that row events convert
 # NOT_YET_DETERMINED to ANONYMOUS. No need to test other formats.
+#
+# BUG#18089914: REFACTORING: RENAME GROUP TO GTID
+# - changed NOT_YET_DETERMINED_GROUP to NOT_YET_DETERMINED_GTID
+
+# this test case expects certain events in a given order. This
+# is not allowed when compression is on, because the transaction
+# shows up compressed in a single event.
+--source include/not_binlog_transaction_compression_on.inc
+
 --source include/have_binlog_format_mixed_or_row.inc
 
 # MTS does not allow row events outside transactions.
 --source include/not_mts_slave_parallel_workers.inc
 
+--source include/set_privilege_checks_user_as_system_user.inc
 --source include/master-slave.inc
 
 --echo #### Initialize ####
@@ -191,7 +201,7 @@ INSERT INTO t1 VALUES (1);
 
 --connection slave
 --replace_result $file FILE $position POSITION
-eval CHANGE MASTER TO MASTER_LOG_FILE = '$file', MASTER_LOG_POS = $position;
+eval CHANGE REPLICATION SOURCE TO SOURCE_LOG_FILE = '$file', SOURCE_LOG_POS = $position;
 --source include/start_slave_io.inc
 
 --connection master
@@ -209,7 +219,7 @@ INSERT INTO t1 VALUES (2);
 --let $position = query_get_value(SHOW RELAYLOG EVENTS IN '$file' FROM $position, Pos, 3)
 
 --replace_result $file FILE $position POSITION
-eval CHANGE MASTER TO RELAY_LOG_FILE = '$file', RELAY_LOG_POS = $position;
+eval CHANGE REPLICATION SOURCE TO RELAY_LOG_FILE = '$file', RELAY_LOG_POS = $position;
 --source include/start_slave.inc
 
 --connection master

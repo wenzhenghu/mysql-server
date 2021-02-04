@@ -1,13 +1,20 @@
-/* Copyright (c) 2015, 2017, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2015, 2020, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -25,16 +32,14 @@
 #include <stddef.h>
 #include <sys/types.h>
 
-#include "dur_prop.h"      // durability_properties
-#include "handler.h"       // enum_tx_isolation
-#include "key.h"
+#include "dur_prop.h"  // durability_properties
+#include "lex_string.h"
 #include "m_ctype.h"
-#include "mysql/psi/psi_base.h"
+#include "mysql/components/services/psi_thread_bits.h"
+#include "sql/handler.h"  // enum_tx_isolation
 
 class THD;
 class partition_info;
-
-typedef struct charset_info_st CHARSET_INFO;
 
 /**
   Set up various THD data for a new connection
@@ -44,7 +49,7 @@ typedef struct charset_info_st CHARSET_INFO;
   @param              bound          True if bound to a physical thread.
   @param              psi_key        Instrumentation key for the thread.
 */
-int thd_init(THD *thd, char *stack_start, bool bound, PSI_thread_key psi_key);
+void thd_init(THD *thd, char *stack_start, bool bound, PSI_thread_key psi_key);
 
 /**
   Create a THD and do proper initialization of it.
@@ -61,7 +66,8 @@ int thd_init(THD *thd, char *stack_start, bool bound, PSI_thread_key psi_key);
         SHOW PROCESSLIST and the server will not wait for them to
         terminate during shutdown.
 */
-THD *create_thd(bool enable_plugins, bool background_thread, bool bound, PSI_thread_key psi_key);
+THD *create_thd(bool enable_plugins, bool background_thread, bool bound,
+                PSI_thread_key psi_key);
 
 /**
   Cleanup the THD object, remove it from the global list of THDs
@@ -87,9 +93,9 @@ void thd_set_thread_stack(THD *thd, const char *stack_start);
 
   @return Pointer to the working copy of partition_info or NULL.
 */
-partition_info* thd_get_work_part_info(THD* thd);
+partition_info *thd_get_work_part_info(THD *thd);
 
-enum_tx_isolation thd_get_trx_isolation(const THD* thd);
+enum_tx_isolation thd_get_trx_isolation(const THD *thd);
 
 const CHARSET_INFO *thd_charset(THD *thd);
 
@@ -170,7 +176,7 @@ durability_properties thd_get_durability_property(const THD *thd);
   @param off auto_increment_offset
   @param inc auto_increment_increment
 */
-void thd_get_autoinc(const THD *thd, ulong* off, ulong* inc);
+void thd_get_autoinc(const THD *thd, ulong *off, ulong *inc);
 
 /**
   Is strict sql_mode set.
@@ -183,13 +189,22 @@ void thd_get_autoinc(const THD *thd, ulong* off, ulong* inc);
 bool thd_is_strict_mode(const THD *thd);
 
 /**
+  Is an error set in the DA.
+  Needed by InnoDB to catch behavior modified by an error handler.
+  @param thd	Thread object
+  @return True if THD::is_error() returns true.
+    @retval true  An error has been raised.
+    @retval false No error has been raised.
+*/
+bool thd_is_error(const THD *thd);
+
+/**
   Test a file path whether it is same as mysql data directory path.
 
   @param path null terminated character string
 
-  @return
-    @retval true The path is different from mysql data directory.
-    @retval false The path is same as mysql data directory.
+  @retval true The path is different from mysql data directory.
+  @retval false The path is same as mysql data directory.
 */
 bool is_mysql_datadir_path(const char *path);
 
@@ -210,4 +225,38 @@ bool is_mysql_datadir_path(const char *path);
 
 int mysql_tmpfile_path(const char *path, const char *prefix);
 
-#endif // SQL_THD_INTERNAL_API_INCLUDED
+/**
+  Check if the server is in the process of being initialized.
+
+  Check the thread type of the THD. If this is a thread type
+  being used for initializing the DD or the server, return
+  true.
+
+  @param   thd    Needed since this is an opaque type in the SE.
+
+  @retval  true   The thread is a bootstrap thread.
+  @retval  false  The thread is not a bootstrap thread.
+*/
+
+bool thd_is_bootstrap_thread(THD *thd);
+
+/**
+  Is statement updating the data dictionary tables.
+
+  @details
+  The thread switches to the data dictionary tables update context using
+  the dd::Update_dictionary_tables_ctx while updating dictionary tables.
+  If thread is in this context then the method returns true otherwise
+  false.
+  This method is used by the InnoDB while updating the tables to mark
+  transaction as DDL if this method returns true.
+
+  @param  thd     Thread handle.
+
+  @retval true    Updates data dictionary tables.
+  @retval false   Otherwise.
+*/
+bool thd_is_dd_update_stmt(const THD *thd);
+
+my_thread_id thd_thread_id(const THD *thd);
+#endif  // SQL_THD_INTERNAL_API_INCLUDED

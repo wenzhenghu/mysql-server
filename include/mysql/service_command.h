@@ -1,20 +1,26 @@
 #ifndef MYSQL_SERVICE_COMMAND_INCLUDED
 #define MYSQL_SERVICE_COMMAND_INCLUDED
-/*  Copyright (c) 2015, 2016, Oracle and/or its affiliates. All rights reserved.
+/*  Copyright (c) 2015, 2020, Oracle and/or its affiliates. All rights reserved.
 
-    This program is free software; you can redistribute it and/or
-    modify it under the terms of the GNU General Public License as
-    published by the Free Software Foundation; version 2 of the
-    License.
+    This program is free software; you can redistribute it and/or modify
+    it under the terms of the GNU General Public License, version 2.0,
+    as published by the Free Software Foundation.
+
+    This program is also distributed with certain software (including
+    but not limited to OpenSSL) that is licensed under separate terms,
+    as designated in a particular file or component or in included license
+    documentation.  The authors of MySQL hereby grant you an additional
+    permission to link the program and your derivative works with the
+    separately licensed software that they have included with MySQL.
 
     This program is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-    GNU General Public License for more details.
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License, version 2.0, for more details.
 
     You should have received a copy of the GNU General Public License
     along with this program; if not, write to the Free Software
-    Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA */
+    Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 /**
   @file include/mysql/service_command.h
@@ -23,24 +29,19 @@
   in the server.
 */
 
-#include "mysql/service_srv_session.h"
 #include "mysql/com_data.h"
+#include "mysql/service_srv_session.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-#include "mysql_time.h"
 #include "decimal.h"
+#include "mysql_time.h"
 #ifndef MYSQL_ABI_CHECK
-#include "binary_log_types.h"
+#include <stdint.h> /* uint32_t */
+#include "field_types.h"
 #include "m_ctype.h"
-#include <stdint.h>                    /* uint32_t */
 #endif
 
 /* POD structure for the field metadata from the server */
-struct st_send_field
-{
+struct st_send_field {
   const char *db_name;
   const char *table_name;
   const char *org_table_name;
@@ -73,7 +74,7 @@ struct st_send_field
   stringified value or non-string data, which is in character_set_results.
 
   @returns
-    1  an error occured, server will abort the command
+    1  an error occurred, server will abort the command
     0  ok
 */
 typedef int (*start_result_metadata_t)(void *ctx, uint num_cols, uint flags,
@@ -87,7 +88,7 @@ typedef int (*start_result_metadata_t)(void *ctx, uint num_cols, uint flags,
   @param charset Field's charset
 
   @returns
-    1  an error occured, server will abort the command
+    1  an error occurred, server will abort the command
     0  ok
 */
 typedef int (*field_metadata_t)(void *ctx, struct st_send_field *field,
@@ -101,7 +102,7 @@ typedef int (*field_metadata_t)(void *ctx, struct st_send_field *field,
   @param warn_count     Number of warnings generated during execution to the
                           moment when the metadata is sent.
   @returns
-    1  an error occured, server will abort the command
+    1  an error occurred, server will abort the command
     0  ok
 */
 typedef int (*end_result_metadata_t)(void *ctx, uint server_status,
@@ -113,7 +114,7 @@ typedef int (*end_result_metadata_t)(void *ctx, uint server_status,
   @param ctx   Plugin's context
 
   @returns
-    1  an error occured, server will abort the command
+    1  an error occurred, server will abort the command
     0  ok
 */
 typedef int (*start_row_t)(void *ctx);
@@ -124,13 +125,13 @@ typedef int (*start_row_t)(void *ctx);
   @param ctx   Plugin's context
 
   @returns
-    1  an error occured, server will abort the command
+    1  an error occurred, server will abort the command
     0  ok
 */
 typedef int (*end_row_t)(void *ctx);
 
 /**
-  An error occured during execution
+  An error occurred during execution
 
   This callback indicates that an error occurred during command
   execution and the partial row should be dropped. Server will raise error
@@ -155,10 +156,10 @@ typedef ulong (*get_client_capabilities_t)(void *ctx);
   @param ctx  Plugin's context
 
   @returns
-    1  an error occured, server will abort the command
+    1  an error occurred, server will abort the command
     0  ok
 */
-typedef int (*get_null_t)(void * ctx);
+typedef int (*get_null_t)(void *ctx);
 
 /**
   Receive TINY/SHORT/LONG value from server
@@ -170,10 +171,10 @@ typedef int (*get_null_t)(void * ctx);
   track the metadata that was sent just prior to the result set.
 
   @returns
-    1  an error occured, server will abort the command
+    1  an error occurred, server will abort the command
     0  ok
 */
-typedef int (*get_integer_t)(void * ctx, longlong value);
+typedef int (*get_integer_t)(void *ctx, longlong value);
 
 /**
   Get LONGLONG value from server
@@ -183,10 +184,10 @@ typedef int (*get_integer_t)(void * ctx, longlong value);
   @param is_unsigned   TRUE <=> value is unsigned
 
   @returns
-    1  an error occured, server will abort the command
+    1  an error occurred, server will abort the command
     0  ok
 */
-typedef int (*get_longlong_t)(void * ctx, longlong value, uint is_unsigned);
+typedef int (*get_longlong_t)(void *ctx, longlong value, uint is_unsigned);
 
 /**
   Receive DECIMAL value from server
@@ -195,10 +196,10 @@ typedef int (*get_longlong_t)(void * ctx, longlong value, uint is_unsigned);
   @param value Value received
 
   @returns
-    1  an error occured, server will abort the command
+    1  an error occurred, server will abort the command
     0  ok
 */
-typedef int (*get_decimal_t)(void * ctx, const decimal_t * value);
+typedef int (*get_decimal_t)(void *ctx, const decimal_t *value);
 
 /**
   Receive FLOAT/DOUBLE from server
@@ -211,10 +212,10 @@ typedef int (*get_decimal_t)(void * ctx, const decimal_t * value);
   track the metadata that was sent just prior to the result set.
 
   @returns
-    1  an error occured, server will abort the command
+    1  an error occurred, server will abort the command
     0  ok
 */
-typedef int (*get_double_t)(void * ctx, double value, uint32_t decimals);
+typedef int (*get_double_t)(void *ctx, double value, uint32_t decimals);
 
 /**
   Get DATE value from server
@@ -223,10 +224,10 @@ typedef int (*get_double_t)(void * ctx, double value, uint32_t decimals);
   @param value    Value received
 
   @returns
-    1  an error occured during storing, server will abort the command
+    1  an error occurred during storing, server will abort the command
     0  ok
 */
-typedef int (*get_date_t)(void * ctx, const MYSQL_TIME * value);
+typedef int (*get_date_t)(void *ctx, const MYSQL_TIME *value);
 
 /**
   Receive TIME value from server
@@ -236,10 +237,10 @@ typedef int (*get_date_t)(void * ctx, const MYSQL_TIME * value);
   @param decimals Number of decimals
 
   @returns
-    1  an error occured during storing, server will abort the command
+    1  an error occurred during storing, server will abort the command
     0  ok
 */
-typedef int (*get_time_t)(void * ctx, const MYSQL_TIME * value, uint decimals);
+typedef int (*get_time_t)(void *ctx, const MYSQL_TIME *value, uint decimals);
 
 /**
   Receive DATETIME value from server
@@ -249,10 +250,11 @@ typedef int (*get_time_t)(void * ctx, const MYSQL_TIME * value, uint decimals);
   @param decimals Number of decimals
 
   @returns
-    1  an error occured during storing, server will abort the command
+    1  an error occurred during storing, server will abort the command
     0  ok
 */
-typedef int (*get_datetime_t)(void * ctx, const MYSQL_TIME * value, uint decimals);
+typedef int (*get_datetime_t)(void *ctx, const MYSQL_TIME *value,
+                              uint decimals);
 
 /**
   Get STRING value from server
@@ -271,11 +273,11 @@ typedef int (*get_datetime_t)(void * ctx, const MYSQL_TIME * value, uint decimal
   @see start_result_metadata()
 
   @returns
-    1  an error occured, server will abort the command
+    1  an error occurred, server will abort the command
     0  ok
 */
-typedef int (*get_string_t)(void * ctx, const char * value, size_t length,
-                            const CHARSET_INFO * valuecs);
+typedef int (*get_string_t)(void *ctx, const char *value, size_t length,
+                            const CHARSET_INFO *valuecs);
 
 /**
   Command ended with success
@@ -288,10 +290,9 @@ typedef int (*get_string_t)(void * ctx, const char * value, size_t length,
   @param last_insert_id       Last insert id being assigned during execution
   @param message              A message from server
 */
-typedef void (*handle_ok_t)(void * ctx,
-                            uint server_status, uint statement_warn_count,
-                            ulonglong affected_rows, ulonglong last_insert_id,
-                            const char * message);
+typedef void (*handle_ok_t)(void *ctx, uint server_status,
+                            uint statement_warn_count, ulonglong affected_rows,
+                            ulonglong last_insert_id, const char *message);
 
 /**
   Command ended with ERROR
@@ -301,8 +302,8 @@ typedef void (*handle_ok_t)(void * ctx,
   @param err_msg   Error message
   @param sqlstate  SQL state corresponding to the error code
 */
-typedef void (*handle_error_t)(void * ctx, uint sql_errno, const char * err_msg,
-                               const char * sqlstate);
+typedef void (*handle_error_t)(void *ctx, uint sql_errno, const char *err_msg,
+                               const char *sqlstate);
 
 /**
   Callback for shutdown notification from the server.
@@ -313,8 +314,17 @@ typedef void (*handle_error_t)(void * ctx, uint sql_errno, const char * err_msg,
 */
 typedef void (*shutdown_t)(void *ctx, int server_shutdown);
 
-struct st_command_service_cbs
-{
+/**
+   If the user of the srv_service is bound to a connection,
+   this callback makes it possible to check if the connection is still alive.
+   It should always return true unless the client closed the connection.
+   @returns
+    true    if the connection is still alive
+    false   otherwise
+ */
+typedef bool (*connection_alive_t)(void *ctx);
+
+struct st_command_service_cbs {
   /*
     For a statement that returns a result, the flow of called callbacks will be:
 
@@ -370,31 +380,30 @@ struct st_command_service_cbs
   handle_ok_t handle_ok;
   handle_error_t handle_error;
   shutdown_t shutdown;
+
+  /* Connection status */
+  connection_alive_t connection_alive;
 };
 
-enum cs_text_or_binary
-{
-  CS_TEXT_REPRESENTATION= 1,   /* Let the server convert everything to string */
-  CS_BINARY_REPRESENTATION= 2, /* Let the server use native types */
+enum cs_text_or_binary {
+  CS_TEXT_REPRESENTATION = 1, /* Let the server convert everything to string */
+  CS_BINARY_REPRESENTATION = 2, /* Let the server use native types */
 };
 
-extern struct command_service_st {
-  int (*run_command)(MYSQL_SESSION session,
-                     enum enum_server_command command,
-                     const union COM_DATA * data,
-                     const CHARSET_INFO * client_cs,
-                     const struct st_command_service_cbs * callbacks,
+extern "C" struct command_service_st {
+  int (*run_command)(MYSQL_SESSION session, enum enum_server_command command,
+                     const union COM_DATA *data, const CHARSET_INFO *client_cs,
+                     const struct st_command_service_cbs *callbacks,
                      enum cs_text_or_binary text_or_binary,
-                     void * service_callbacks_ctx);
-} *command_service;
+                     void *service_callbacks_ctx);
+} * command_service;
 
 #ifdef MYSQL_DYNAMIC_PLUGIN
 
 #define command_service_run_command(t, command, data, cset, cbs, t_or_b, ctx) \
-  command_service->run_command((t), (command), (data), (cset), \
-                               (cbs), (t_or_b), (ctx))
+  command_service->run_command((t), (command), (data), (cset), (cbs),         \
+                               (t_or_b), (ctx))
 #else
-
 
 /**
   Executes a server command in a session.
@@ -441,16 +450,12 @@ extern struct command_service_st {
 */
 int command_service_run_command(MYSQL_SESSION session,
                                 enum enum_server_command command,
-                                const union COM_DATA * data,
-                                const CHARSET_INFO * client_cs,
-                                const struct st_command_service_cbs * callbacks,
+                                const union COM_DATA *data,
+                                const CHARSET_INFO *client_cs,
+                                const struct st_command_service_cbs *callbacks,
                                 enum cs_text_or_binary text_or_binary,
-                                void * service_callbacks_ctx);
+                                void *service_callbacks_ctx);
 
 #endif /* MYSQL_DYNAMIC_PLUGIN */
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif

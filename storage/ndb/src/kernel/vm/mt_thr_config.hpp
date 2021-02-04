@@ -1,14 +1,21 @@
 /*
-   Copyright (c) 2011, 2016, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2011, 2020, Oracle and/or its affiliates.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -49,8 +56,10 @@ public:
     T_WD    = 5, /* SocketServer, Socket Client, Watchdog */
     T_TC    = 6, /* TC+SPJ */
     T_SEND  = 7, /* No blocks */
-
-    T_END  = 8
+    T_IXBLD = 8, /* File thread during offline index build */
+    T_QUERY = 9, /* Query threads */
+    T_RECOVER=10,/* Recover threads */
+    T_END  = 11
   };
 
   THRConfig();
@@ -60,14 +69,22 @@ public:
   int setLockExecuteThreadToCPU(const char * val);
   int setLockIoThreadsToCPU(unsigned val);
 
+  int do_parse(unsigned realtime,
+               unsigned spintime,
+               unsigned num_cpus,
+               unsigned &num_rr_groups);
   int do_parse(const char * ThreadConfig,
                unsigned realtime,
-               unsigned spintime);
+               unsigned spintime,
+               unsigned &num_rr_groups,
+               bool check);
   int do_parse(unsigned MaxNoOfExecutionThreads,
                unsigned __ndbmt_lqh_threads,
                unsigned __ndbmt_classic,
                unsigned realtime,
-               unsigned spintime);
+               unsigned spintime,
+               unsigned &num_rr_groups,
+               bool check);
 
   const char * getConfigString();
   void append_name(const char *name,
@@ -97,11 +114,14 @@ protected:
     unsigned m_thread_prio; // Between 0 and 10, 11 means not used
     unsigned m_realtime; //0 = no realtime, 1 = realtime
     unsigned m_spintime; //0 = no spinning, > 0 spintime in microseconds
+    unsigned m_nosend; //0 = assist send thread, 1 = cannot assist send thread
+    bool m_core_bind; // Bind to all CPUs in CPU core
   };
   bool m_classic;
   SparseBitmask m_LockExecuteThreadToCPU;
   SparseBitmask m_LockIoThreadsToCPU;
   Vector<SparseBitmask> m_cpu_sets;
+  Vector<unsigned> m_perm_cpu_sets;
   Vector<T_Thread> m_threads[T_END];
 
   BaseString m_err_msg;
@@ -112,12 +132,25 @@ protected:
   void add(T_Type, unsigned realtime, unsigned spintime);
   int handle_spec(char *ptr, unsigned real_time, unsigned spin_time);
 
-  unsigned createCpuSet(const SparseBitmask&);
+  unsigned createCpuSet(const SparseBitmask&, bool permanent);
+  void lock_io_threads();
   int do_bindings(bool allow_too_few_cpus);
   int do_validate();
 
   unsigned count_unbound(const Vector<T_Thread>& vec) const;
   void bind_unbound(Vector<T_Thread> & vec, unsigned cpu);
+
+  void compute_automatic_thread_config(
+    Uint32 num_cpus,
+    Uint32 & tc_threads,
+    Uint32 & ldm_threads,
+    Uint32 & query_threads,
+    Uint32 & recover_threads,
+    Uint32 & main_threads,
+    Uint32 & rep_threads,
+    Uint32 & send_threads,
+    Uint32 & recv_threads);
+  void reorganize_ldm_bindings(bool, unsigned&, bool);
 
 public:
   struct Entries
@@ -125,6 +158,8 @@ public:
     unsigned m_type;
     unsigned m_min_cnt;
     unsigned m_max_cnt;
+    bool     m_is_exec_thd; /* Is this a non-blocking execution thread type */
+    bool     m_is_permanent;/* Is this a fixed thread type */
   };
 };
 
@@ -154,8 +189,12 @@ public:
 
   int do_bind(NdbThread*, const unsigned short list[], unsigned cnt);
   int do_bind_io(NdbThread*);
+  int do_bind_idxbuild(NdbThread*);
   int do_bind_watchdog(NdbThread*);
   int do_bind_send(NdbThread*, unsigned);
+  int do_unbind(NdbThread*);
+  bool do_get_nosend(const unsigned short list[],
+                     unsigned cnt) const;
   bool do_get_realtime_io() const;
   bool do_get_realtime_wd() const;
   bool do_get_realtime_send(unsigned) const;
@@ -164,14 +203,27 @@ public:
                        unsigned cnt) const;
   unsigned do_get_spintime(const unsigned short list[],
                            unsigned cnt) const;
-
 protected:
   const T_Thread* find_thread(const unsigned short list[], unsigned cnt) const;
   void appendInfo(BaseString&, const T_Thread*) const;
   int do_bind(NdbThread*, const T_Thread*);
 };
 
+/**
+ * This class is used to temporarily change the thread
+ * type during some task
+ */
+class THRConfigRebinder
+{
+public:
+  THRConfigRebinder(THRConfigApplier*, THRConfig::T_Type, NdbThread*);
+  ~THRConfigRebinder();
+private:
+  THRConfigApplier* m_config_applier;
+  int m_state;
+  NdbThread* m_thread;
+};
 
 #undef JAM_FILE_ID
 
-#endif // IPCConfig_H
+#endif // THRConfig_H

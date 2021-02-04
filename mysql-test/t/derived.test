@@ -35,6 +35,7 @@ SELECT a,2 as a FROM (SELECT '1' as a) b HAVING a=1;
 SELECT 1 FROM (SELECT 1) a WHERE a=2;
 --error 1054
 SELECT (SELECT 1) as a FROM (SELECT 1 FROM t1  HAVING a=1) as a;
+--sorted_result
 select * from t1 as x1, (select * from t1) as x2;
 explain select * from t1 as x1, (select * from t1) as x2;
 drop table if exists  t2,t3;
@@ -154,6 +155,7 @@ drop table t1;
 
 create table t1 (a int);
 insert into t1 values (1),(2);
+--sorted_result
 select * from ( select * from t1 union select * from t1) a,(select * from t1 union select * from t1) b;
 explain select * from ( select * from t1 union select * from t1) a,(select * from t1 union select * from t1) b;
 drop table t1;
@@ -442,12 +444,22 @@ SET @optimizer_switch_saved= @@optimizer_switch;
 SET @@optimizer_switch="derived_merge=off";
 
 --echo # Ref access to the derived table should be used.
-EXPLAIN SELECT table1 . o1 
-FROM C table1  
-  JOIN ( C table2  
-    JOIN ( SELECT * FROM cc ) table3  
-    ON table3 .`i1`  = table2 .o1  
-  ) ON table3 .`i2`  = table2 .o1   
+EXPLAIN SELECT table1 . o1
+FROM C table1
+  JOIN ( C table2
+    JOIN ( SELECT * FROM cc ) table3
+    ON table3 .`i1`  = table2 .o1
+  ) ON table3 .`i2`  = table2 .o1
+;
+
+# Test EXPLAIN on MaterializeIterator.
+--skip_if_hypergraph  # Depends on the query plan.
+EXPLAIN FORMAT=tree SELECT table1 . o1
+FROM C table1
+  JOIN ( C table2
+    JOIN ( SELECT * FROM cc ) table3
+    ON table3 .`i1`  = table2 .o1
+  ) ON table3 .`i2`  = table2 .o1
 ;
 
 SET @@optimizer_switch=@optimizer_switch_saved;
@@ -468,6 +480,7 @@ CREATE TABLE `t1` (
 INSERT INTO t1 VALUES (2, 9, NULL), (3, 3, '1900-01-01 00:00:00'),
 (8, 8, '1900-01-01 00:00:00'), (15, 0, '2007-12-15 12:39:34');
 
+--sorted_result
 SELECT * FROM ( 
   SELECT DISTINCT tableb.col_datetime_key 
   FROM t1 tablea LEFT JOIN t1 tableb ON tablea.pk < tableb.col_int_key
@@ -521,19 +534,22 @@ INSERT INTO t2 VALUES(1,1),(3,3),(2,2),(4,4),(8,8),(6,6);
 EXPLAIN SELECT * FROM (SELECT * FROM t1) tt;
 SELECT * FROM (SELECT * FROM t1) tt;
 --echo  explain for multitable derived
-EXPLAIN EXTENDED SELECT * FROM (SELECT * FROM t1 JOIN t2 ON f1=f2) tt;
+EXPLAIN SELECT * FROM (SELECT * FROM t1 JOIN t2 ON f1=f2) tt;
+--sorted_result
 SELECT * FROM (SELECT * FROM t1 JOIN t2 ON f1=f2) tt;
 --echo  explain for derived with where
 FLUSH STATUS;
-EXPLAIN EXTENDED 
+EXPLAIN 
   SELECT * FROM (SELECT * FROM t1 WHERE f1 IN (2,3)) tt WHERE f11=2;
+--skip_if_hypergraph  # Depends on the query plan.
 SHOW STATUS LIKE 'Handler_read%';
 FLUSH STATUS;
 SELECT * FROM (SELECT * FROM t1 WHERE f1 IN (2,3)) tt WHERE f11=2;
+--skip_if_hypergraph  # Depends on the query plan.
 SHOW STATUS LIKE 'Handler_read%';
 
 --echo join of derived
-EXPLAIN EXTENDED 
+EXPLAIN 
   SELECT * FROM (SELECT * FROM t1 WHERE f1 IN (2,3)) tt JOIN
   (SELECT * FROM t1 WHERE f1 IN (1,2)) aa ON tt.f1=aa.f1;
 SELECT * FROM (SELECT * FROM t1 WHERE f1 IN (2,3)) tt JOIN
@@ -545,24 +561,29 @@ CREATE VIEW v2 AS SELECT * FROM t1 JOIN t2 ON f1=f2;
 CREATE VIEW v3 AS SELECT * FROM t1 WHERE f1 IN (2,3);
 CREATE VIEW v4 AS SELECT * FROM t2 WHERE f2 IN (2,3);
 --echo  explain for simple views
-EXPLAIN EXTENDED SELECT * FROM v1;
+EXPLAIN SELECT * FROM v1;
+--sorted_result
 SELECT * FROM v1;
 --echo  explain for multitable views
-EXPLAIN EXTENDED SELECT * FROM v2;
+EXPLAIN SELECT * FROM v2;
+--sorted_result
 SELECT * FROM v2;
 --echo  explain for views with where
-EXPLAIN EXTENDED SELECT * FROM v3 WHERE f11 IN (1,3);
+EXPLAIN SELECT * FROM v3 WHERE f11 IN (1,3);
 SELECT * FROM v3 WHERE f11 IN (1,3);
 --echo explain for joined views
-EXPLAIN EXTENDED
+EXPLAIN
   SELECT * FROM v3 JOIN v4 ON f1=f2;
+--sorted_result
 SELECT * FROM v3 JOIN v4 ON f1=f2;
 
 FLUSH STATUS;
-EXPLAIN EXTENDED SELECT * FROM v4 WHERE f2 IN (1,3);
+EXPLAIN SELECT * FROM v4 WHERE f2 IN (1,3);
+--skip_if_hypergraph  # Depends on the query plan.
 SHOW STATUS LIKE 'Handler_read%';
 FLUSH STATUS;
 SELECT * FROM v4 WHERE f2 IN (1,3);
+--skip_if_hypergraph  # Depends on the query plan.
 SHOW STATUS LIKE 'Handler_read%';
 
 # Lots of "SELECT * GROUP BY non-unique-field" below, so:
@@ -570,15 +591,17 @@ SHOW STATUS LIKE 'Handler_read%';
 
 --echo for materialized derived tables
 --echo  explain for simple derived
-EXPLAIN EXTENDED SELECT * FROM (SELECT * FROM t1 GROUP BY f1) tt;
+EXPLAIN SELECT * FROM (SELECT * FROM t1 GROUP BY f1) tt;
 SELECT * FROM (SELECT * FROM t1 HAVING f1=f1) tt;
 --echo  explain showing created indexes and late materialization
 FLUSH STATUS;
-EXPLAIN EXTENDED
+EXPLAIN
   SELECT * FROM t1 JOIN (SELECT * FROM t2 GROUP BY f2) tt ON f1=f2;
+--skip_if_hypergraph  # Depends on the query plan.
 SHOW STATUS LIKE 'Handler_read%';
 FLUSH STATUS;
 SELECT * FROM t1 JOIN (SELECT * FROM t2 GROUP BY f2) tt ON f1=f2;
+--skip_if_hypergraph  # Depends on the query plan.
 SHOW STATUS LIKE 'Handler_read%';
 
 --echo for materialized views
@@ -586,52 +609,69 @@ DROP VIEW v1,v2,v3;
 CREATE VIEW v1 AS SELECT * FROM t1 GROUP BY f1;
 CREATE VIEW v2 AS SELECT * FROM t2 GROUP BY f2;
 CREATE VIEW v3 AS SELECT t1.f1,t1.f11 FROM t1 JOIN t1 AS t11 HAVING t1.f1<100;
+--echo ensure that view definitions are cached in the data-dictionary cache.
+--disable_result_log
+--disable_query_log
+SHOW CREATE VIEW v1;
+SHOW CREATE VIEW v2;
+SHOW CREATE VIEW v3;
+--enable_query_log
+--enable_result_log
 --echo  explain for simple derived
-EXPLAIN EXTENDED SELECT * FROM v1;
+EXPLAIN SELECT * FROM v1;
+--sorted_result
 SELECT * FROM v1;
 --echo  explain showing created indexes and late materialization for views
 FLUSH STATUS;
-EXPLAIN EXTENDED SELECT * FROM t1 JOIN v2 ON f1=f2;
+EXPLAIN SELECT * FROM t1 JOIN v2 ON f1=f2;
+--skip_if_hypergraph  # Depends on the query plan.
 SHOW STATUS LIKE 'Handler_read%';
 FLUSH STATUS;
 SELECT * FROM t1 JOIN v2 ON f1=f2;
+--skip_if_hypergraph  # Depends on the query plan.
 SHOW STATUS LIKE 'Handler_read%';
 
-EXPLAIN EXTENDED
+EXPLAIN
   SELECT * FROM t1,v3 AS v31,v3 WHERE t1.f1=v31.f1 and t1.f1=v3.f1;
 FLUSH STATUS;
 SELECT * FROM t1,v3 AS v31,v3 WHERE t1.f1=v31.f1 and t1.f1=v3.f1;
+--skip_if_hypergraph  # Depends on the query plan.
 SHOW STATUS LIKE 'Handler_read%';
 --echo  explain showing late materialization for views
-EXPLAIN EXTENDED SELECT * FROM v1 JOIN v4 ON f1=f2;
+EXPLAIN SELECT * FROM v1 JOIN v4 ON f1=f2;
+--sorted_result
 SELECT * FROM v1 JOIN v4 ON f1=f2;
 
 --echo merged derived in merged derived
-EXPLAIN EXTENDED SELECT * FROM (SELECT * FROM 
+EXPLAIN SELECT * FROM (SELECT * FROM 
   (SELECT * FROM t1 WHERE f1 < 7) tt WHERE f1 > 2) zz;
+--sorted_result
 SELECT * FROM (SELECT * FROM 
   (SELECT * FROM t1 WHERE f1 < 7) tt WHERE f1 > 2) zz;
 
 --echo materialized derived in merged derived
-EXPLAIN EXTENDED  SELECT * FROM (SELECT * FROM 
+EXPLAIN  SELECT * FROM (SELECT * FROM 
   (SELECT * FROM t1 WHERE f1 < 7 GROUP BY f1) tt WHERE f1 > 2) zz;
+--sorted_result
 SELECT * FROM (SELECT * FROM 
   (SELECT * FROM t1 WHERE f1 < 7 GROUP BY f1) tt WHERE f1 > 2) zz;
 
 --echo merged derived in materialized derived
-EXPLAIN  extended SELECT * FROM (SELECT * FROM 
+EXPLAIN SELECT * FROM (SELECT * FROM 
   (SELECT * FROM t1 WHERE f1 < 7) tt WHERE f1 > 2 GROUP BY f1) zz;
+--sorted_result
 SELECT * FROM (SELECT * FROM 
   (SELECT * FROM t1 WHERE f1 < 7) tt WHERE f1 > 2 GROUP BY f1) zz;
 
 --echo materialized derived in materialized derived
-EXPLAIN EXTENDED  SELECT * FROM (SELECT * FROM 
+EXPLAIN  SELECT * FROM (SELECT * FROM 
   (SELECT * FROM t1 WHERE f1 < 7 GROUP BY f1) tt WHERE f1 > 2 GROUP BY f1) zz;
+--sorted_result
 SELECT * FROM (SELECT * FROM 
   (SELECT * FROM t1 WHERE f1 < 7 GROUP BY f1) tt WHERE f1 > 2 GROUP BY f1) zz;
 
 --echo mat in merged derived join mat in merged derived
-EXPLAIN EXTENDED  SELECT * FROM 
+EXPLAIN  SELECT * FROM 
  (SELECT * FROM (SELECT * FROM t1 WHERE f1 < 7 GROUP BY f1) tt WHERE f1 > 2) x
 JOIN 
  (SELECT * FROM (SELECT * FROM t1 WHERE f1 < 7 GROUP BY f1) tt WHERE f1 > 2) z
@@ -643,11 +683,12 @@ SELECT * FROM
 JOIN 
  (SELECT * FROM (SELECT * FROM t1 WHERE f1 < 7 GROUP BY f1) tt WHERE f1 > 2) z
  ON x.f1 = z.f1;
+--skip_if_hypergraph  # Depends on the query plan.
 SHOW STATUS LIKE 'Handler_read%';
 FLUSH STATUS;
 
 --echo merged in merged derived join merged in merged derived
-EXPLAIN EXTENDED  SELECT * FROM 
+EXPLAIN  SELECT * FROM 
  (SELECT * FROM 
   (SELECT * FROM t1 WHERE f1 < 7 ) tt WHERE f1 > 2 ) x
 JOIN 
@@ -665,7 +706,7 @@ JOIN
 
 --echo materialized in materialized derived join 
 --echo   materialized in materialized derived
-EXPLAIN EXTENDED  SELECT * FROM 
+EXPLAIN  SELECT * FROM 
  (SELECT * FROM 
   (SELECT * FROM t1 WHERE f1 < 7 GROUP BY f1) tt WHERE f1 > 2 GROUP BY f1) x
 JOIN 
@@ -682,27 +723,34 @@ JOIN
  ON x.f1 = z.f1;
 
 --echo merged view in materialized derived
-EXPLAIN EXTENDED
+EXPLAIN
 SELECT * FROM (SELECT * FROM v4 GROUP BY 1) tt;
+--sorted_result
 SELECT * FROM (SELECT * FROM v4 GROUP BY 1) tt;
 
 --echo materialized view in merged derived
-EXPLAIN EXTENDED 
+# Condition f1 < 7 gets pushed down to view v1 here. However when the
+# tranformed query is printed in "NOTE", it does not display the pushed
+# condition in the view definition. It just chooses to print the original view
+# definition only.
+EXPLAIN 
 SELECT * FROM ( SELECT * FROM v1 WHERE f1 < 7) tt;
 SELECT * FROM ( SELECT * FROM v1 WHERE f1 < 7) tt;
 
 --echo merged view in a merged view in a merged derived
 CREATE VIEW v6 AS SELECT * FROM v4 WHERE f2 < 7;
-EXPLAIN EXTENDED SELECT * FROM (SELECT * FROM v6) tt;
+EXPLAIN SELECT * FROM (SELECT * FROM v6) tt;
 SELECT * FROM (SELECT * FROM v6) tt;
 
 --echo materialized view in a merged view in a materialized derived
 CREATE VIEW v7 AS SELECT * FROM v1;
-EXPLAIN EXTENDED SELECT * FROM (SELECT * FROM v7 GROUP BY 1) tt;
+EXPLAIN SELECT * FROM (SELECT * FROM v7 GROUP BY 1) tt;
+--sorted_result
 SELECT * FROM (SELECT * FROM v7 GROUP BY 1) tt;
 
 --echo JOIN of above two
-EXPLAIN EXTENDED SELECT * FROM v6 JOIN v7 ON f2=f1;
+EXPLAIN SELECT * FROM v6 JOIN v7 ON f2=f1;
+--sorted_result
 SELECT * FROM v6 JOIN v7 ON f2=f1;
 
 --echo test two keys
@@ -711,7 +759,8 @@ INSERT INTO t1 VALUES(6,6),(8,8);
 INSERT INTO t3 VALUES(1,1),(2,2),(3,3),(5,5);
 let $query= SELECT * FROM t1 JOIN (SELECT * FROM t2) tt ON t1.f1=tt.f2
   JOIN t3 ON tt.f22=t3.f3;
-eval EXPLAIN EXTENDED $query;
+eval EXPLAIN $query;
+--sorted_result
 eval $query;
 
 --source include/restore_sql_mode_after_turn_off_only_full_group_by.inc
@@ -919,6 +968,9 @@ DROP TABLE t1,t2;
 --echo #
 create table t1(f1 char(255) charset utf8);
 insert into t1 values('1'),('2'),('3'),('4'),('5'),('6'),('7'),('8'),('9'),('0');
+# We only need the temp SE to overflow here, so use 'memory' for this purpose.
+set @save_internal_tmp_mem_storage_engine= @@internal_tmp_mem_storage_engine;
+set session internal_tmp_mem_storage_engine='memory';
 set @save_heap_size= @@max_heap_table_size;
 set @@max_heap_table_size= 1;
 SET @optimizer_switch_saved= @@optimizer_switch;
@@ -930,6 +982,7 @@ select count(*) from t1 join (
   select t1.f1 from t1 join t1 as t2 join t1 as t3) tt on t1.f1 = tt.f1;
 show status like 'Handler_write';
 set @@max_heap_table_size= @save_heap_size;
+set session internal_tmp_mem_storage_engine= @save_internal_tmp_mem_storage_engine;
 SET @@optimizer_switch= @optimizer_switch_saved;
 
 drop table t1;
@@ -1523,6 +1576,7 @@ eval explain $query;
 let $query=
 SELECT *
 FROM t1 JOIN (SELECT * FROM t2 UNION ALL SELECT * FROM t2) AS dt ON t1.a=dt.a;
+--sorted_result
 eval $query;
 eval explain $query;
 
@@ -2391,6 +2445,8 @@ FROM t1 RIGHT JOIN
      ON t1.pk = dt.pk;
 
 eval explain $query;
+
+--sorted_result
 eval $query;
 
 SET @@optimizer_switch=@optimizer_switch_saved;
@@ -2461,7 +2517,7 @@ CREATE TABLE t2 (
 INSERT INTO t2 VALUES
 ('f','ff'),('t','tt'),('c','cc'),('c','cc'),('r','rr'),('k','kk');
 
-CREATE TABLE empty (dummy INTEGER);
+CREATE TABLE `empty` (dummy INTEGER);
 
 CREATE VIEW vr AS
 SELECT t2.c2n AS v_field
@@ -2523,7 +2579,7 @@ FROM vr AS alias1
 SELECT alias1.dt_field AS field1
 FROM (SELECT t2.c2n AS dt_field
       FROM t1 RIGHT JOIN
-             (empty RIGHT JOIN t2
+             (`empty` RIGHT JOIN t2
               ON TRUE)
            ON t2.c2k = t1.c1k
      ) AS alias1
@@ -2533,7 +2589,7 @@ FROM (SELECT t2.c2n AS dt_field
 SELECT alias1.dt_field AS field1
 FROM (SELECT t2.c2n AS dt_field
       FROM t1 RIGHT JOIN
-             (t2 LEFT JOIN empty
+             (t2 LEFT JOIN `empty`
               ON TRUE)
            ON t2.c2k = t1.c1k
      ) AS alias1
@@ -2541,7 +2597,7 @@ FROM (SELECT t2.c2n AS dt_field
      ON alias2.c2n = alias1.dt_field;
 
 DROP VIEW vl, vr;
-DROP TABLE t1, t2, empty;
+DROP TABLE t1, t2, `empty`;
 
 --echo # Bug#22239474: Unexpected error 1093 on nested subquery for update
 
@@ -2640,6 +2696,7 @@ SELECT * FROM t1 LEFT JOIN (
 ) AS sq ON a <= sq.c;
 
 eval explain $query;
+--sorted_result
 eval $query;
 
 DROP TABLE t1, t2, t3;
@@ -2706,8 +2763,10 @@ DROP TABLE users;
 
 CREATE TABLE t(a INTEGER) engine=innodb;
 INSERT INTO t VALUES(1);
---error ER_INVALID_GROUP_FUNC_USE
+--echo # Per MySQL rules, SUM(1) is aggregated in top query
+--echo # (can't be in WHERE, in FROM)
 SELECT (SELECT 1 FROM (SELECT 1 FROM t WHERE SUM(1)) AS t);
+SELECT (SELECT 1 FROM (SELECT 1 FROM t WHERE SUM(0)) AS t);
 DROP TABLE t;
 
 --echo # Bug#23074801: Delete from joined tables with where using derived table
@@ -2813,4 +2872,394 @@ EXECUTE yy;
 EXECUTE yy;
 EXECUTE yy;
 
+DROP TABLE t1;
+
+
+--echo #
+--echo # Bug#26596977: ASSERT `!(USED_TABS & (~READ_TABLES & ~FILTER_FOR_TABLE))'
+--echo #               FAILED IN ITEM_FUNC
+--echo #
+
+CREATE TABLE t1 (
+  col_varchar_key varchar(1) ,
+  pk int(11) NOT NULL AUTO_INCREMENT,
+  PRIMARY KEY (pk),
+  KEY col_varchar_key (col_varchar_key)
+) ENGINE=MyISAM;
+
+CREATE TABLE t2 (
+  col_int int(11) ,
+  pk int(11) NOT NULL AUTO_INCREMENT,
+  col_varchar varchar(1) ,
+  col_varchar_key varchar(1) ,
+  PRIMARY KEY (pk)
+) ENGINE=MyISAM;
+INSERT INTO t2 VALUES (4,1,'s','r'), (9,19,'p','a');
+
+CREATE TABLE t3 (
+  pk int(11) NOT NULL AUTO_INCREMENT,
+  col_int int(11) ,
+  col_varchar_key varchar(1) ,
+  col_varchar varchar(1) ,
+  PRIMARY KEY (pk),
+  KEY col_varchar_key (col_varchar_key)
+) ENGINE=MyISAM;
+INSERT INTO t3 VALUES (100,2,'g',NULL);
+
+let query1=
+SELECT table1.col_int
+FROM t3 AS table1
+  LEFT JOIN (
+      SELECT subquery1_t1.*
+      FROM t1 AS subquery1_t1
+        RIGHT JOIN t2 AS subquery1_t2
+        ON (subquery1_t2.col_varchar_key = subquery1_t1.col_varchar_key)
+    ) AS table3
+    ON (table3.col_varchar_key = table1.col_varchar_key)
+WHERE table3.col_varchar_key  IN (
+  SELECT subquery2_t3.col_varchar
+  FROM t3 AS subquery2_t3
+  WHERE subquery2_t3.pk < table3.pk
+);
+
+eval EXPLAIN $query1;
+eval $query1;
+
+DROP TABLE t1, t2, t3;
+
+--echo #
+--echo # Bug #26618455: ASSERT 'KEYPARTS > 0' IN CALC_LENGTH_AND_KEYPARTS()
+--echo #                WITHOUT FIRSTMATCH
+--echo #
+
+
+CREATE TABLE t1 (
+  col_int int(11) DEFAULT NULL,
+  pk int(11) NOT NULL AUTO_INCREMENT,
+  col_varchar_key varchar(1) DEFAULT NULL,
+  col_varchar varchar(1) DEFAULT NULL,
+  col_int_key int(11) DEFAULT NULL,
+  PRIMARY KEY (pk),
+  KEY col_int_key (col_int_key)
+) ENGINE=MyISAM;
+
+INSERT INTO t1 VALUES (0,1,'i','n',125);
+INSERT INTO t1 VALUES (3,20,'b','o',0);
+
+CREATE TABLE t2 (
+  col_int_key int(11) DEFAULT NULL,
+  col_varchar_key varchar(1) DEFAULT NULL,
+  col_varchar varchar(1) DEFAULT NULL,
+  col_int int(11) DEFAULT NULL,
+  pk int(11) NOT NULL AUTO_INCREMENT,
+  PRIMARY KEY (pk),
+  KEY col_varchar_key (col_varchar_key)
+) ENGINE=MyISAM;
+
+INSERT INTO t2 VALUES (3,'y','p',4,1);
+
+CREATE TABLE t3 (
+  col_int int(11) DEFAULT NULL,
+  col_varchar varchar(1) DEFAULT NULL,
+  pk int(11) NOT NULL AUTO_INCREMENT,
+  col_varchar_key varchar(1) DEFAULT NULL,
+  col_int_key int(11) DEFAULT NULL,
+  PRIMARY KEY (pk),
+  KEY col_int_key (col_int_key)
+) ENGINE=MyISAM;
+
+CREATE TABLE t4 (  col_int int(11) DEFAULT NULL,
+  col_varchar varchar(1) DEFAULT NULL,
+  col_int_key int(11) DEFAULT NULL,
+  col_varchar_key varchar(1) DEFAULT NULL,
+  pk int(11) NOT NULL AUTO_INCREMENT,
+  PRIMARY KEY (pk),
+  KEY col_varchar_key (col_varchar_key)
+) ENGINE=MyISAM
+;
+INSERT INTO t4 VALUES (7,'k',9,'z',20);
+
+let query1=
+SELECT
+  table2.col_int_key AS field3
+FROM
+  (
+    SELECT subquery2_t2.*
+    FROM t1 AS subquery2_t1
+      INNER JOIN t2 AS subquery2_t2
+      ON (subquery2_t2.pk = subquery2_t1.col_int)
+  ) AS table1
+    RIGHT OUTER JOIN (
+      SELECT subquery3_t1.*
+      FROM t2 AS subquery3_t1
+    ) AS table2
+    ON (table1.col_varchar_key = table2.col_varchar_key)
+WHERE table1.col_varchar_key IN (
+  SELECT subquery4_t1.col_varchar AS subquery4_field1
+  FROM t3 AS subquery4_t1);
+
+SET optimizer_switch = 'firstmatch=off';
+eval EXPLAIN $query1;
+eval $query1;
+SET optimizer_switch = default;
+
+DROP TABLE t1, t2, t3, t4;
+
+--echo # Bug#26798989: Sig 11 in find_table_in_global_list
+
+CREATE TABLE t1(a INTEGER);
+CREATE TABLE t2(a INTEGER);
+UPDATE t1
+SET a=5
+WHERE a IN (SELECT a FROM t2
+            ORDER BY (SELECT a FROM (SELECT SUM(a) FROM t1) AS dt));
+DROP TABLE t1, t2;
+
+--echo #
+--echo # Bug#30381092 WRONG BEHAVIOR OF '=' CONDITION WHEN WORKING WITH COMPLEX SUBQUERIES
+--echo #
+
+# Parent table
+CREATE TABLE t1 (t1_id INT PRIMARY KEY);
+# Child table, one-to-many.
+CREATE TABLE t2 (t2_id INT, t1_id INT);
+
+INSERT INTO t1 VALUES (-1), (1);
+INSERT INTO t2 SELECT t1_id, t1_id FROM t1;
+ANALYZE TABLE t1,t2;
+
+# ot.t2_id is a deeply nested outer reference.
+
+# We verify that the pulling-out finds the outer reference. We hide
+# this reference in various places :-)
+
+# Inside the WHERE clause of a merged derived table in a scalar subquery.
+
+let $query=
+SELECT * FROM t2 AS ot
+WHERE
+( SELECT t1_id AS it1
+  FROM ( SELECT * FROM t1 AS it2
+         WHERE t1_id = ( SELECT t1_id
+                         FROM ( SELECT * FROM t2 AS it3
+                                WHERE t2_id=ot.t2_id
+                              ) AS dt1
+                       )
+       ) AS dt2
+) IS NOT NULL;
+
+eval EXPLAIN $query;
+eval $query;
+
+# Inside the WHERE clause of a non-merged derived table in a scalar
+# subquery.
+
+let $query=
+SELECT * FROM t2 AS ot
+WHERE
+( SELECT t1_id AS it1
+  FROM ( SELECT * FROM t1 AS it2
+         WHERE t1_id = ( SELECT /*+ NO_MERGE() */ t1_id
+                         FROM ( SELECT * FROM t2 AS it3
+                                WHERE t2_id=ot.t2_id
+                              ) AS dt1
+                       )
+       ) AS dt2
+) IS NOT NULL;
+
+eval EXPLAIN $query;
+eval $query;
+
+DROP TABLE t1,t2;
+
+--echo # Bug#30488700: Mysql chooses different execution plan in 5.7
+
+CREATE TABLE tbl1 (
+  id BIGINT NOT NULL,
+  rec_id INTEGER NOT NULL,
+  id_value2 BIGINT DEFAULT NULL,
+  PRIMARY KEY (id, rec_id)
+) ENGINE=INNODB;
+
+CREATE TABLE tbl2 (
+  t_id BIGINT NOT NULL,
+  s_date DATETIME DEFAULT NULL,
+  PRIMARY KEY (t_id)
+) ENGINE=INNODB;
+
+let select_statement =
+SELECT t1.rec_id
+FROM tbl1 AS t1 INNER JOIN
+       (SELECT a.id, a.rec_id,s_date
+        FROM tbl2 AS b, tbl1 AS a
+        WHERE a.id_value2 = b.t_id AND a.id = 6889877970355107670
+        ORDER BY s_date DESC) t2
+     ON t1.id = t2.id AND t1.rec_id = t2.rec_id;
+
+let update_statement =
+UPDATE tbl1 AS t1 INNER JOIN
+       (SELECT a.id, a.rec_id, b.s_date
+        FROM tbl2 AS b, tbl1 AS a
+        WHERE a.id_value2 = b.t_id AND a.id = 6889877970355107670
+        ORDER BY s_date DESC) t2
+       ON t1.id = t2.id AND t1.rec_id = t2.rec_id
+SET t1.rec_id = @ROWNUM:= @ROWNUM+1;
+
+SET @ROWNUM = 0;
+eval $select_statement;
+eval $update_statement;
+eval explain $select_statement;
+eval explain $update_statement;
+
+DROP TABLE tbl1, tbl2;
+
+--echo # Bug#26542829: Assertion !(check_datetime_range(ltime)) failed
+
+CREATE TABLE t1 (
+  c1 varchar(10) DEFAULT NULL,
+  c2 datetime DEFAULT NULL,
+  c3 varchar(255) DEFAULT NULL,
+  c4 varchar(255) DEFAULT NULL,
+  pk int NOT NULL,
+  c5 varchar(255) DEFAULT NULL,
+  c6 date DEFAULT NULL,
+  c7 int DEFAULT NULL,
+  c8 date DEFAULT NULL,
+  c9 varchar(255) DEFAULT NULL,
+  c10 int DEFAULT NULL,
+  c11 varchar(10) DEFAULT NULL,
+  c12 varchar(10) DEFAULT NULL,
+  c13 datetime DEFAULT NULL,
+  PRIMARY KEY (pk),
+  KEY k5 (c5)
+) engine=innodb;
+
+INSERT INTO t1 VALUES
+('gjnhugwevl','1000-01-01 00:00:00','m','UJVFB',2,'j','1000-01-01',208797696,'1000-01-01','LRNWI',NULL,'look','ISVAL','2001-03-02 00:00:00'),
+('nhugwevltb','1000-01-01 00:00:00','m','h',3,'can\'t','2004-06-07',2052784128,'2000-12-19','r',NULL,'ugwevltbgy','something','1000-01-01 00:00:00');
+
+CREATE TABLE t2 (
+  c1 varchar(255) DEFAULT NULL,
+  c2 varchar(10) DEFAULT NULL,
+  c3 int DEFAULT NULL,
+  c4 datetime DEFAULT NULL,
+  c5 varchar(10) DEFAULT NULL,
+  c6 varchar(255) DEFAULT NULL,
+  c7 varchar(255) DEFAULT NULL,
+  c8 varchar(255) DEFAULT NULL,
+  c9 varchar(10) DEFAULT NULL,
+  c10 datetime DEFAULT NULL,
+  pk int NOT NULL,
+  c11 date DEFAULT NULL,
+  c12 int DEFAULT NULL,
+  PRIMARY KEY (pk)
+) engine=innodb;
+
+INSERT INTO t2 VALUES
+('be','njhqcbglns',NULL,'2002-07-20 19:40:02','YHBGN','go','NSPET','j','MKFNT','2007-08-25 14:41:26',1,'2002-04-21',6),
+('b','glnspcqnog',2,'1000-01-01 00:00:00','YEJTV','on','z','PPPCH','YRXFT','1000-01-01 00:00:00',4,'2003-07-25',0),
+('c','qnogpabsxs',6,'1000-01-01 00:00:00','nogpabsxsr','b','we','og','e','2000-11-01 15:48:07',7,'1000-01-01',3),
+('OFZJT','was',6,'2007-01-14 21:01:33','as','was','r','a','but','2009-01-20 17:58:56',9,'2005-02-14',7),
+('d','bsxsrumtna',9,'1000-01-01 00:00:00','would','he','o','VESLR','sxsrumtnab','2007-09-25 12:13:37',10,'2005-02-11',772472832);
+
+ANALYZE TABLE t1, t2;
+
+SELECT field1
+FROM (SELECT alias1.c5 AS field1,
+             alias1.c13 AS field2,
+             alias1.c1 AS field4
+      FROM t1 AS alias1 RIGHT JOIN t2 AS alias2
+           ON alias1.pk = alias2.c12
+      ORDER BY field2
+     ) as dt;
+
+SELECT field1
+FROM (SELECT *
+      FROM (SELECT alias1.c5 AS field1,
+                   alias1.c13 AS field2,
+                   alias1.c1 AS field4
+            FROM t1 AS alias1 RIGHT JOIN t2 AS alias2
+                 ON alias1.pk = alias2.c12
+            ORDER BY field2
+           ) AS dt_inner
+     ) AS dt_outer;
+
+DROP TABLE t1, t2;
+
+--echo # Bug#26808862: Execution of prepared statement with ORDER BY
+--echo #               in derived table may fail
+
+CREATE TABLE t1 (
+  pk INTEGER NOT NULL,
+  c1 INTEGER DEFAULT NULL,
+  c2 INTEGER DEFAULT NULL,
+  PRIMARY KEY (pk)
+);
+
+CREATE TABLE t2 (
+  c1 integer DEFAULT NULL
+);
+
+prepare s from "
+SELECT field1
+FROM (SELECT alias1.c1 AS field1,
+             alias1.c2 AS field2
+      FROM t1 AS alias1 RIGHT JOIN t2 AS alias2
+           ON alias1.pk = alias2.c1
+      ORDER BY field2) as dt";
+
+execute s;
+execute s;
+
+DROP TABLE t1, t2;
+
+--echo # Bug#31565009: Simplification of condition when seeing false and
+--echo #               <cond> leaks tmp tables opened
+
+CREATE TABLE t1 (i int);
+
+SELECT t1.i
+FROM t1
+WHERE FALSE AND
+      t1.i > (SELECT MAX(a)
+              FROM (SELECT 8 AS a UNION SELECT 3) AS tt);
+
+DROP TABLE t1;
+
+--echo # Bug#31401637: Asan heap-buffer-overflow Handler::index_only_read_time
+
+CREATE TABLE t(
+  w INTEGER NOT NULL,
+  h INTEGER NOT NULL,
+  u SMALLINT NOT NULL,
+  PRIMARY KEY (u)
+);
+INSERT INTO t VALUES(1,2,3),(3,4,5),(6,6,7);
+PREPARE s FROM "
+SELECT dtaa.c AS c
+FROM (SELECT 1 AS c
+      FROM (SELECT 1 AS c
+            FROM t AS ta RIGHT JOIN t AS tb ON ta.u  <= ?
+            WHERE 1 OR ?
+            GROUP BY ta.u
+           ) AS dta
+           INNER JOIN t AS tbb
+           ON dta.c = tbb.h
+     ) AS dtaa
+     RIGHT JOIN t AS tbbb
+     ON dtaa.c or w";
+SET @a:='77777';
+EXECUTE s USING @a,@a;
+SET @a:='-77777';
+EXECUTE s USING @a,@a;
+DEALLOCATE PREPARE s;
+DROP TABLE t;
+
+--echo #
+--echo # Bug #32162862: ORDER BY SUB-SELECT COLUMN SETS ALL VALUES TO NULL
+--echo #
+
+CREATE TABLE t1 ( a INTEGER ) Engine=InnoDB;
+INSERT INTO t1 VALUES (123);
+SELECT * FROM t1 LEFT JOIN ( SELECT 1 FROM t1 ) d1 ON TRUE ORDER BY a;
 DROP TABLE t1;

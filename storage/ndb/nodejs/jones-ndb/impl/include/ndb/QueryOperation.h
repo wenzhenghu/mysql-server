@@ -1,21 +1,25 @@
 /*
- Copyright (c) 2015, 2016, Oracle and/or its affiliates. All rights
- reserved.
+ Copyright (c) 2015, 2020 Oracle and/or its affiliates.
  
- This program is free software; you can redistribute it and/or
- modify it under the terms of the GNU General Public License
- as published by the Free Software Foundation; version 2 of
- the License.
- 
+ This program is free software; you can redistribute it and/or modify
+ it under the terms of the GNU General Public License, version 2.0,
+ as published by the Free Software Foundation.
+
+ This program is also distributed with certain software (including
+ but not limited to OpenSSL) that is licensed under separate terms,
+ as designated in a particular file or component or in included license
+ documentation.  The authors of MySQL hereby grant you an additional
+ permission to link the program and your derivative works with the
+ separately licensed software that they have included with MySQL.
+
  This program is distributed in the hope that it will be useful,
  but WITHOUT ANY WARRANTY; without even the implied warranty of
- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- GNU General Public License for more details.
- 
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License, version 2.0, for more details.
+
  You should have received a copy of the GNU General Public License
  along with this program; if not, write to the Free Software
- Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
- 02110-1301  USA
+ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
  */
 
 #ifndef NODEJS_ADAPTER_NDB_INCLUDE_QUERYOPERATION_H
@@ -29,6 +33,7 @@ class NdbQueryOperationDef;
 class NdbQueryDef;
 class TransactionImpl;
 class NdbQueryOperand;
+class SessionImpl;
 
 class QueryBuffer {
 public:
@@ -42,8 +47,8 @@ public:
   uint16_t      result_flags;
   uint32_t      result;        // index of current result in all ResultHeaders
   QueryBuffer() : record(0), buffer(0), size(0), parent(0),
-                  static_flags(0), result_flags(0), result(0)   {};
-  ~QueryBuffer()  { if(size) delete[] buffer; };
+                  static_flags(0), result_flags(0), result(0)   {}
+  ~QueryBuffer()  { if(size) delete[] buffer; }
 };
 
 class QueryResultHeader {
@@ -64,7 +69,7 @@ public:
   int prepareAndExecute();
   void setTransactionImpl(TransactionImpl *);
   bool createNdbQuery(NdbTransaction *);
-  void prepare(const NdbQueryOperationDef * root);
+  void prepare(const NdbQueryOperationDef *, const SessionImpl *);
   int fetchAllResults();
   NdbQueryBuilder * getBuilder() { return ndbQueryBuilder; }
   const NdbQueryOperationDef * defineOperation(const NdbDictionary::Index * index,
@@ -102,6 +107,6 @@ private:
 
 inline uint32_t QueryOperation::getResultRowSize(int depth) {
   return buffers[depth].size;
-};
+}
 
 #endif

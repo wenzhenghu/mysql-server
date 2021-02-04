@@ -1,14 +1,21 @@
 /*
-   Copyright (c) 2004, 2016, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2004, 2020, Oracle and/or its affiliates.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -16,9 +23,10 @@
 */
 
 #include <ndb_global.h>
-#include <my_sys.h>
+#include "my_sys.h"
 #include <NdbMutex.h>
 #include <NdbLockCpuUtil.h>
+#include <NdbSpin.h>
 
 class EventLogger *g_eventLogger = NULL;
 
@@ -29,18 +37,20 @@ extern void destroy_event_logger(class EventLogger ** g_eventLogger);
 
 static int ndb_init_called = 0;
 
-extern "C" void NdbMutex_SysInit();
-extern "C" void NdbMutex_SysEnd();
-extern "C" void NdbCondition_initialize();
-extern "C" int NdbThread_Init();
-extern "C" void NdbThread_End();
-extern "C" void NdbGetRUsage_Init();
-extern "C" void NdbGetRUsage_End();
-extern "C" int NdbLockCpu_Init();
-extern "C" void NdbLockCpu_End();
-
+extern void NdbMutex_SysInit();
+extern void NdbMutex_SysEnd();
+extern void NdbCondition_initialize();
+extern int NdbThread_Init();
+extern void NdbThread_End();
+extern void NdbGetRUsage_Init();
+extern void NdbGetRUsage_End();
+extern int NdbLockCpu_Init();
+extern void NdbLockCpu_End();
 extern void NdbTick_Init();
 extern void NdbOut_Init();
+extern void NdbSpin_Init();
+extern int NdbHW_Init();
+extern void NdbHW_End();
 
 extern "C"
 {
@@ -99,6 +109,7 @@ ndb_init_internal(Uint32 caller)
     NdbTick_Init();
     NdbCondition_initialize();
     NdbGetRUsage_Init();
+    NdbSpin_Init();
   }
   if (init_all)
   {
@@ -110,6 +121,7 @@ ndb_init_internal(Uint32 caller)
       (void)res;
       exit(1);
     }
+    NdbHW_Init();
   }
 }
 
@@ -171,6 +183,7 @@ ndb_end_internal(Uint32 caller)
     NdbLockCpu_End();
     NdbThread_End();
     NdbMutex_SysEnd();
+    NdbHW_End();
   }
 }
 
