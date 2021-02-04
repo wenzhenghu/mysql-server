@@ -105,6 +105,8 @@ SET @row_count = 4;
 SET @sleep_time_per_result_row = 1;
 SET @max_acceptable_delay = 2;
 SET @@global.query_cache_size = 1024 * 64;
+Warnings:
+Warning	1287	'@@query_cache_size' is deprecated and will be removed in a future release.
 DROP TEMPORARY TABLE IF EXISTS t_history;
 DROP TABLE IF EXISTS t1;
 CREATE TEMPORARY TABLE t_history (attempt SMALLINT,
@@ -192,6 +194,8 @@ Expect 1
 DROP TABLE t1;
 DROP TEMPORARY TABLE t_history;
 SET @@global.query_cache_size = default;
+Warnings:
+Warning	1287	'@@query_cache_size' is deprecated and will be removed in a future release.
 create table t1 select INET_ATON('255.255.0.1') as `a`;
 show create table t1;
 Table	Create Table
@@ -1159,6 +1163,20 @@ inet_aton("255.255.255.2551")
 NULL
 Warnings:
 Warning	1411	Incorrect string value: ''255.255.255.2551'' for function inet_aton
+#
+# Bug #26319675:"ILLEGAL MIX OF COLLATIONS" HAPPENS IN CONCAT WITH
+# NAME_CONST
+#
+SELECT CONCAT(NAME_CONST('char_col',_cp932'test' COLLATE 'cp932_japanese_ci'), NAME_CONST('num_col',0)) AS a;
+a
+test0
+CREATE TABLE t1 AS SELECT CONCAT(NAME_CONST('char_col',_cp932'test' COLLATE 'cp932_japanese_ci'), NAME_CONST('num_col',0)) AS a;
+SHOW CREATE TABLE t1;
+Table	Create Table
+t1	CREATE TABLE `t1` (
+  `a` varchar(5) CHARACTER SET cp932 DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=latin1
+DROP TABLE t1;
 
 # -- Done.
 

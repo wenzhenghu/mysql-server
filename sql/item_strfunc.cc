@@ -1,14 +1,21 @@
 /*
-   Copyright (c) 2000, 2016, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2000, 2019, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -28,9 +35,16 @@
 */
 
 /* May include caustic 3rd-party defs. Use early, so it can override nothing. */
-#include "sha2.h"
+#include <openssl/sha.h>
 
 #include "item_strfunc.h"
+
+#ifdef HAVE_UNISTD_H
+#include <unistd.h>
+#endif
+#ifdef HAVE_CRYPT_H
+#include <crypt.h>
+#endif
 
 #include "base64.h"                  // base64_encode_max_arg_length
 #include "my_aes.h"                  // MY_AES_IV_SIZE
@@ -239,9 +253,9 @@ String *Item_func_sha2::val_str_ascii(String *str)
   unsigned char digest_buf[SHA512_DIGEST_LENGTH];
   uint digest_length= 0;
 
+  String *input_string= args[0]->val_str(str);
   str->set_charset(&my_charset_bin);
 
-  String *input_string= args[0]->val_str(str);
   if (input_string == NULL)
   {
     null_value= TRUE;
@@ -764,145 +778,35 @@ String *Item_func_from_base64::val_str(String *str)
   Don't reallocate val_str() if not absolute necessary.
 */
 
-String *Item_func_concat::val_str(String *str)
-{
+String *Item_func_concat::val_str(String *str) {
   DBUG_ASSERT(fixed == 1);
-  String *res,*res2,*use_as_buff;
-  uint i;
-  bool is_const= 0;
+  String *res;
 
-  null_value=0;
-  if (!(res=args[0]->val_str(str)))
-    goto null;
-  use_as_buff= &tmp_value;
-  /* Item_subselect in --ps-protocol mode will state it as a non-const */
-  is_const= args[0]->const_item() || !args[0]->used_tables();
-  for (i=1 ; i < arg_count ; i++)
-  {
-    if (res->length() == 0)
-    {
-      if (!(res=args[i]->val_str(str)))
-	goto null;
-      /*
-       CONCAT accumulates its result in the result of its the first
-       non-empty argument. Because of this we need is_const to be 
-       evaluated only for it.
-      */
-      is_const= args[i]->const_item() || !args[i]->used_tables();
+  THD *thd = current_thd;
+  null_value = false;
+  tmp_value.length(0);
+  for (uint i = 0; i < arg_count; ++i) {
+    if (!(res = args[i]->val_str(str))) {
+      null_value = 1;
+      return 0;
     }
-    else
-    {
-      if (!(res2=args[i]->val_str(use_as_buff)))
-	goto null;
-      if (res2->length() == 0)
-	continue;
-      if (res->length()+res2->length() >
-	  current_thd->variables.max_allowed_packet)
-      {
-	push_warning_printf(current_thd, Sql_condition::SL_WARNING,
-			    ER_WARN_ALLOWED_PACKET_OVERFLOWED,
-			    ER(ER_WARN_ALLOWED_PACKET_OVERFLOWED), func_name(),
-			    current_thd->variables.max_allowed_packet);
-	goto null;
-      }
-      if (!is_const && res->alloced_length() >= res->length()+res2->length())
-      {						// Use old buffer
-	res->append(*res2);
-      }
-      else if (str->alloced_length() >= res->length()+res2->length())
-      {
-	if (str->ptr() == res2->ptr())
-	  str->replace(0,0,*res);
-	else
-	{
-          // If res2 is a substring of str, then clone it first.
-          char buff[STRING_BUFFER_USUAL_SIZE];
-          String res2_clone(buff, sizeof(buff), system_charset_info);
-          if (res2->uses_buffer_owned_by(str))
-          {
-            if (res2_clone.copy(*res2))
-              goto null;
-            res2= &res2_clone;
-          }
- 	  str->copy(*res);
-	  str->append(*res2);
-	}
-        res= str;
-        use_as_buff= &tmp_value;
-      }
-      else if (res == &tmp_value)
-      {
-	if (res->append(*res2))			// Must be a blob
-	  goto null;
-      }
-      else if (res2 == &tmp_value)
-      {						// This can happend only 1 time
-	if (tmp_value.replace(0,0,*res))
-	  goto null;
-	res= &tmp_value;
-	use_as_buff=str;			// Put next arg here
-      }
-      else if (tmp_value.is_alloced() && res2->ptr() >= tmp_value.ptr() &&
-	       res2->ptr() <= tmp_value.ptr() + tmp_value.alloced_length())
-      {
-	/*
-	  This happens really seldom:
-	  In this case res2 is sub string of tmp_value.  We will
-	  now work in place in tmp_value to set it to res | res2
-	*/
-	/* Chop the last characters in tmp_value that isn't in res2 */
-	tmp_value.length((uint32) (res2->ptr() - tmp_value.ptr()) +
-			 res2->length());
-	/* Place res2 at start of tmp_value, remove chars before res2 */
-	if (tmp_value.replace(0,(uint32) (res2->ptr() - tmp_value.ptr()),
-			      *res))
-	  goto null;
-	res= &tmp_value;
-	use_as_buff=str;			// Put next arg here
-      }
-      else
-      {						// Two big const strings
-        /*
-          NOTE: We should be prudent in the initial allocation unit -- the
-          size of the arguments is a function of data distribution, which
-          can be any. Instead of overcommitting at the first row, we grow
-          the allocated amount by the factor of 2. This ensures that no
-          more than 25% of memory will be overcommitted on average.
-        */
-
-        size_t concat_len= res->length() + res2->length();
-
-        if (tmp_value.alloced_length() < concat_len)
-        {
-          if (tmp_value.alloced_length() == 0)
-          {
-            if (tmp_value.alloc(concat_len))
-              goto null;
-          }
-          else
-          {
-            size_t new_len = max(tmp_value.alloced_length() * 2, concat_len);
-
-            if (tmp_value.mem_realloc(new_len))
-              goto null;
-          }
-        }
-
-	if (tmp_value.copy(*res) || tmp_value.append(*res2))
-	  goto null;
-
-	res= &tmp_value;
-	use_as_buff=str;
-      }
-      is_const= 0;
+    if (res->length() + tmp_value.length() >
+        thd->variables.max_allowed_packet) {
+      push_warning_printf(thd, Sql_condition::SL_WARNING,
+                          ER_WARN_ALLOWED_PACKET_OVERFLOWED,
+                          ER(ER_WARN_ALLOWED_PACKET_OVERFLOWED), func_name(),
+                          thd->variables.max_allowed_packet);
+      null_value = 1;
+      return 0;
+    }
+    if (tmp_value.append(*res)) {
+      null_value = 1;
+      return 0;
     }
   }
+  res = &tmp_value;
   res->set_charset(collation.collation);
   return res;
-
-null:
-  null_value=1;
-  return 0;
 }
 
 
@@ -1112,155 +1016,57 @@ wrong_key:
   concat_ws takes at least two arguments.
 */
 
-String *Item_func_concat_ws::val_str(String *str)
-{
+String *Item_func_concat_ws::val_str(String *str) {
   DBUG_ASSERT(fixed == 1);
   char tmp_str_buff[10];
-  String tmp_sep_str(tmp_str_buff, sizeof(tmp_str_buff),default_charset_info),
-         *sep_str, *res, *res2,*use_as_buff;
+  String tmp_sep_str(tmp_str_buff, sizeof(tmp_str_buff), default_charset_info);
+  String *sep_str, *res = NULL, *res2;
   uint i;
-  bool is_const= 0;
 
-  null_value=0;
-  if (!(sep_str= args[0]->val_str(&tmp_sep_str)))
-    goto null;
-
-  use_as_buff= &tmp_value;
-  str->length(0);				// QQ; Should be removed
-  res=str;
+  THD *thd = current_thd;
+  null_value = false;
+  if (!(sep_str = args[0]->val_str(&tmp_sep_str))) {
+    null_value = 1;
+    return 0;
+  }
+  tmp_value.length(0);
 
   // Skip until non-null argument is found.
   // If not, return the empty string
-  for (i=1; i < arg_count; i++)
-    if ((res= args[i]->val_str(str)))
-    {
-      is_const= args[i]->const_item() || !args[i]->used_tables();
+  for (i = 1; i < arg_count; i++)
+    if ((res = args[i]->val_str(str))) {
       break;
     }
 
-  if (i ==  arg_count)
+  if (i == arg_count)
     return make_empty_result();
 
-  for (i++; i < arg_count ; i++)
-  {
-    if (!(res2= args[i]->val_str(use_as_buff)))
-      continue;					// Skip NULL
+  if (tmp_value.append(*res)) {
+    null_value = 1;
+    return 0;
+  }
 
-    if (res->length() + sep_str->length() + res2->length() >
-	current_thd->variables.max_allowed_packet)
-    {
-      push_warning_printf(current_thd, Sql_condition::SL_WARNING,
-			  ER_WARN_ALLOWED_PACKET_OVERFLOWED,
-			  ER(ER_WARN_ALLOWED_PACKET_OVERFLOWED), func_name(),
-			  current_thd->variables.max_allowed_packet);
-      goto null;
-    }
-    if (!is_const && res->alloced_length() >=
-	res->length() + sep_str->length() + res2->length())
-    {						// Use old buffer
-      res->append(*sep_str);			// res->length() > 0 always
-      res->append(*res2);
-    }
-    else if (str->alloced_length() >=
-	     res->length() + sep_str->length() + res2->length())
-    {
-      /* We have room in str;  We can't get any errors here */
-      if (str->ptr() == res2->ptr())
-      {						// This is quite uncommon!
-	str->replace(0,0,*sep_str);
-	str->replace(0,0,*res);
-      }
-      else
-      {
-        // If res2 is a substring of str, then clone it first.
-        char buff[STRING_BUFFER_USUAL_SIZE];
-        String res2_clone(buff, sizeof(buff), system_charset_info);
-        if (res2->uses_buffer_owned_by(str))
-        {
-          if (res2_clone.copy(*res2))
-            goto null;
-          res2= &res2_clone;
-        }
-	str->copy(*res);
-	str->append(*sep_str);
-	str->append(*res2);
-      }
-      res=str;
-      use_as_buff= &tmp_value;
-    }
-    else if (res == &tmp_value)
-    {
-      if (res->append(*sep_str) || res->append(*res2))
-	goto null; // Must be a blob
-    }
-    else if (res2 == &tmp_value)
-    {						// This can happend only 1 time
-      if (tmp_value.replace(0,0,*sep_str) || tmp_value.replace(0,0,*res))
-	goto null;
-      res= &tmp_value;
-      use_as_buff=str;				// Put next arg here
-    }
-    else if (tmp_value.is_alloced() && res2->ptr() >= tmp_value.ptr() &&
-	     res2->ptr() < tmp_value.ptr() + tmp_value.alloced_length())
-    {
-      /*
-	This happens really seldom:
-	In this case res2 is sub string of tmp_value.  We will
-	now work in place in tmp_value to set it to res | sep_str | res2
-      */
-      /* Chop the last characters in tmp_value that isn't in res2 */
-      tmp_value.length((uint32) (res2->ptr() - tmp_value.ptr()) +
-		       res2->length());
-      /* Place res2 at start of tmp_value, remove chars before res2 */
-      if (tmp_value.replace(0,(uint32) (res2->ptr() - tmp_value.ptr()),
-			    *res) ||
-	  tmp_value.replace(res->length(),0, *sep_str))
-	goto null;
-      res= &tmp_value;
-      use_as_buff=str;			// Put next arg here
-    }
-    else
-    {						// Two big const strings
-      /*
-        NOTE: We should be prudent in the initial allocation unit -- the
-        size of the arguments is a function of data distribution, which can
-        be any. Instead of overcommitting at the first row, we grow the
-        allocated amount by the factor of 2. This ensures that no more than
-        25% of memory will be overcommitted on average.
-      */
+  for (i++; i < arg_count; i++) {
+    if (!(res2 = args[i]->val_str(str)))
+      continue; // Skip NULL
 
-      size_t concat_len= res->length() + sep_str->length() + res2->length();
-
-      if (tmp_value.alloced_length() < concat_len)
-      {
-        if (tmp_value.alloced_length() == 0)
-        {
-          if (tmp_value.alloc(concat_len))
-            goto null;
-        }
-        else
-        {
-          size_t new_len = max(tmp_value.alloced_length() * 2, concat_len);
-
-          if (tmp_value.mem_realloc(new_len))
-            goto null;
-        }
-      }
-
-      if (tmp_value.copy(*res) ||
-	  tmp_value.append(*sep_str) ||
-	  tmp_value.append(*res2))
-	goto null;
-      res= &tmp_value;
-      use_as_buff=str;
+    if (tmp_value.length() + sep_str->length() + res2->length() >
+        thd->variables.max_allowed_packet) {
+      push_warning_printf(thd, Sql_condition::SL_WARNING,
+                          ER_WARN_ALLOWED_PACKET_OVERFLOWED,
+                          ER(ER_WARN_ALLOWED_PACKET_OVERFLOWED), func_name(),
+                          thd->variables.max_allowed_packet);
+      null_value = 1;
+      return 0;
+    }
+    if (tmp_value.append(*sep_str) || tmp_value.append(*res2)) {
+      null_value = 1;
+      return 0;
     }
   }
+  res = &tmp_value;
   res->set_charset(collation.collation);
   return res;
-
-null:
-  null_value=1;
-  return 0;
 }
 
 
@@ -2159,6 +1965,12 @@ static size_t calculate_password(String *str, char *buffer)
 #if defined(HAVE_OPENSSL)
   if (old_passwords == 2)
   {
+    if (str->length() > MAX_PLAINTEXT_LENGTH)
+    {
+      my_error(ER_NOT_VALID_PASSWORD, MYF(0));
+      return 0;
+    }
+
     my_make_scrambled_password(buffer, str->ptr(),
                                str->length());
     buffer_len= strlen(buffer) + 1;
@@ -2224,31 +2036,6 @@ String *Item_func_password::val_str_ascii(String *str)
            default_charset());
 
   return str;
-}
-
-char *Item_func_password::
-  create_password_hash_buffer(THD *thd, const char *password,  size_t pass_len)
-{
-  String *password_str= new (thd->mem_root)String(password, thd->variables.
-                                                    character_set_client);
-  my_validate_password_policy(password_str->ptr(), password_str->length());
-
-  char *buff= NULL;
-  if (thd->variables.old_passwords == 0)
-  {
-    /* Allocate memory for the password scramble and one extra byte for \0 */
-    buff= (char *) thd->alloc(SCRAMBLED_PASSWORD_CHAR_LENGTH + 1);
-    my_make_scrambled_password_sha1(buff, password, pass_len);
-  }
-#if defined(HAVE_OPENSSL)
-  else
-  {
-    /* Allocate memory for the password scramble and one extra byte for \0 */
-    buff= (char *) thd->alloc(CRYPT_MAX_PASSWORD_SIZE + 1);
-    my_make_scrambled_password(buff, password, pass_len);
-  }
-#endif
-  return buff;
 }
 
 bool Item_func_encrypt::itemize(Parse_context *pc, Item **res)
@@ -3198,14 +2985,15 @@ String *Item_func_format::val_str_ascii(String *str)
       str_length >= dec_length + 1 + lc->grouping[0])
   {
     /* We need space for ',' between each group of digits as well. */
-    char buf[2 * FLOATING_POINT_BUFFER];
+    char buf[2 * FLOATING_POINT_BUFFER + 2] = {0};
     int count;
     const char *grouping= lc->grouping;
     char sign_length= *str->ptr() == '-' ? 1 : 0;
     const char *src= str->ptr() + str_length - dec_length - 1;
     const char *src_begin= str->ptr() + sign_length;
-    char *dst= buf + sizeof(buf);
-    
+    char *dst= buf + 2 * FLOATING_POINT_BUFFER;
+    char *start_dst = dst;
+
     /* Put the fractional part */
     if (dec)
     {
@@ -3237,7 +3025,8 @@ String *Item_func_format::val_str_ascii(String *str)
       *--dst= *str->ptr();
     
     /* Put the rest of the integer part without grouping */
-    str->copy(dst, buf + sizeof(buf) - dst, &my_charset_latin1);
+    size_t result_length = start_dst - dst;
+    str->copy(dst, result_length, &my_charset_latin1);
   }
   else if (dec_length && lc->decimal_point != '.')
   {
@@ -3718,6 +3507,7 @@ String *Item_func_rpad::val_str(String *str)
   char *to;
   /* must be longlong to avoid truncation */
   longlong count= args[1]->val_int();
+  /* Avoid modifying this string as it may affect args[0] */
   String *res= args[0]->val_str(str);
   String *rpad= args[2]->val_str(&rpad_str);
 
@@ -3761,10 +3551,15 @@ String *Item_func_rpad::val_str(String *str)
 
   const size_t res_char_length= res->numchars();
 
+  // String to pad is big enough
   if (count <= static_cast<longlong>(res_char_length))
-  {						// String to pad is big enough
-    res->length(res->charpos((int) count));	// Shorten result if longer
-    return (res);
+  {
+    int res_charpos= res->charpos((int)count);
+    if (tmp_value.alloc(res_charpos))
+      return NULL;
+    (void)tmp_value.copy(*res);
+    tmp_value.length(res_charpos); // Shorten result if longer
+    return &tmp_value;
   }
   const size_t pad_char_length= rpad->numchars();
 
@@ -3786,6 +3581,10 @@ String *Item_func_rpad::val_str(String *str)
   }
   /* Must be done before alloc_buffer */
   const size_t res_byte_length= res->length();
+  /*
+    alloc_buffer() doesn't modify 'res' because 'res' is guaranteed too short
+    at this stage.
+  */
   if (!(res= alloc_buffer(res, str, &tmp_value,
                           static_cast<size_t>(byte_count))))
   {
@@ -3846,6 +3645,7 @@ String *Item_func_lpad::val_str(String *str)
   /* must be longlong to avoid truncation */
   longlong count= args[1]->val_int();
   size_t byte_count;
+  /* Avoid modifying this string as it may affect args[0] */
   String *res= args[0]->val_str(&tmp_value);
   String *pad= args[2]->val_str(&lpad_str);
 
@@ -3886,8 +3686,12 @@ String *Item_func_lpad::val_str(String *str)
 
   if (count <= static_cast<longlong>(res_char_length))
   {
-    res->length(res->charpos((int) count));
-    return res;
+    int res_charpos= res->charpos((int)count);
+   if (tmp_value.alloc(res_charpos))
+     return NULL;
+   (void)tmp_value.copy(*res);
+   tmp_value.length(res_charpos); // Shorten result if longer
+   return &tmp_value;
   }
   
   pad_char_length= pad->numchars();

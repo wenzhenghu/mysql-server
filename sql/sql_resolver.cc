@@ -1,13 +1,20 @@
-/* Copyright (c) 2000, 2017, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2000, 2020, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -33,6 +40,7 @@
 #include "opt_explain_format.h"
 #include "sql_test.h"            // print_where
 #include "aggregate_check.h"
+#include "template_utils.h"
 
 static void propagate_nullability(List<TABLE_LIST> *tables, bool nullable);
 
@@ -230,7 +238,6 @@ bool SELECT_LEX::prepare(THD *thd)
 
   // Set up the ORDER BY clause
   all_fields_count= all_fields.elements;
-  int hidden_order_field_count= 0;
   if (order_list.elements)
   {
     if (setup_order(thd, ref_ptrs, get_table_list(), fields_list, all_fields,
@@ -256,11 +263,11 @@ bool SELECT_LEX::prepare(THD *thd)
       first_execution &&                                   // 2)
       !(thd->lex->context_analysis_only & CONTEXT_ANALYSIS_ONLY_VIEW)) // 3)
   {
-    remove_redundant_subquery_clauses(thd, hidden_group_field_count,
-                                      hidden_order_field_count);
+    remove_redundant_subquery_clauses(thd, hidden_group_field_count);
   }
 
-  if (order_list.elements && setup_order_final(thd, hidden_order_field_count))
+  if (order_list.elements &&
+      setup_order_final(thd))
     DBUG_RETURN(true);     /* purecov: inspected */
 
   if (is_distinct() &&
@@ -362,8 +369,15 @@ bool SELECT_LEX::prepare(THD *thd)
 
   sj_candidates= NULL;
 
+  /*
+    When reaching the top-most query block, or the next-to-top query block for
+    the SQL command SET and for SP instructions (indicated with SQLCOM_END),
+    apply local transformations to this query block and all underlying query
+    blocks.
+  */
   if (outer_select() == NULL ||
-      (parent_lex->sql_command == SQLCOM_SET_OPTION &&
+      ((parent_lex->sql_command == SQLCOM_SET_OPTION ||
+       parent_lex->sql_command == SQLCOM_END) &&
        outer_select()->outer_select() == NULL))
   {
     /*
@@ -1022,9 +1036,10 @@ bool SELECT_LEX::resolve_subquery(THD *thd)
       a single table UPDATE/DELETE (TODO: We should handle this at some
       point by switching to multi-table UPDATE/DELETE)
       7. We're not in a confluent table-less subquery, like "SELECT 1".
-      8. No execution method was already chosen (by a prepared statement)
-      9. Parent select is not a confluent table-less select
-      10. Neither parent nor child select have STRAIGHT_JOIN option.
+      8. No execution method was already chosen (by a prepared statement).
+      9. Parent query block is not a confluent table-less query block.
+      10. Neither parent nor child query block has straight join.
+      11. Parent query block does not prohibit semi-join.
   */
   if (semijoin_enabled(thd) &&
       in_predicate &&                                                   // 1
@@ -1035,12 +1050,13 @@ bool SELECT_LEX::resolve_subquery(THD *thd)
        outer->resolve_place == st_select_lex::RESOLVE_JOIN_NEST) &&     // 5a
       !outer->semijoin_disallowed &&                                    // 5b
       outer->sj_candidates &&                                           // 6
-      leaf_table_count &&                                               // 7
+      leaf_table_count > 0 &&                                           // 7
       in_predicate->exec_method ==
                            Item_exists_subselect::EXEC_UNSPECIFIED &&   // 8
       outer->leaf_table_count &&                                        // 9
       !((active_options() | outer->active_options()) &
-       SELECT_STRAIGHT_JOIN))                                           //10
+        SELECT_STRAIGHT_JOIN) &&                                        //10
+      !(outer->active_options() & SELECT_NO_SEMI_JOIN))                 //11
   {
     DBUG_PRINT("info", ("Subquery is semi-join conversion candidate"));
 
@@ -1095,11 +1111,10 @@ bool SELECT_LEX::setup_wild(THD *thd)
   {
     Item_field *item_field;
     if (item->type() == Item::FIELD_ITEM &&
-        (item_field= (Item_field *) item) &&
-        item_field->field_name &&
-        item_field->field_name[0] == '*' &&
-        !item_field->field)
+        (item_field= down_cast<Item_field *>(item)) &&
+        item_field->is_asterisk())
     {
+      DBUG_ASSERT(item_field->field == NULL);
       const uint elem= fields_list.elements;
       const bool any_privileges= item_field->any_privileges;
       Item_subselect *subsel= master_unit()->item;
@@ -1967,6 +1982,20 @@ SELECT_LEX::convert_subquery_to_semijoin(Item_exists_subselect *subq_pred)
           break;
         }
       }
+
+      /*
+        outer_tbl is replaced by wrap_nest.
+        For subselects, update embedding_join_nest to point to wrap_nest
+        instead of outer_tbl
+      */
+      for (Item_exists_subselect **subquery= sj_candidates->begin();
+           subquery < sj_candidates->end();
+           subquery++)
+      {
+        if ((*subquery)->embedding_join_nest == outer_tbl)
+          (*subquery)->embedding_join_nest= wrap_nest;
+      }
+
       /*
         Ok now wrap_nest 'contains' outer_tbl and we're ready to add the 
         semi-join nest into it
@@ -2431,7 +2460,28 @@ bool SELECT_LEX::merge_derived(THD *thd, TABLE_LIST *derived_table)
           is_distinct() ||
           is_ordered() ||
           get_table_list()->next_local != NULL))
+    {
       order_list.push_back(&derived_select->order_list);
+      /*
+        If at outer-most level (not within another derived table), ensure
+        the ordering columns are marked in read_set, since columns selected
+        from derived tables are not marked in initial resolving.
+      */
+      if (!thd->derived_tables_processing)
+      {
+        Mark_field mf(thd->mark_used_columns);
+        for (ORDER *o = derived_select->order_list.first; o != NULL;
+             o = o->next)
+          o->item[0]->walk(&Item::mark_field_in_map, Item::WALK_POSTFIX,
+                           pointer_cast<uchar *>(&mf));
+      }
+    }
+    else
+    {
+      derived_select->empty_order_list(this);
+      trace_derived.add_alnum("transformations_to_derived_table",
+                              "removed_ordering");
+    }
   }
 
   // Add any full-text functions from derived table into outer query
@@ -2697,6 +2747,19 @@ bool SELECT_LEX::flatten_subqueries()
   DBUG_RETURN(FALSE);
 }
 
+bool SELECT_LEX::is_in_select_list(Item *cand) {
+  List_iterator<Item> li(fields_list);
+  Item *item;
+  while ((item = li++)) {
+    // Use a walker to detect if cand is present in this select item
+
+    if (item->walk(&Item::find_item_processor, Item::WALK_SUBQUERY_POSTFIX,
+                   pointer_cast<uchar *>(cand)))
+      return true;
+  }
+  return false;
+}
+
 /**
   Propagate nullability into inner tables of outer join operation
 
@@ -2941,14 +3004,11 @@ bool SELECT_LEX::fix_inner_refs(THD *thd)
    @param thd               thread handler
    @param hidden_group_field_count Number of hidden group fields added
                             by setup_group().
-   @param hidden_order_field_count Number of hidden order fields added
-                            by setup_order().
 */
 
 
 void SELECT_LEX::remove_redundant_subquery_clauses(THD *thd,
-                                                   int hidden_group_field_count,
-                                                   int hidden_order_field_count)
+                                                   int hidden_group_field_count)
 {
   Item_subselect *subq_predicate= master_unit()->item;
   /*
@@ -2980,7 +3040,7 @@ void SELECT_LEX::remove_redundant_subquery_clauses(THD *thd,
   if (order_list.elements)
   {
     changelog|= REMOVE_ORDER;
-    empty_order_list(hidden_order_field_count);
+    empty_order_list(this);
   }
 
   if (is_distinct())
@@ -3031,16 +3091,18 @@ void SELECT_LEX::remove_redundant_subquery_clauses(THD *thd,
   Delete corresponding elements from all_fields and ref_ptrs too.
   If ORDER list contain any subqueries, delete them from the query block list.
 
-  @param hidden_order_field_count Number of hidden order fields to remove
+  @param sl  Query block that possible subquery blocks in the ORDER BY clause
+             are attached to (may be different from "this" when query block has
+             been merged into an outer query block).
 */
 
-void SELECT_LEX::empty_order_list(int hidden_order_field_count)
+void SELECT_LEX::empty_order_list(SELECT_LEX *sl)
 {
   for (ORDER *o= order_list.first; o != NULL; o= o->next)
   {
     if (*o->item == o->item_ptr)
       (*o->item)->walk(&Item::clean_up_after_removal, walk_subquery,
-                       reinterpret_cast<uchar*>(this));
+                       pointer_cast<uchar *>(sl));
   }
   order_list.empty();
   while (hidden_order_field_count-- > 0)
@@ -3378,17 +3440,15 @@ bool SELECT_LEX::check_only_full_group_by(THD *thd)
   Split any aggregate functions.
 
   @param thd                      Thread handler
-  @param hidden_order_field_count Number of fields to delete from ref array
-                                  if ORDER BY clause is redundant.
 
   @returns false if success, true if error
 */
-bool SELECT_LEX::setup_order_final(THD *thd, int hidden_order_field_count)
+bool SELECT_LEX::setup_order_final(THD *thd)
 {
   if (is_implicitly_grouped())
   {
     // Result will contain zero or one row - ordering is redundant
-    empty_order_list(hidden_order_field_count);
+    empty_order_list(this);
     return false;
   }
 
@@ -3397,7 +3457,7 @@ bool SELECT_LEX::setup_order_final(THD *thd, int hidden_order_field_count)
       !(braces && explicit_limit))
   {
     // Part of UNION which requires global ordering may skip local order
-    empty_order_list(hidden_order_field_count);
+    empty_order_list(this);
     return false;
   }
 
@@ -3610,7 +3670,7 @@ validate_gc_assignment(THD * thd, List<Item> *fields,
     Field *rfield;
 
     if (!use_table_field)
-      rfield= ((Item_field *)f++)->field;
+      rfield= (down_cast<Item_field*>((f++)->real_item()))->field;
     else
       rfield= *(fld++);
     if (rfield->table != table)

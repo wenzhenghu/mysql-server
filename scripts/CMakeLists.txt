@@ -1,14 +1,21 @@
-# Copyright (c) 2006, 2017, Oracle and/or its affiliates. All rights reserved.
+# Copyright (c) 2006, 2020, Oracle and/or its affiliates.
 # 
 # This program is free software; you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; version 2 of the License.
-# 
+# it under the terms of the GNU General Public License, version 2.0,
+# as published by the Free Software Foundation.
+#
+# This program is also distributed with certain software (including
+# but not limited to OpenSSL) that is licensed under separate terms,
+# as designated in a particular file or component or in included license
+# documentation.  The authors of MySQL hereby grant you an additional
+# permission to link the program and your derivative works with the
+# separately licensed software that they have included with MySQL.
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-# 
+# GNU General Public License, version 2.0, for more details.
+#
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301 USA
@@ -167,12 +174,6 @@ IF(NOT WITHOUT_SERVER)
   )
 ENDIF()
 
-# TCMalloc hacks
-IF(MALLOC_LIB)
-  MESSAGE("Using tcmalloc '${MALLOC_LIB}'")
-  INSTALL(FILES ${MALLOC_LIB} DESTINATION ${INSTALL_LIBDIR} OPTIONAL)
-ENDIF()
-
 SET(COMPILE_DEFINITIONS_WHITELIST
 )
 
@@ -214,6 +215,12 @@ ENDFOREACH()
 # the correct libraries. Only remove for GCC/Clang
 IF(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   STRING(REGEX REPLACE "-std=c..[0-9]+" "" CXXFLAGS "${CXXFLAGS}")
+ENDIF()
+
+IF(CMAKE_SYSTEM_NAME MATCHES "FreeBSD")
+  SET (PERL_PATH "/usr/local/bin/perl")
+ELSE()
+  SET (PERL_PATH "/usr/bin/perl")
 ENDIF()
 
 IF(UNIX)
@@ -302,14 +309,6 @@ ENDIF()
 SET(CLIENT_LIBS "")
 SET(LIBS "")
 
-# Avoid compatibility warning about lists with empty elements
-IF(POLICY CMP0011)
-  CMAKE_POLICY(SET CMP0011 NEW)
-ENDIF()
-IF(POLICY CMP0007)
-  CMAKE_POLICY(SET CMP0007 OLD)
-ENDIF()
-
 # Extract dependencies using CMake's internal ${target}_LIB_DEPENDS variable
 # returned string in ${var} is can be passed to linker's command line
 MACRO(EXTRACT_LINK_LIBRARIES target var)
@@ -317,17 +316,22 @@ MACRO(EXTRACT_LINK_LIBRARIES target var)
     LIST(REMOVE_ITEM ${target}_LIB_DEPENDS "")
     LIST(REMOVE_DUPLICATES ${target}_LIB_DEPENDS)
     FOREACH(lib ${${target}_LIB_DEPENDS})
+      # Filter out -limported_openssl and -limported_crypto
       # Filter out "general", it is not a library, just CMake hint
-      IF(NOT lib STREQUAL "general" AND NOT ${var}  MATCHES "-l${lib} ")
+      IF(NOT lib STREQUAL "general" AND NOT ${var}  MATCHES "-l${lib} " AND
+          NOT lib MATCHES "imported_"
+          )
         IF (lib MATCHES "^\\-l")
-          SET(${var} "${${var}} ${lib} ") 
+          SET(${var} "${${var}} ${lib} ")
+        ELSEIF (lib MATCHES "^\\-L")
+          SET(${var} "${${var}} ${lib} ")
         ELSEIF(lib MATCHES "^/")
           # Full path, convert to just filename, strip "lib" prefix and extension
           GET_FILENAME_COMPONENT(lib "${lib}" NAME_WE)
           STRING(REGEX REPLACE "^lib" "" lib "${lib}")
-          SET(${var} "${${var}}-l${lib} " ) 
+          SET(${var} "${${var}}-l${lib} " )
         ELSE()
-          SET(${var} "${${var}}-l${lib} " ) 
+          SET(${var} "${${var}}-l${lib} " )
         ENDIF()
       ENDIF()
     ENDFOREACH()
@@ -470,15 +474,6 @@ ELSE()
       COMPONENT ${${file}_COMPONENT}
      )
   ENDFOREACH()
-  IF(COPY_MYSQL_CONFIG)
-    CONFIGURE_FILE(${CMAKE_CURRENT_BINARY_DIR}/mysql_config
-       ${CMAKE_CURRENT_BINARY_DIR}/mysql_server_config COPYONLY)
-    INSTALL_SCRIPT(
-      ${CMAKE_CURRENT_BINARY_DIR}/mysql_server_config
-      DESTINATION ${INSTALL_BINDIR}
-      COMPONENT ${mysql_server_config_COMPONENT}
-    )
-  ENDIF()
 
   # Systemd files
   IF(WITH_SYSTEMD)

@@ -1,16 +1,23 @@
 #ifndef SQL_USER_CACHE_INCLUDED
 #define SQL_USER_CACHE_INCLUDED
 
-/* Copyright (c) 2000, 2015, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2000, 2020, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software Foundation,
@@ -41,8 +48,8 @@ class ACL_HOST_AND_IP
   const char *calc_ip(const char *ip_arg, long *val, char end);
 
 public:
-  const char *get_host() const { return hostname; }
-  size_t get_host_len() { return hostname_length; }
+  const char *get_host() const { return hostname ? hostname : ""; }
+  size_t get_host_len() const { return hostname_length; }
 
   bool has_wildcard()
   {
@@ -57,9 +64,8 @@ public:
   }
 
   void update_hostname(const char *host_arg);
-
   bool compare_hostname(const char *host_arg, const char *ip_arg);
-
+  bool is_null() const { return hostname == NULL; }
 };
 
 class ACL_ACCESS {
@@ -152,7 +158,7 @@ public:
     user= user_arg && *user_arg ? strdup_root(mem, user_arg) : NULL;
   }
 
-  bool check_validity(bool check_no_resolve);
+  void check_validity(bool check_no_resolve);
 
   bool matches(const char *host_arg, const char *user_arg, const char *ip_arg,
                 const char *proxied_user_arg, bool any_proxy_user);
@@ -169,8 +175,8 @@ public:
   {
     return (((!user && (!user_arg || !user_arg[0])) ||
              (user && user_arg && !strcmp(user, user_arg))) &&
-            ((!host.get_host() && (!host_arg || !host_arg[0])) ||
-             (host.get_host() && host_arg && !strcmp(host.get_host(), host_arg))));
+            ((host.is_null() && (!host_arg || !host_arg[0])) ||
+             (!host.is_null() && host_arg && !strcmp(host.get_host(), host_arg))));
   }
 
 

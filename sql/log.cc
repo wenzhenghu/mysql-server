@@ -1,13 +1,20 @@
-/* Copyright (c) 2000, 2016, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2000, 2019, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -46,10 +53,6 @@
 
 using std::min;
 using std::max;
-
-/* max size of log messages (error log, plugins' logging, general log) */
-static const uint MAX_LOG_BUFFER_SIZE= 1024;
-
 
 #ifndef _WIN32
 static int   log_syslog_facility= 0;
@@ -1713,10 +1716,10 @@ void log_slow_do(THD *thd)
   THD_STAGE_INFO(thd, stage_logging_slow_query);
   thd->status_var.long_query_count++;
 
-  if (thd->rewritten_query.length())
+  if (thd->rewritten_query().length())
     query_logger.slow_log_write(thd,
-                                thd->rewritten_query.c_ptr_safe(),
-                                thd->rewritten_query.length());
+                                thd->rewritten_query().ptr(),
+                                thd->rewritten_query().length());
   else
     query_logger.slow_log_write(thd, thd->query().str, thd->query().length);
 }
@@ -1979,7 +1982,7 @@ void init_error_log()
 }
 
 
-bool open_error_log(const char *filename)
+bool open_error_log(const char *filename, bool get_lock)
 {
   DBUG_ASSERT(filename);
   int retries= 2, errors= 0;
@@ -1997,7 +2000,17 @@ bool open_error_log(const char *filename)
   while (retries-- && errors);
 
   if (errors)
+  {
+    char errbuf[MYSYS_STRERROR_SIZE];
+    if (get_lock)
+      mysql_mutex_unlock(&LOCK_error_log);
+    sql_print_error(ER_DEFAULT(ER_CANT_OPEN_ERROR_LOG), filename,
+                    ": ", my_strerror(errbuf, sizeof(errbuf), errno));
+    flush_error_log_messages();
+    if (get_lock)
+      mysql_mutex_lock(&LOCK_error_log);
     return true;
+  }
 
   /* The error stream must be unbuffered. */
   setbuf(stderr, NULL);
@@ -2030,10 +2043,10 @@ bool reopen_error_log()
   if (!error_log_file)
     return false;
   mysql_mutex_lock(&LOCK_error_log);
-  bool result= open_error_log(error_log_file);
+  bool result= open_error_log(error_log_file, true);
   mysql_mutex_unlock(&LOCK_error_log);
   if (result)
-    my_error(ER_UNKNOWN_ERROR, MYF(0));
+    my_error(ER_CANT_OPEN_ERROR_LOG, MYF(0), error_log_file, ".", "");
   return result;
 }
 

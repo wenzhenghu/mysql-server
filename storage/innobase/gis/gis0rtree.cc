@@ -1,14 +1,22 @@
 /*****************************************************************************
 
-Copyright (c) 2016, Oracle and/or its affiliates. All Rights Reserved.
+Copyright (c) 2016, 2019, Oracle and/or its affiliates. All Rights Reserved.
 
-This program is free software; you can redistribute it and/or modify it under
-the terms of the GNU General Public License as published by the Free Software
-Foundation; version 2 of the License.
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License, version 2.0,
+as published by the Free Software Foundation.
 
-This program is distributed in the hope that it will be useful, but WITHOUT
-ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+This program is also distributed with certain software (including
+but not limited to OpenSSL) that is licensed under separate terms,
+as designated in a particular file or component or in included license
+documentation.  The authors of MySQL hereby grant you an additional
+permission to link the program and your derivative works with the
+separately licensed software that they have included with MySQL.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License, version 2.0, for more details.
 
 You should have received a copy of the GNU General Public License along with
 this program; if not, write to the Free Software Foundation, Inc.,
@@ -663,7 +671,6 @@ rtr_adjust_upper_level(
 
 	/* Create a memory heap where the data tuple is stored */
 	heap = mem_heap_create(1024);
-	memset(&cursor, 0, sizeof(cursor));
 
 	cursor.thr = sea_cur->thr;
 
@@ -728,15 +735,30 @@ rtr_adjust_upper_level(
 		cursor.rtr_info = sea_cur->rtr_info;
 		cursor.tree_height = sea_cur->tree_height;
 
+		mem_heap_t *new_heap = NULL;
+
+		DBUG_EXECUTE_IF("rtr_page_need_first_split", {
+			DBUG_SET("+d,rtr_page_need_second_split");
+		});
+
 		err = btr_cur_pessimistic_insert(flags
 						 | BTR_NO_LOCKING_FLAG
 						 | BTR_KEEP_SYS_FLAG
 						 | BTR_NO_UNDO_LOG_FLAG,
-						 &cursor, &offsets, &heap,
+						 &cursor, &offsets, &new_heap,
 						 node_ptr_upper, &rec,
 						 &dummy_big_rec, 0, NULL, mtr);
+
+		DBUG_EXECUTE_IF("rtr_page_need_first_split", {
+			DBUG_SET("-d,rtr_page_need_second_split");
+		});
+
 		cursor.rtr_info = NULL;
 		ut_a(err == DB_SUCCESS);
+
+		if (new_heap) {
+			mem_heap_free(new_heap);
+		}
 	}
 
 	prdt.data = static_cast<void*>(mbr);
@@ -1032,6 +1054,7 @@ rtr_page_split_and_insert(
 	}
 
 func_start:
+	ut_ad(tuple->m_heap != *heap);
 	mem_heap_empty(*heap);
 	*offsets = NULL;
 
@@ -1346,7 +1369,6 @@ rtr_ins_enlarge_mbr(
 	page_cur_t*		page_cursor;
 	ulint*			offsets;
 	node_visit_t*		node_visit;
-	btr_cur_t		cursor;
 	page_t*			page;
 
 	ut_ad(dict_index_is_spatial(index));
@@ -1380,7 +1402,7 @@ rtr_ins_enlarge_mbr(
 		rtr_page_cal_mbr(index, block, &new_mbr, heap);
 
 		/* Get father block. */
-		memset(&cursor, 0, sizeof(cursor));
+		btr_cur_t cursor;
 		offsets = rtr_page_get_father_block(
 			NULL, heap, index, block, mtr, btr_cur, &cursor);
 
@@ -1472,7 +1494,9 @@ rtr_page_copy_rec_list_end_no_locks(
 						   ULINT_UNDEFINED, &heap);
 			cmp = cmp_rec_rec_with_match(cur1_rec, cur_rec,
 						     offsets1, offsets2,
-						     index, FALSE,
+						     index,
+						     page_is_spatial_non_leaf(cur1_rec, index),
+						     false,
 						     &cur_matched_fields);
 			if (cmp < 0) {
 				page_cur_move_to_prev(&page_cur);
@@ -1591,7 +1615,9 @@ rtr_page_copy_rec_list_start_no_locks(
 						   ULINT_UNDEFINED, &heap);
 			cmp = cmp_rec_rec_with_match(cur1_rec, cur_rec,
 						     offsets1, offsets2,
-						     index, FALSE,
+						     index,
+						     page_is_spatial_non_leaf(cur1_rec, index),
+						     false,
 						     &cur_matched_fields);
 			if (cmp < 0) {
 				page_cur_move_to_prev(&page_cur);

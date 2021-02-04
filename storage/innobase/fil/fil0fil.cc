@@ -1,14 +1,22 @@
 /*****************************************************************************
 
-Copyright (c) 1995, 2017, Oracle and/or its affiliates. All Rights Reserved.
+Copyright (c) 1995, 2020, Oracle and/or its affiliates.
 
-This program is free software; you can redistribute it and/or modify it under
-the terms of the GNU General Public License as published by the Free Software
-Foundation; version 2 of the License.
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License, version 2.0,
+as published by the Free Software Foundation.
 
-This program is distributed in the hope that it will be useful, but WITHOUT
-ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+This program is also distributed with certain software (including
+but not limited to OpenSSL) that is licensed under separate terms,
+as designated in a particular file or component or in included license
+documentation.  The authors of MySQL hereby grant you an additional
+permission to link the program and your derivative works with the
+separately licensed software that they have included with MySQL.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License, version 2.0, for more details.
 
 You should have received a copy of the GNU General Public License along with
 this program; if not, write to the Free Software Foundation, Inc.,
@@ -603,6 +611,8 @@ fil_node_create_low(
 	node->is_raw_disk = is_raw;
 
 	node->size = size;
+
+	node->flush_size = size;
 
 	node->magic_n = FIL_NODE_MAGIC_N;
 
@@ -2974,15 +2984,17 @@ fil_prepare_for_truncate(
 
 /** Reinitialize the original tablespace header with the same space id
 for single tablespace
-@param[in]      id              space id of the tablespace
+@param[in]      table		table belongs to tablespace
 @param[in]      size            size in blocks
 @param[in]      trx             Transaction covering truncate */
 void
-fil_reinit_space_header(
-	ulint		id,
+fil_reinit_space_header_for_table(
+	dict_table_t*	table,
 	ulint		size,
 	trx_t*		trx)
 {
+	ulint	id = table->space;
+
 	ut_a(!is_system_tablespace(id));
 
 	/* Invalidate in the buffer pool all pages belonging
@@ -2991,7 +3003,11 @@ fil_reinit_space_header(
 	and the dict operation lock during the scan and aquire
 	it again after the buffer pool scan.*/
 
+	/* Release the lock on the indexes too. So that
+	they won't violate the latch ordering. */
+	dict_table_x_unlock_indexes(table);
 	row_mysql_unlock_data_dictionary(trx);
+	DEBUG_SYNC_C("trunc_table_index_dropped_release_dict_lock");
 
 	/* Lock the search latch in shared mode to prevent user
 	from disabling AHI during the scan */
@@ -2999,7 +3015,10 @@ fil_reinit_space_header(
 	DEBUG_SYNC_C("simulate_buffer_pool_scan");
 	buf_LRU_flush_or_remove_pages(id, BUF_REMOVE_ALL_NO_WRITE, 0);
 	btr_search_s_unlock_all();
+
 	row_mysql_lock_data_dictionary(trx);
+
+	dict_table_x_lock_indexes(table);
 
 	/* Remove all insert buffer entries for the tablespace */
 	ibuf_delete_for_discarded_space(id);
@@ -5062,24 +5081,40 @@ retry:
 
 #if !defined(NO_FALLOCATE) && defined(UNIV_LINUX)
 		int     ret = posix_fallocate(node->handle.m_file, node_start, len);
-		/* We already pass the valid offset and len in, if EINVAL
-		is returned, it could only mean that the file system doesn't
-		support fallocate(), currently one known case is
-		ext3 FS with O_DIRECT. We ignore EINVAL here so that the
-		error message won't flood. */
-		if (ret != 0 && ret != EINVAL) {
-			ib::error()
-				<< "posix_fallocate(): Failed to preallocate"
-				" data for file "
-				<< node->name << ", desired size "
-				<< len << " bytes."
-				" Operating system error number "
-				<< ret << ". Check"
-				" that the disk is not full or a disk quota"
-				" exceeded. Make sure the file system supports"
-				" this function. Some operating system error"
-				" numbers are described at " REFMAN
-				" operating-system-error-codes.html";
+
+		DBUG_EXECUTE_IF("ib_posix_fallocate_fail_eintr",
+				ret = EINTR;);
+
+		DBUG_EXECUTE_IF("ib_posix_fallocate_fail_einval",
+				ret = EINVAL;);
+
+		if (ret != 0) {
+			/* We already pass the valid offset and len in,
+			if EINVAL is returned, it could only mean that the
+			file system doesn't support fallocate(), currently
+			one known case is ext3 with O_DIRECT.
+
+			Also because above call could be interrupted,
+			in this case, simply go to plan B by writing zeroes.
+
+			Both error messages for above two scenarios are
+			skipped in case of flooding error messages, because
+			they can be ignored by users. */
+			if (ret != EINTR && ret != EINVAL) {
+				ib::error()
+					<< "posix_fallocate(): Failed to"
+					" preallocate data for file "
+					<< node->name << ", desired size "
+					<< len << " bytes."
+					" Operating system error number "
+					<< ret << ". Check"
+					" that the disk is not full or a disk"
+					" quota exceeded. Make sure the file"
+					" system supports this function."
+					" Some operating system error"
+					" numbers are described at " REFMAN
+					"operating-system-error-codes.html";
+			}
 
 			err = DB_IO_ERROR;
 		}
@@ -5896,26 +5931,35 @@ fil_flush(
 		return;
 	}
 
-	if (fil_buffering_disabled(space)) {
+	bool fbd = fil_buffering_disabled(space);
+	if (fbd) {
 
 		/* No need to flush. User has explicitly disabled
-		buffering. */
+		buffering. However, flush should be called if the file
+                size changes to keep OS metadata in sync. */
 		ut_ad(!space->is_in_unflushed_spaces);
 		ut_ad(fil_space_is_flushed(space));
-		ut_ad(space->n_pending_flushes == 0);
 
-#ifdef UNIV_DEBUG
+		/* Flush only if the file size changes */
+		bool no_flush = true;
 		for (node = UT_LIST_GET_FIRST(space->chain);
 		     node != NULL;
 		     node = UT_LIST_GET_NEXT(chain, node)) {
+#ifdef UNIV_DEBUG
 			ut_ad(node->modification_counter
 			      == node->flush_counter);
-			ut_ad(node->n_pending_flushes == 0);
-		}
 #endif /* UNIV_DEBUG */
+			if (node->flush_size != node->size) {
+				/* Found at least one file whose size has changed */
+				no_flush = false;
+				break;
+			}
+		}
 
-		mutex_exit(&fil_system->mutex);
-		return;
+		if (no_flush) {
+			mutex_exit(&fil_system->mutex);
+			return;
+		}
 	}
 
 	space->n_pending_flushes++;	/*!< prevent dropping of the space while
@@ -5926,11 +5970,26 @@ fil_flush(
 
 		int64_t	old_mod_counter = node->modification_counter;
 
-		if (old_mod_counter <= node->flush_counter) {
+		if (!node->is_open) {
 			continue;
 		}
 
-		ut_a(node->is_open);
+		/* Skip flushing if the file size has not changed since
+		last flush was done and the flush mode is O_DIRECT_NO_FSYNC */
+		if (fbd && (node->flush_size == node->size)) {
+			continue;
+		}
+
+		/* If we are here and the flush mode is O_DIRECT_NO_FSYNC, then
+		it means that the file size has changed and hence, it shold be
+		flushed, irrespective of the mod_counter and flush counter values,
+		which are always same in case of O_DIRECT_NO_FSYNC to avoid flush
+		on every write operation.
+		For other flush modes, if the flush_counter is same or ahead of
+		the mode_counter, skip the flush. */
+		if (!fbd && (old_mod_counter <= node->flush_counter)) {
+			continue;
+		}
 
 		switch (space->purpose) {
 		case FIL_TYPE_TEMPORARY:
@@ -5982,6 +6041,8 @@ retry:
 		mutex_exit(&fil_system->mutex);
 
 		os_file_flush(file);
+
+		node->flush_size = node->size;
 
 		mutex_enter(&fil_system->mutex);
 
@@ -6279,6 +6340,7 @@ struct fil_iterator_t {
 	byte*		io_buffer;		/*!< Buffer to use for IO */
 	byte*		encryption_key;		/*!< Encryption key */
 	byte*		encryption_iv;		/*!< Encryption iv */
+	size_t		block_size;		/*!< FS Block Size */
 };
 
 /********************************************************************//**
@@ -6353,6 +6415,7 @@ fil_iterate(
 
 		dberr_t		err;
 		IORequest	read_request(read_type);
+		read_request.block_size(iter.block_size);
 
 		/* For encrypted table, set encryption information. */
 		if (iter.encryption_key != NULL && offset != 0) {
@@ -6399,6 +6462,7 @@ fil_iterate(
 		}
 
 		IORequest	write_request(write_type);
+		write_request.block_size(iter.block_size);
 
 		/* For encrypted table, set encryption information. */
 		if (iter.encryption_key != NULL && offset != 0) {
@@ -6506,6 +6570,17 @@ fil_tablespace_iterate(
 		err = DB_SUCCESS;
 	}
 
+	/* Set File System Block Size */
+	size_t block_size;
+	{
+		os_file_stat_t stat_info;
+
+		ut_d(dberr_t err =) os_file_get_status(filepath, &stat_info, false, false);
+		ut_ad(err == DB_SUCCESS);
+
+		block_size = stat_info.block_size;
+	}
+
 	callback.set_file(filepath, file);
 
 	os_offset_t	file_size = os_file_get_size(file);
@@ -6548,6 +6623,7 @@ fil_tablespace_iterate(
 		iter.file_size = file_size;
 		iter.n_io_buffers = n_io_buffers;
 		iter.page_size = callback.get_page_size().physical();
+		iter.block_size = block_size;
 
 		/* Set encryption info. */
 		iter.encryption_key = table->encryption_key;
@@ -6556,14 +6632,22 @@ fil_tablespace_iterate(
 		/* Check encryption is matched or not. */
 		ulint	space_flags = callback.get_space_flags();
 		if (FSP_FLAGS_GET_ENCRYPTION(space_flags)) {
-			ut_ad(table->encryption_key != NULL);
-
 			if (!dict_table_is_encrypted(table)) {
 				ib::error() << "Table is not in an encrypted"
-					" tablespace, but the data file which"
-					" trying to import is an encrypted"
+					" tablespace, but the data file"
+                                        " intended for import is an encrypted"
 					" tablespace";
 				err = DB_IO_NO_ENCRYPT_TABLESPACE;
+			} else {
+				/* encryption_key must have been populated
+                                while reading CFP file. */
+				ut_ad(table->encryption_key != NULL &&
+				table->encryption_iv != NULL);
+
+				if (table->encryption_key == NULL ||
+					table->encryption_iv == NULL) {
+					err = DB_ERROR;
+				}
 			}
 		}
 

@@ -1,14 +1,21 @@
 /*
-   Copyright (c) 2000, 2017, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2000, 2020, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -2112,7 +2119,8 @@ bool Item_name_const::fix_fields(THD *thd, Item **ref)
   {
     item_name.copy(tmp->ptr(), (uint) tmp->length(), system_charset_info);
   }
-  collation.set(value_item->collation.collation, DERIVATION_IMPLICIT,
+  collation.set(value_item->collation.collation,
+                value_item->collation.derivation,
                 value_item->collation.repertoire);
   max_length= value_item->max_length;
   decimals= value_item->decimals;
@@ -2205,17 +2213,28 @@ void Item::split_sum_func2(THD *thd, Ref_ptr_array ref_pointer_array,
       Exception is Item_direct_view_ref which we need to convert to
       Item_ref to allow fields from view being stored in tmp table.
     */
-    Item_aggregate_ref *item_ref;
     uint el= fields.elements;
     Item *real_itm= real_item();
+    SELECT_LEX *base_select;
+    SELECT_LEX *depended_from= NULL;
 
-    ref_pointer_array[el]= real_itm;
-    if (!(item_ref= new Item_aggregate_ref(&thd->lex->current_select()->context,
-                                           &ref_pointer_array[el], 0,
-                                           item_name.ptr())))
-      return;                                   // fatal_error is set
     if (type() == SUM_FUNC_ITEM)
-      item_ref->depended_from= ((Item_sum *) this)->depended_from(); 
+    {
+      Item_sum *const item= down_cast<Item_sum *>(this);
+      base_select= item->base_select;
+      depended_from= item->depended_from();
+    }
+    else
+    {
+      base_select= thd->lex->current_select();
+    }
+    ref_pointer_array[el]= real_itm;
+    Item_aggregate_ref *const item_ref=
+      new Item_aggregate_ref(&base_select->context, &ref_pointer_array[el],
+                             0, item_name.ptr());
+    if (!item_ref)
+      return;                      /* purecov: inspected */
+    item_ref->depended_from= depended_from;
     fields.push_front(real_itm);
     thd->change_item_tree(ref, item_ref);
   }
@@ -2236,6 +2255,12 @@ left_is_superset(DTCollation *left, DTCollation *right)
           left->collation->mbmaxlen > right->collation->mbmaxlen &&
           left->collation->mbminlen == right->collation->mbminlen)))))
     return TRUE;
+  /* Allow convert from any Unicode to utf32 or utf8mb4 */
+  if (test_all_bits(left->collation->state,
+                    MY_CS_UNICODE | MY_CS_UNICODE_SUPPLEMENT) &&
+      right->collation->state & MY_CS_UNICODE &&
+      left->derivation == right->derivation)
+    return true;
   /* Allow convert from ASCII */
   if (right->repertoire == MY_REPERTOIRE_ASCII &&
       (left->derivation < right->derivation ||
@@ -2627,6 +2652,9 @@ Item_field::Item_field(Field *f)
    item_equal(NULL), no_const_subst(false),
    have_privileges(0), any_privileges(false)
 {
+  if (f->table->pos_in_table_list != NULL)
+    context= &(f->table->pos_in_table_list->select_lex->context);
+
   set_field(f);
   /*
     field_name and table_name should not point to garbage
@@ -2720,9 +2748,6 @@ bool Item_field::itemize(Parse_context *pc, Item **res)
   if (select->parsing_place != CTX_HAVING)
     select->select_n_where_fields++;
 
-  if (select->parsing_place == CTX_SELECT_LIST &&
-      field_name && field_name[0] == '*' && field_name[1] == 0)
-    select->with_wild++;
   return false;
 }
 
@@ -3738,7 +3763,7 @@ bool Item_param::itemize(Parse_context *pc, Item **res)
     my_error(ER_VIEW_SELECT_VARIABLE, MYF(0));
     return true;
   }
-  return lex->param_list.push_back(this);
+  return false;
 }
 
 
@@ -4824,6 +4849,7 @@ Item_copy_json::save_in_field_inner(Field *field, bool no_conversions)
   }
   else
   {
+    str_value.length(0);
     if (m_value->to_string(&str_value, true, item_name.ptr()))
       return set_field_to_null(field);        /* purecov: inspected */
     return save_str_value_in_field(field, &str_value);
@@ -6207,7 +6233,8 @@ Item *Item_field::equal_fields_propagator(uchar *arg)
       first converted to a string (in date/time format) and compared as such if
       compared with another string.
     */
-    if (item && field->type() != FIELD_TYPE_TIMESTAMP && cmp_context != INT_RESULT)
+    if (item && field->type() != FIELD_TYPE_TIMESTAMP && cmp_context != INT_RESULT
+        && item->real_item()->type() != Item::REAL_ITEM)
       convert_zerofill_number_to_string(&item, (Field_num *)field);
     else
       item= this;
@@ -9076,7 +9103,7 @@ Item *Item_default_value::transform(Item_transformer transformer, uchar *args)
 bool Item_insert_value::eq(const Item *item, bool binary_cmp) const
 {
   return item->type() == INSERT_VALUE_ITEM &&
-    ((Item_default_value *)item)->arg->eq(arg, binary_cmp);
+    (down_cast<const Item_insert_value *>(item))->arg->eq(arg, binary_cmp);
 }
 
 
@@ -9356,7 +9383,7 @@ bool resolve_const_item(THD *thd, Item **ref, Item *comp_item)
     {
       Json_wrapper wr;
       if (item->val_json(&wr))
-        break;
+        return true;
       if (item->null_value)
         new_item= new Item_null(item->item_name);
       else
@@ -9950,18 +9977,15 @@ bool Item_cache_json::cache_value()
   if (!example || !m_value)
     return false;
 
-  if (json_value(&example, 0, m_value))
-    return false;
-
+  value_cached= !json_value(&example, 0, m_value);
   null_value= example->null_value;
-  value_cached= true;
 
-  if (!null_value)
+  if (value_cached && !null_value)
   {
     m_value->to_dom(); // the row buffer might change, so need own copy
   }
 
-  return true;
+  return value_cached;
 }
 
 
@@ -10506,7 +10530,8 @@ bool Item_type_holder::join_types(THD *thd, Item *item)
   DBUG_PRINT("info:", ("in type %d len %d, dec %d",
                        get_real_type(item),
                        item->max_length, item->decimals));
-  fld_type= Field::field_type_merge(fld_type, get_real_type(item));
+  fld_type= real_type_to_type(Field::field_type_merge(fld_type,
+                                                      get_real_type(item)));
   {
     int item_decimals= item->decimals;
     /* fix variable decimals which always is NOT_FIXED_DEC */
@@ -10516,6 +10541,7 @@ bool Item_type_holder::join_types(THD *thd, Item *item)
   }
   if (Field::result_merge_type(fld_type) == DECIMAL_RESULT)
   {
+    collation.set_numeric();
     decimals= min<int>(max(decimals, item->decimals), DECIMAL_MAX_SCALE);
     int item_int_part= item->decimal_int_part();
     int item_prec = max(prev_decimal_int_part, item_int_part) + decimals;
@@ -10567,7 +10593,8 @@ bool Item_type_holder::join_types(THD *thd, Item *item)
       subtypes are different, use GEOMETRY.
     */
     if (fld_type == MYSQL_TYPE_GEOMETRY &&
-        geometry_type != item->get_geometry_type())
+        (get_real_type(item) != MYSQL_TYPE_GEOMETRY ||
+         geometry_type != item->get_geometry_type()))
     {
       geometry_type= Field::GEOM_GEOMETRY;
     }
@@ -10682,12 +10709,13 @@ uint32 Item_type_holder::display_length(Item *item)
   of UNION result.
 
   @param table  temporary table for which we create fields
+  @param strict If strict mode is on
 
   @return
     created field
 */
 
-Field *Item_type_holder::make_field_by_type(TABLE *table)
+Field *Item_type_holder::make_field_by_type(TABLE *table, bool strict)
 {
   /*
     The field functions defines a field to be not null if null_ptr is not 0
@@ -10704,7 +10732,7 @@ Field *Item_type_holder::make_field_by_type(TABLE *table)
                           enum_set_typelib, collation.collation);
     if (field)
       field->init(table);
-    return field;
+    break;
   case MYSQL_TYPE_SET:
     DBUG_ASSERT(enum_set_typelib);
     field= new Field_set((uchar *) 0, max_length, null_ptr, 0,
@@ -10713,13 +10741,26 @@ Field *Item_type_holder::make_field_by_type(TABLE *table)
                          enum_set_typelib, collation.collation);
     if (field)
       field->init(table);
-    return field;
+    break;
   case MYSQL_TYPE_NULL:
-    return make_string_field(table);
+    field= make_string_field(table);
+    break;
   default:
+    field= tmp_table_field_from_field_type(table, 0);
     break;
   }
-  return tmp_table_field_from_field_type(table, 0);
+  if (strict &&
+      field && field->is_temporal_with_date() && !field->real_maybe_null())
+  {
+    /*
+      This function is used for CREATE SELECT UNION [ALL] ... , and, if
+      expression is non-nullable, the resulting column is declared
+      non-nullable with a default of 0. However, in strict mode, for dates,
+      0000-00-00 is invalid; in that case, don't give any default.
+    */
+    field->flags|= NO_DEFAULT_VALUE_FLAG;
+  }
+  return field;
 }
 
 
@@ -10974,5 +11015,28 @@ bool Item_field::repoint_const_outer_ref(uchar *arg)
   if (*is_outer_ref)
     result_field= field;
   *is_outer_ref= false;
+  return false;
+}
+
+
+Item_asterisk::Item_asterisk(Name_resolution_context *context_arg,
+                             const char *opt_schema_name,
+                             const char *opt_table_name)
+    : super(context_arg, opt_schema_name, opt_table_name, "*")
+{
+  context_arg->select_lex->with_wild++;
+}
+
+
+bool Item_asterisk::itemize(Parse_context *pc, Item **res)
+{
+  DBUG_ASSERT(pc->select->parsing_place == CTX_SELECT_LIST);
+
+  if (skip_itemize(res))
+    return false;
+  if (super::itemize(pc, res))
+    return true;
+
+  pc->select->with_wild++;
   return false;
 }

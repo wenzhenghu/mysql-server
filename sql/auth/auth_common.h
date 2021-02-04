@@ -1,16 +1,23 @@
 #ifndef AUTH_COMMON_INCLUDED
 #define AUTH_COMMON_INCLUDED
 
-/* Copyright (c) 2000, 2016, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2000, 2020, Oracle and/or its affiliates.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software Foundation,
@@ -560,6 +567,13 @@ public:
       table->field[Acl_load_user_table_old_schema::MYSQL_USER_FIELD_PASSWORD_56];
     return strncmp(password_field->field_name, "Password", 8) == 0;
   }
+
+  virtual bool user_table_schema_check(TABLE* table)
+  {
+    return table->s->fields >
+           Acl_load_user_table_old_schema::MYSQL_USER_FIELD_PASSWORD_56;
+  }
+
   virtual ~Acl_load_user_table_schema_factory() {}
 };
 
@@ -601,13 +615,15 @@ bool acl_check_host(const char *host, const char *ip);
 
 /* rewrite CREATE/ALTER/GRANT user */
 void mysql_rewrite_create_alter_user(THD *thd, String *rlb,
-                                     std::set<LEX_USER *> *users_not_to_log= NULL);
+                                     std::set<LEX_USER *> *extra_users= NULL,
+                                     bool hide_password_hash= false);
 void mysql_rewrite_grant(THD *thd, String *rlb);
 
 /* sql_user */
 void append_user(THD *thd, String *str, LEX_USER *user,
                  bool comma, bool ident);
-void append_user_new(THD *thd, String *str, LEX_USER *user, bool comma);
+void append_user_new(THD *thd, String *str, LEX_USER *user, bool comma= true,
+                     bool hide_password_hash= false);
 int check_change_password(THD *thd, const char *host, const char *user,
                           const char *password, size_t password_len);
 bool change_password(THD *thd, const char *host, const char *user,
@@ -620,7 +636,8 @@ bool mysql_rename_user(THD *thd, List <LEX_USER> &list);
 bool set_and_validate_user_attributes(THD *thd,
                                       LEX_USER *Str,
                                       ulong &what_to_set,
-                                      bool is_privileged_user);
+                                      bool is_privileged_user,
+                                      const char * cmd);
 
 /* sql_auth_cache */
 int wild_case_compare(CHARSET_INFO *cs, const char *str,const char *wildstr);
@@ -671,7 +688,7 @@ ulong get_column_grant(THD *thd, GRANT_INFO *grant,
                        const char *db_name, const char *table_name,
                        const char *field_name);
 bool mysql_show_grants(THD *thd, LEX_USER *user);
-bool mysql_show_create_user(THD *thd, LEX_USER *user);
+bool mysql_show_create_user(THD *thd, LEX_USER *user, bool are_both_users_same);
 bool mysql_revoke_all(THD *thd, List <LEX_USER> &list);
 bool sp_revoke_privileges(THD *thd, const char *sp_db, const char *sp_name,
                           bool is_proc);
@@ -695,8 +712,11 @@ bool lock_tables_precheck(THD *thd, TABLE_LIST *tables);
 bool create_table_precheck(THD *thd, TABLE_LIST *tables,
                            TABLE_LIST *create_table);
 bool check_fk_parent_table_access(THD *thd,
+                                  const char *child_table_db,
                                   HA_CREATE_INFO *create_info,
                                   Alter_info *alter_info);
+bool check_lock_view_underlying_table_access(THD *thd, TABLE_LIST *tbl,
+                                             bool *fake_lock_tables_acl);
 bool check_readonly(THD *thd, bool err_if_readonly);
 void err_readonly(THD *thd);
 
@@ -773,8 +793,8 @@ typedef enum ssl_artifacts_status
 
 #endif /* EMBEDDED_LIBRARY */
 
-#if defined(HAVE_OPENSSL) && !defined(HAVE_YASSL)
+#if defined(HAVE_OPENSSL)
 extern my_bool opt_auto_generate_certs;
 bool do_auto_cert_generation(ssl_artifacts_status auto_detection_status);
-#endif /* HAVE_OPENSSL && !HAVE_YASSL */
+#endif /* HAVE_OPENSSL */
 #endif /* AUTH_COMMON_INCLUDED */

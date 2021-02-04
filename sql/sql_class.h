@@ -1,13 +1,20 @@
-/* Copyright (c) 2000, 2017, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2000, 2020, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -50,6 +57,8 @@
 
 #include <memory>
 #include "mysql/thread_type.h"
+
+#include "violite.h"                       /* SSL_handle */
 
 class Reprepare_observer;
 class sp_cache;
@@ -491,6 +500,7 @@ typedef struct system_variables
   ulong completion_type;
   ulong query_cache_type;
   ulong tx_isolation;
+  ulong transaction_isolation;
   ulong updatable_views_with_limit;
   uint max_user_connections;
   ulong my_aes_mode;
@@ -504,6 +514,7 @@ typedef struct system_variables
     Default transaction access mode. READ ONLY (true) or READ WRITE (false).
   */
   my_bool tx_read_only;
+  my_bool transaction_read_only;
   my_bool low_priority_updates;
   my_bool new_mode;
   my_bool query_cache_wlock_invalidate;
@@ -558,6 +569,11 @@ typedef struct system_variables
   my_bool session_track_schema;
   my_bool session_track_state_change;
   ulong   session_track_transaction_info;
+  /**
+    Used for the verbosity of SHOW CREATE TABLE. Currently used for displaying
+    the row format in the output even if the table uses default row format.
+  */
+  my_bool show_create_table_verbosity;
   /**
     Compatibility option to mark the pre MySQL-5.6.4 temporals columns using
     the old format using comments for SHOW CREATE TABLE and in I_S.COLUMNS
@@ -1183,6 +1199,14 @@ public:
   }
 };
 
+class Key_length_error_handler : public Internal_error_handler {
+ public:
+  virtual bool handle_condition(THD *, uint sql_errno, const char *,
+                                Sql_condition::enum_severity_level *,
+                                const char *) {
+    return (sql_errno == ER_TOO_LONG_KEY);
+  }
+};
 
 /**
   This class is an internal error handler implementation for
@@ -1511,8 +1535,6 @@ private:
   */
   LEX_CSTRING m_db;
 
-public:
-
   /**
     In some cases, we may want to modify the query (i.e. replace
     passwords with their hashes before logging the statement etc.).
@@ -1527,8 +1549,17 @@ public:
     may follow at a later date, both pre- and post parsing of the query.
     Rewriting of binloggable statements must preserve all pertinent
     information.
+
+    Similar restrictions as for m_query_string (see there) hold for locking:
+    - Value may only be (re)set from owning thread (current_thd)
+    - Value must be modified using (reset|swap)_rewritten_query().
+      Doing so will protect the update with LOCK_thd_query.
+    - The owner (current_thd) may read the value without holding the lock.
+    - Other threads may read the value, but must hold LOCK_thd_query to do so.
   */
-  String      rewritten_query;
+  String      m_rewritten_query;
+
+public:
 
   /* Used to execute base64 coded binlog events in MySQL server */
   Relay_log_info* rli_fake;
@@ -1548,6 +1579,12 @@ public:
     ha_data associated with it and memorizes the fact of that.
   */
   void rpl_detach_engine_ha_data();
+
+  /**
+    When the thread is a binlog or slave applier it reattaches the engine
+    ha_data associated with it and memorizes the fact of that.
+  */
+  void rpl_reattach_engine_ha_data();
 
   /**
     @return true   when the current binlog (rli_fake) or slave (rli_slave)
@@ -1637,6 +1674,7 @@ public:
   */
   void save_current_query_costs()
   {
+    DBUG_ASSERT(!status_var_aggregated);
     status_var.last_query_cost= m_current_query_cost;
     status_var.last_query_partial_plans= m_current_query_partial_plans;
   }
@@ -1743,6 +1781,22 @@ public:
     return m_protocol;
   }
 
+  SSL_handle get_ssl() const
+  {
+#ifndef DBUG_OFF
+    if (current_thd != this)
+    {
+      /*
+        When inspecting this thread from monitoring,
+        the monitoring thread MUST lock LOCK_thd_data,
+        to be allowed to safely inspect SSL status variables.
+      */
+      mysql_mutex_assert_owner(&LOCK_thd_data);
+    }
+#endif
+    return m_SSL;
+  }
+
   /**
     Asserts that the protocol is of type text or binary and then
     returns the m_protocol casted to Protocol_classic. This method
@@ -1763,6 +1817,17 @@ public:
 
 private:
   Protocol *m_protocol;           // Current protocol
+  /**
+    SSL data attached to this connection.
+    This is an opaque pointer,
+    When building with SSL, this pointer is non NULL
+    only if the connection is using SSL.
+    When building without SSL, this pointer is always NULL.
+    The SSL data can be inspected to read per thread
+    status variables,
+    and this can be inspected while the thread is running.
+  */
+  SSL_handle m_SSL;
 
 public:
   /**
@@ -2023,6 +2088,14 @@ public:
 
   bool is_current_stmt_binlog_disabled() const;
 
+  /**
+    Determine if binloging is enabled in row format and write set extraction is
+    enabled for this session
+    @retval true  if is enable
+    @retval false otherwise
+  */
+  bool is_current_stmt_binlog_row_enabled_with_write_set_extraction() const;
+
   /** Tells whether the given optimizer_switch flag is on */
   inline bool optimizer_switch_flag(ulonglong flag) const
   {
@@ -2067,6 +2140,11 @@ public:
   struct st_thd_timer_info *timer_cache;
 
 private:
+  /*
+    Indicates that the command which is under execution should ignore the
+    'read_only' and 'super_read_only' options.
+  */
+  bool skip_readonly_check;
   /**
     Indicate if the current statement should be discarded
     instead of written to the binlog.
@@ -2129,6 +2207,22 @@ private:
   NET     net;                          // client connection descriptor
   String  packet;                       // dynamic buffer for network I/O
 public:
+  void set_skip_readonly_check()
+  {
+    skip_readonly_check= true;
+  }
+
+  bool is_cmd_skip_readonly()
+  {
+    return skip_readonly_check;
+  }
+
+  void reset_skip_readonly_check()
+  {
+    if (skip_readonly_check)
+      skip_readonly_check= false;
+  }
+
   void issue_unsafe_warnings();
 
   uint get_binlog_table_maps() const {
@@ -2784,6 +2878,7 @@ public:
   {
     CE_NONE= 0,
     CE_FLUSH_ERROR,
+    CE_FLUSH_GNO_EXHAUSTED_ERROR,
     CE_SYNC_ERROR,
     CE_COMMIT_ERROR,
     CE_ERROR_COUNT
@@ -3004,10 +3099,22 @@ public:
     mysql_mutex_unlock(&LOCK_thd_data);
   }
 
+  inline void set_ssl(Vio* vio)
+  {
+#ifdef HAVE_OPENSSL
+    mysql_mutex_lock(&LOCK_thd_data);
+    m_SSL = (SSL*) vio->ssl_arg;
+    mysql_mutex_unlock(&LOCK_thd_data);
+#else
+    m_SSL = NULL;
+#endif
+  }
+
   inline void clear_active_vio()
   {
     mysql_mutex_lock(&LOCK_thd_data);
     active_vio = 0;
+    m_SSL = NULL;
     mysql_mutex_unlock(&LOCK_thd_data);
   }
 
@@ -4271,6 +4378,21 @@ public:
   }
 
   /**
+    Set query to be displayed in performance schema (threads table etc.).
+  */
+  void set_query_for_display(const char *query_arg, size_t query_length_arg) {
+    // Set in pfs events statements table
+    MYSQL_SET_STATEMENT_TEXT(m_statement_psi, query_arg, query_length_arg);
+#ifdef HAVE_PSI_THREAD_INTERFACE
+    // Set in pfs threads table
+    PSI_THREAD_CALL(set_thread_info)(query_arg, query_length_arg);
+#endif
+  }
+  void reset_query_for_display(void) {
+    set_query_for_display(NULL, 0);
+  }
+
+  /**
     Assign a new value to thd->m_query_string.
     Protected with the LOCK_thd_query mutex.
   */
@@ -4280,7 +4402,50 @@ public:
     set_query(tmp);
   }
   void set_query(const LEX_CSTRING& query_arg);
-  void reset_query() { set_query(LEX_CSTRING()); }
+  void reset_query() {
+    set_query(LEX_CSTRING());
+  }
+
+  /**
+    Set the rewritten query (with passwords obfuscated etc.) on the THD.
+    Wraps this in the LOCK_thd_query mutex to protect against race conditions
+    with SHOW PROCESSLIST inspecting that string.
+
+    This uses swap() and therefore "steals" the argument from the caller;
+    the caller MUST take care not to try to use its own string after calling
+    this function! This is an optimization for mysql_rewrite_query() so we
+    don't copy its temporary string (which may get very long, up to
+    @@max_allowed_packet).
+
+    Using this outside of mysql_rewrite_query() is almost certainly wrong;
+    please check with the runtime team!
+
+    @param query_arg  The rewritten query to use for slow/bin/general logging.
+                      The value will be released in the caller and MUST NOT
+                      be used there after calling this function.
+  */
+  void swap_rewritten_query(String& query_arg);
+
+  /**
+    Get the rewritten query (with passwords obfuscated etc.) from the THD.
+    If done from a different thread (from the one that the rewritten_query
+    is set on), the caller must hold LOCK_thd_query while calling this!
+  */
+  const String &rewritten_query() const {
+#ifndef DBUG_OFF
+    if (current_thd != this)
+      mysql_mutex_assert_owner(&LOCK_thd_query);
+#endif
+    return m_rewritten_query;
+  }
+
+  /**
+    Reset thd->rewritten_query. Protected with the LOCK_thd_query mutex.
+  */
+  void reset_rewritten_query() {
+    String empty;
+    swap_rewritten_query(empty);
+  }
 
   /**
     Assign a new value to thd->query_id.
@@ -5039,8 +5204,11 @@ public:
 
   Temp_table_param()
     :copy_field(NULL), copy_field_end(NULL),
+     group_buff(NULL),
+     items_to_copy(NULL),
      recinfo(NULL), start_recinfo(NULL),
      keyinfo(NULL),
+     end_write_records(0),
      field_count(0), func_count(0), sum_func_count(0), hidden_field_count(0),
      group_parts(0), group_length(0), group_null_parts(0),
      quick_group(1),
@@ -5541,6 +5709,20 @@ inline void reattach_engine_ha_data_to_thd(THD *thd, const struct handlerton *ht
       replace_native_transaction_in_thd(thd, *trx_backup, NULL);
     *trx_backup= NULL;
   }
+}
+
+/**
+  Check if engine substitution is allowed in the current thread context.
+
+  @param thd         thread context
+  @return
+  @retval            true if engine substitution is allowed
+  @retval            false otherwise
+*/
+
+static inline bool is_engine_substitution_allowed(THD* thd)
+{
+  return !(thd->variables.sql_mode & MODE_NO_ENGINE_SUBSTITUTION);
 }
 
 /*************************************************************************/

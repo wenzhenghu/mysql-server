@@ -1,14 +1,22 @@
 /*****************************************************************************
 
-Copyright (c) 2007, 2017, Oracle and/or its affiliates. All Rights Reserved.
+Copyright (c) 2007, 2020, Oracle and/or its affiliates. All Rights Reserved.
 
-This program is free software; you can redistribute it and/or modify it under
-the terms of the GNU General Public License as published by the Free Software
-Foundation; version 2 of the License.
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License, version 2.0,
+as published by the Free Software Foundation.
 
-This program is distributed in the hope that it will be useful, but WITHOUT
-ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+This program is also distributed with certain software (including
+but not limited to OpenSSL) that is licensed under separate terms,
+as designated in a particular file or component or in included license
+documentation.  The authors of MySQL hereby grant you an additional
+permission to link the program and your derivative works with the
+separately licensed software that they have included with MySQL.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License, version 2.0, for more details.
 
 You should have received a copy of the GNU General Public License along with
 this program; if not, write to the Free Software Foundation, Inc.,
@@ -1459,7 +1467,7 @@ i_s_cmp_fill_low(
 		table->field[5]->store(zip_stat->decompressed_usec / 1000000, true);
 
 		if (reset) {
-			memset(zip_stat, 0, sizeof *zip_stat);
+			new (zip_stat) page_zip_stat_t;
 		}
 
 		if (schema_table_store_record(thd, table)) {
@@ -2610,7 +2618,7 @@ i_s_metrics_fill(
 			time_diff = 0;
 		}
 
-		/* Unless MONITOR__NO_AVERAGE is marked, we will need
+		/* Unless MONITOR_NO_AVERAGE is marked, we will need
 		to calculate the average value. If this is a monitor set
 		owner marked by MONITOR_SET_OWNER, divide
 		the value by another counter (number of calls) designated
@@ -2641,6 +2649,7 @@ i_s_metrics_fill(
 					/ MONITOR_VALUE(
 					monitor_info->monitor_related_id),
 					FALSE));
+				fields[METRIC_AVG_VALUE_RESET]->set_notnull();
 			} else {
 				fields[METRIC_AVG_VALUE_RESET]->set_null();
 			}
@@ -2998,7 +3007,17 @@ i_s_fts_deleted_generic_fill(
 		DBUG_RETURN(0);
 	}
 
+	mysql_mutex_lock(&LOCK_global_system_variables);
+
 	if (!fts_internal_tbl_name) {
+		mysql_mutex_unlock(&LOCK_global_system_variables);
+		DBUG_RETURN(0);
+	}
+
+	std::string fts_table_name(fts_internal_tbl_name);
+	mysql_mutex_unlock(&LOCK_global_system_variables);
+
+	if(!fts_table_name.c_str()) {
 		DBUG_RETURN(0);
 	}
 
@@ -3006,7 +3025,8 @@ i_s_fts_deleted_generic_fill(
 	rw_lock_s_lock(dict_operation_lock);
 
 	user_table = dict_table_open_on_name(
-		fts_internal_tbl_name, FALSE, FALSE, DICT_ERR_IGNORE_NONE);
+				fts_table_name.c_str(),
+				FALSE, FALSE, DICT_ERR_IGNORE_NONE);
 
 	if (!user_table) {
 		rw_lock_s_unlock(dict_operation_lock);
@@ -3421,12 +3441,22 @@ i_s_fts_index_cache_fill(
 		DBUG_RETURN(0);
 	}
 
-	if (!fts_internal_tbl_name) {
-		DBUG_RETURN(0);
-	}
+        mysql_mutex_lock(&LOCK_global_system_variables);
+
+        if (!fts_internal_tbl_name) {
+                mysql_mutex_unlock(&LOCK_global_system_variables);
+                DBUG_RETURN(0);
+        }
+
+	std::string fts_table_name(fts_internal_tbl_name);
+	mysql_mutex_unlock(&LOCK_global_system_variables);
+
+        if(!fts_table_name.c_str()) {
+                DBUG_RETURN(0);
+        }
 
 	user_table = dict_table_open_on_name(
-		fts_internal_tbl_name, FALSE, FALSE, DICT_ERR_IGNORE_NONE);
+		fts_table_name.c_str(), FALSE, FALSE, DICT_ERR_IGNORE_NONE);
 
 	if (!user_table) {
 		DBUG_RETURN(0);
@@ -3441,6 +3471,12 @@ i_s_fts_index_cache_fill(
 	cache = user_table->fts->cache;
 
 	ut_a(cache);
+
+	/* Check if cache is being synced.
+	Note: we wait till cache is being synced. */
+	while (cache->sync->in_progress) {
+		os_event_wait(cache->sync->event);
+	}
 
 	for (ulint i = 0; i < ib_vector_size(cache->indexes); i++) {
 		fts_index_cache_t*      index_cache;
@@ -3869,15 +3905,25 @@ i_s_fts_index_table_fill(
 		DBUG_RETURN(0);
 	}
 
-	if (!fts_internal_tbl_name) {
-		DBUG_RETURN(0);
-	}
+        mysql_mutex_lock(&LOCK_global_system_variables);
+
+        if (!fts_internal_tbl_name) {
+                mysql_mutex_unlock(&LOCK_global_system_variables);
+                DBUG_RETURN(0);
+        }
+
+	std::string fts_table_name(fts_internal_tbl_name);
+	mysql_mutex_unlock(&LOCK_global_system_variables);
+
+        if(!fts_table_name.c_str()) {
+                DBUG_RETURN(0);
+        }
 
 	/* Prevent DDL to drop fts aux tables. */
 	rw_lock_s_lock(dict_operation_lock);
 
 	user_table = dict_table_open_on_name(
-		fts_internal_tbl_name, FALSE, FALSE, DICT_ERR_IGNORE_NONE);
+		fts_table_name.c_str(), FALSE, FALSE, DICT_ERR_IGNORE_NONE);
 
 	if (!user_table) {
 		rw_lock_s_unlock(dict_operation_lock);
@@ -4029,9 +4075,19 @@ i_s_fts_config_fill(
 		DBUG_RETURN(0);
 	}
 
-	if (!fts_internal_tbl_name) {
-		DBUG_RETURN(0);
-	}
+        mysql_mutex_lock(&LOCK_global_system_variables);
+
+        if (!fts_internal_tbl_name) {
+                mysql_mutex_unlock(&LOCK_global_system_variables);
+                DBUG_RETURN(0);
+        }
+
+	std::string fts_table_name(fts_internal_tbl_name);
+	mysql_mutex_unlock(&LOCK_global_system_variables);
+
+        if(!fts_table_name.c_str()) {
+                DBUG_RETURN(0);
+        }
 
 	DEBUG_SYNC_C("i_s_fts_config_fille_check");
 
@@ -4041,7 +4097,7 @@ i_s_fts_config_fill(
 	rw_lock_s_lock(dict_operation_lock);
 
 	user_table = dict_table_open_on_name(
-		fts_internal_tbl_name, FALSE, FALSE, DICT_ERR_IGNORE_NONE);
+		fts_table_name.c_str(), FALSE, FALSE, DICT_ERR_IGNORE_NONE);
 
 	if (!user_table) {
 		rw_lock_s_unlock(dict_operation_lock);

@@ -1,13 +1,20 @@
-/* Copyright (c) 2000, 2016, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2000, 2020, Oracle and/or its affiliates.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software Foundation,
@@ -228,7 +235,6 @@ bool Sql_cmd_update::multi_update_precheck(THD *thd, TABLE_LIST *tables)
 
 bool multi_delete_precheck(THD *thd, TABLE_LIST *tables)
 {
-  SELECT_LEX *select_lex= thd->lex->select_lex;
   TABLE_LIST *aux_tables= thd->lex->auxiliary_table_list.first;
   TABLE_LIST **save_query_tables_own_last= thd->lex->query_tables_own_last;
   DBUG_ENTER("multi_delete_precheck");
@@ -251,13 +257,6 @@ bool multi_delete_precheck(THD *thd, TABLE_LIST *tables)
   }
   thd->lex->query_tables_own_last= save_query_tables_own_last;
 
-  if ((thd->variables.option_bits & OPTION_SAFE_UPDATES) &&
-      !select_lex->where_cond())
-  {
-    my_message(ER_UPDATE_WITHOUT_KEY_IN_SAFE_MODE,
-               ER(ER_UPDATE_WITHOUT_KEY_IN_SAFE_MODE), MYF(0));
-    DBUG_RETURN(TRUE);
-  }
   DBUG_RETURN(FALSE);
 }
 
@@ -464,7 +463,8 @@ bool create_table_precheck(THD *thd, TABLE_LIST *tables,
       goto err;
   }
 
-  if (check_fk_parent_table_access(thd, &lex->create_info, &lex->alter_info))
+  if (check_fk_parent_table_access(thd, create_table->db,
+                                   &lex->create_info, &lex->alter_info))
     goto err;
 
   error= FALSE;
@@ -494,8 +494,11 @@ bool check_readonly(THD *thd, bool err_if_readonly)
   if (!opt_readonly)
     DBUG_RETURN(FALSE);
 
-  /* thread is replication slave, do not prohibit operation: */
-  if (thd->slave_thread)
+  /*
+    Thread is replication slave or skip_read_only check is enabled for the
+    command, do not prohibit operation.
+  */
+  if (thd->slave_thread || thd->is_cmd_skip_readonly())
     DBUG_RETURN(FALSE);
 
   bool is_super = thd->security_context()->check_access(SUPER_ACL);
@@ -1317,16 +1320,28 @@ int mysql_table_grant(THD *thd, TABLE_LIST *table_list,
     }
 
     if (set_and_validate_user_attributes(thd, Str, what_to_set,
-                                         is_privileged_user))
+                                         is_privileged_user,
+                                         revoke_grant?"REVOKE":"GRANT"))
     {
       result= TRUE;
       continue;
     }
 
+    ACL_USER *acl_user= find_acl_user(Str->host.str, Str->user.str, TRUE);
+
     /* Create user if needed */
     error= replace_user_table(thd, tables[0].table, Str,
                               0, revoke_grant, create_new_users,
                               what_to_set);
+    /*
+      If the user did not exist and replace_user_table() succeeded and if this
+      is a GRANT statement, then it means that a new user is created.
+
+      So, set the is_partial_execution flag to true.
+    */
+    if (!error)
+      is_partial_execution= (!acl_user && !revoke_grant) || is_partial_execution;
+
     if (error > 0)
     {
       result= TRUE;                             // Remember error
@@ -1466,17 +1481,21 @@ int mysql_table_grant(THD *thd, TABLE_LIST *table_list,
   }
   else
   {
-    if (!revoke_grant)
-    {
-      String *rlb= &thd->rewritten_query;
-      rlb->mem_free();
-      mysql_rewrite_grant(thd, rlb);
+    /*
+      Rewrite (table) GRANT statements to use password hashes
+      instead of <secret> style obfuscation so it can be used
+      in binlog.
+    */
+    if (!revoke_grant) {
+      String rlb;
+      mysql_rewrite_grant(thd, &rlb);
+      thd->swap_rewritten_query(rlb);
     }
-    if (thd->rewritten_query.length())
+
+    if (thd->rewritten_query().length() > 0)
       result= result |
-          write_bin_log(thd, FALSE,
-                        thd->rewritten_query.c_ptr_safe(),
-                        thd->rewritten_query.length(),
+          write_bin_log(thd, FALSE, thd->rewritten_query().ptr(),
+                        thd->rewritten_query().length(),
                         transactional_tables);
     else
       result= result |
@@ -1632,16 +1651,28 @@ bool mysql_routine_grant(THD *thd, TABLE_LIST *table_list, bool is_proc,
     }
 
     if (set_and_validate_user_attributes(thd, Str, what_to_set,
-                                         is_privileged_user))
+                                         is_privileged_user,
+                                         revoke_grant?"REVOKE":"GRANT"))
     {
       result= TRUE;
       continue;
     }
 
+    ACL_USER *acl_user= find_acl_user(Str->host.str, Str->user.str, TRUE);
+
     /* Create user if needed */
     error= replace_user_table(thd, tables[0].table, Str,
                               0, revoke_grant, create_new_users,
                               what_to_set);
+    /*
+      If the user did not exist and replace_user_table() succeeded and if this
+      is a GRANT statement, then it means that a new user is created.
+
+      So, set the is_partial_execution flag to true.
+    */
+    if (!error)
+      is_partial_execution= (!acl_user && !revoke_grant) || is_partial_execution;
+
     if (error > 0)
     {
       result= TRUE;                             // Remember error
@@ -1722,17 +1753,22 @@ bool mysql_routine_grant(THD *thd, TABLE_LIST *table_list, bool is_proc,
     }
     else
     {
-      if (!revoke_grant)
-      {
-        String *rlb= &thd->rewritten_query;
-        rlb->mem_free();
-        mysql_rewrite_grant(thd, rlb);
+      /*
+        Rewrite (routine) GRANT statements to use password hashes
+        instead of <secret> style obfuscation so it can be used
+        in binlog.
+      */
+      if (!revoke_grant) {
+        String rlb;
+        mysql_rewrite_grant(thd, &rlb);
+        thd->swap_rewritten_query(rlb);
       }
+
       /*
         For performance reasons, we don't rewrite the query if we don't have to.
         If that was the case, write the original query.
       */
-      if (!thd->rewritten_query.length())
+      if (thd->rewritten_query().length() == 0)
       {
         if (write_bin_log(thd, false, thd->query().str, thd->query().length,
                           transactional_tables))
@@ -1740,9 +1776,8 @@ bool mysql_routine_grant(THD *thd, TABLE_LIST *table_list, bool is_proc,
       }
       else
       {
-        if (write_bin_log(thd, false,
-                          thd->rewritten_query.c_ptr_safe(),
-                          thd->rewritten_query.length(),
+        if (write_bin_log(thd, false, thd->rewritten_query().ptr(),
+                          thd->rewritten_query().length(),
                           transactional_tables))
           result= TRUE;
       }
@@ -1883,16 +1918,29 @@ bool mysql_grant(THD *thd, const char *db, List <LEX_USER> &list,
     }
 
     if (set_and_validate_user_attributes(thd, Str, what_to_set,
-                                         is_privileged_user))
+                                         is_privileged_user,
+                                         revoke_grant?"REVOKE":"GRANT"))
     {
       result= TRUE;
       continue;
     }
 
+    ACL_USER *acl_user= find_acl_user(Str->host.str, Str->user.str, TRUE);
     int ret= replace_user_table(thd, tables[0].table, Str,
                                 (!db ? rights : 0), revoke_grant,
                                 create_new_users,
                                 (what_to_set | ACCESS_RIGHTS_ATTR));
+    /*
+      If the user did not exist and replace_user_table() succeeded and if
+      this is a GRANT statement, then it means that a new user is created.
+      So, set the is_partial_execution flag to true.
+    */
+    if (!ret)
+    {
+      /* In case of GRANT, user creation is partial execution */
+      is_partial_execution= (!acl_user && !revoke_grant) || is_partial_execution;
+    }
+
     if (ret)
     {
       result= -1;
@@ -1987,18 +2035,22 @@ bool mysql_grant(THD *thd, const char *db, List <LEX_USER> &list,
   }
   else
   {
-    if (!revoke_grant)
-    {
-      String *rlb= &thd->rewritten_query;
-      rlb->mem_free();
-      mysql_rewrite_grant(thd, rlb);
+    /*
+      Rewrite GRANT statements to use password hashes instead of
+      <secret> style obfuscation so it can be used in binlog.
+    */
+    if (!revoke_grant) {
+      String rlb;
+      mysql_rewrite_grant(thd, &rlb);
+      thd->swap_rewritten_query(rlb);
     }
-    if (thd->rewritten_query.length())
+
+    if (thd->rewritten_query().length() > 0) {
       result= result |
-          write_bin_log(thd, FALSE,
-                        thd->rewritten_query.c_ptr_safe(),
-                        thd->rewritten_query.length(),
+          write_bin_log(thd, FALSE, thd->rewritten_query().ptr(),
+                        thd->rewritten_query().length(),
                         transactional_tables);
+    }
     else
       result= result |
         write_bin_log(thd, FALSE, thd->query().str, thd->query().length,
@@ -2737,8 +2789,7 @@ static int show_routine_grants(THD* thd, LEX_USER *lex_user, HASH *hash,
 
     if (!(user=grant_proc->user))
       user= "";
-    if (!(host= grant_proc->host.get_host()))
-      host= "";
+    host= grant_proc->host.get_host();
 
     /*
       We do not make SHOW GRANTS case-sensitive here (like REVOKE),
@@ -2970,8 +3021,7 @@ bool mysql_show_grants(THD *thd,LEX_USER *lex_user)
 
     if (!(user=acl_db->user))
       user= "";
-    if (!(host=acl_db->host.get_host()))
-      host= "";
+    host= acl_db->host.get_host();
 
     /*
       We do not make SHOW GRANTS case-sensitive here (like REVOKE),
@@ -3040,8 +3090,7 @@ bool mysql_show_grants(THD *thd,LEX_USER *lex_user)
 
     if (!(user=grant_table->user))
       user= "";
-    if (!(host= grant_table->host.get_host()))
-      host= "";
+    host= grant_table->host.get_host();
 
     /*
       We do not make SHOW GRANTS case-sensitive here (like REVOKE),
@@ -3271,8 +3320,7 @@ bool mysql_revoke_all(THD *thd,  List <LEX_USER> &list)
 
         if (!(user=acl_db->user))
           user= "";
-        if (!(host=acl_db->host.get_host()))
-          host= "";
+        host= acl_db->host.get_host();
 
         if (!strcmp(lex_user->user.str,user) &&
             !strcmp(lex_user->host.str, host))
@@ -3313,8 +3361,7 @@ bool mysql_revoke_all(THD *thd,  List <LEX_USER> &list)
           (GRANT_TABLE*) my_hash_element(&column_priv_hash, counter);
         if (!(user=grant_table->user))
           user= "";
-        if (!(host=grant_table->host.get_host()))
-          host= "";
+        host= grant_table->host.get_host();
 
         if (!strcmp(lex_user->user.str,user) &&
             !strcmp(lex_user->host.str, host))
@@ -3377,8 +3424,7 @@ bool mysql_revoke_all(THD *thd,  List <LEX_USER> &list)
         GRANT_NAME *grant_proc= (GRANT_NAME*) my_hash_element(hash, counter);
         if (!(user=grant_proc->user))
           user= "";
-        if (!(host=grant_proc->host.get_host()))
-          host= "";
+        host= grant_proc->host.get_host();
 
         if (!strcmp(lex_user->user.str,user) &&
             !strcmp(lex_user->host.str, host))
@@ -3570,10 +3616,8 @@ bool sp_revoke_privileges(THD *thd, const char *sp_db, const char *sp_name,
         LEX_USER lex_user;
         lex_user.user.str= grant_proc->user;
         lex_user.user.length= strlen(grant_proc->user);
-        lex_user.host.str= (char*) (grant_proc->host.get_host() ?
-          grant_proc->host.get_host() : "");
-        lex_user.host.length= grant_proc->host.get_host() ?
-          strlen(grant_proc->host.get_host()) : 0;
+        lex_user.host.str= (char *) (grant_proc->host.get_host());
+        lex_user.host.length= grant_proc->host.get_host_len();
 
         int ret=
           replace_routine_table(thd,grant_proc,tables[4].table,lex_user,
@@ -3642,20 +3686,12 @@ bool sp_grant_privileges(THD *thd, const char *sp_db, const char *sp_name,
   if (!(combo=(LEX_USER*) thd->alloc(sizeof(st_lex_user))))
     DBUG_RETURN(TRUE);
 
-  combo->user.str= (char *) sctx->user().str;
+  combo->user.str= (char *) sctx->priv_user().str;
 
   mysql_mutex_lock(&acl_cache->lock);
 
-  if ((au= find_acl_user(combo->host.str= (char *) sctx->host_or_ip().str,
+  if ((au= find_acl_user(combo->host.str= (char *) sctx->priv_host().str,
                          combo->user.str, false)))
-    goto found_acl;
-  if ((au= find_acl_user(combo->host.str= (char *) sctx->host().str,
-                         combo->user.str, false)))
-    goto found_acl;
-  if ((au= find_acl_user(combo->host.str= (char*) sctx->ip().str,
-                         combo->user.str, false)))
-    goto found_acl;
-  if((au= find_acl_user(combo->host.str=(char*)"%", combo->user.str, FALSE)))
     goto found_acl;
 
   mysql_mutex_unlock(&acl_cache->lock);
@@ -3903,8 +3939,7 @@ int fill_schema_user_privileges(THD *thd, TABLE_LIST *tables, Item *cond)
     const char *user,*host, *is_grantable="YES";
     if (!(user=acl_user->user))
       user= "";
-    if (!(host=acl_user->host.get_host()))
-      host= "";
+    host= acl_user->host.get_host();
 
     if (no_global_access &&
         (strcmp(thd->security_context()->priv_user().str, user) ||
@@ -3977,8 +4012,7 @@ int fill_schema_schema_privileges(THD *thd, TABLE_LIST *tables, Item *cond)
 
     if (!(user=acl_db->user))
       user= "";
-    if (!(host=acl_db->host.get_host()))
-      host= "";
+    host= acl_db->host.get_host();
 
     if (no_global_access &&
         (strcmp(thd->security_context()->priv_user().str, user) ||
@@ -4051,8 +4085,7 @@ int fill_schema_table_privileges(THD *thd, TABLE_LIST *tables, Item *cond)
                                                           index);
     if (!(user=grant_table->user))
       user= "";
-    if (!(host= grant_table->host.get_host()))
-      host= "";
+    host= grant_table->host.get_host();
 
     if (no_global_access &&
         (strcmp(thd->security_context()->priv_user().str, user) ||
@@ -4134,8 +4167,7 @@ int fill_schema_column_privileges(THD *thd, TABLE_LIST *tables, Item *cond)
                                                           index);
     if (!(user=grant_table->user))
       user= "";
-    if (!(host= grant_table->host.get_host()))
-      host= "";
+    host= grant_table->host.get_host();
 
     if (no_global_access &&
         (strcmp(thd->security_context()->priv_user().str, user) ||
@@ -4329,10 +4361,11 @@ bool check_global_access(THD *thd, ulong want_access)
 /**
   Checks foreign key's parent table access.
 
-  @param thd	       [in]	Thread handler
-  @param create_info   [in]     Create information (like MAX_ROWS, ENGINE or
+  @param thd              [in]  Thread handler
+  @param child_table_db   [in]  Database of child table
+  @param create_info      [in]  Create information (like MAX_ROWS, ENGINE or
                                 temporary table flag)
-  @param alter_info    [in]     Initial list of columns and indexes for the
+  @param alter_info       [in]  Initial list of columns and indexes for the
                                 table to be created
 
   @retval
@@ -4341,6 +4374,7 @@ bool check_global_access(THD *thd, ulong want_access)
    true	  error or access denied. Error is sent to client in this case.
 */
 bool check_fk_parent_table_access(THD *thd,
+                                  const char *child_table_db,
                                   HA_CREATE_INFO *create_info,
                                   Alter_info *alter_info)
 {
@@ -4383,10 +4417,17 @@ bool check_fk_parent_table_access(THD *thd,
         if (fk_key->ref_db.str && check_and_convert_db_name(&db_name, false))
           return true;
       }
-      else if (thd->lex->copy_db_to(&db_name.str, &db_name.length))
-        return true;
       else
+      {
+        /*
+          If database name for parent table is not specified explicitly
+          SEs assume that it is the same as database name of child table.
+          We do the same here.
+        */
         is_qualified_table_name= false;
+        db_name.str= const_cast<char*>(child_table_db);
+        db_name.length= strlen(child_table_db);
+      }
 
       // if lower_case_table_names is set then convert tablename to lower case.
       if (lower_case_table_names)
@@ -4436,4 +4477,108 @@ bool check_fk_parent_table_access(THD *thd,
   }
 
   return false;
+}
+
+
+/**
+  For LOCK TABLES on a view checks if user in which context view is executed
+  or user that has initiated this operation has SELECT and LOCK TABLES
+  privileges on one of its underlying tables.
+
+  @param [in]   thd                   Thread context.
+  @param [in]   tbl                   Table list element for underlying table
+                                      on which we check privilege.
+  @param [out]  fake_lock_tables_acl  Set to true if table in question is one
+                                      of special I_S or P_S tables on which
+                                      nobody can get LOCK TABLES privilege.
+                                      So to preserve compatibility with dump
+                                      tools we need to fake this privilege.
+                                      Set to false otherwise.
+
+  @retval false   Success.
+  @retval true    Access denied. Error has been reported.
+*/
+bool check_lock_view_underlying_table_access(THD *thd, TABLE_LIST *tbl,
+                                             bool *fake_lock_tables_acl)
+{
+  ulong want_access= SELECT_ACL | LOCK_TABLES_ACL;
+  *fake_lock_tables_acl= false;
+
+  /*
+    I_S and P_S tables require special handling of LOCK TABLES privilege
+    in this case.
+    On the one hand we don't grant this privileges on I_S and read-only/
+    truncatable-only P_S tables to anyone. So normally you can't lock
+    them directly using LOCK TABLES.
+    On the other hand we allow creation of views which reference these
+    tables. And mysqldump/pump tools routinely lock views using LOCK
+    TABLES just to dump their definition in default mode. So refusing
+    locking of such views will break mysqldump/pump. It will also break
+    user scenarios in when views on top of I_S/P_S tables are locked along
+    with other tables by LOCK TABLES, so they are accessible under LOCK
+    TABLES mode. So we simply skip LOCK TABLES privilege check for I_S and
+    read-only/ truncatable-only P_S tables. However, we report the fact to
+    the caller, so it won't acquire strong metadata locks in this case,
+    which can be considered privilege escalation.
+  */
+  const ACL_internal_schema_access *schema_access=
+      get_cached_schema_access(&tbl->grant.m_internal, tbl->db);
+  if (schema_access)
+  {
+    ulong dummy= 0;
+    switch (schema_access->check(LOCK_TABLES_ACL, &dummy))
+    {
+    case ACL_INTERNAL_ACCESS_DENIED:
+      *fake_lock_tables_acl= true;
+      // Fall through.
+    case ACL_INTERNAL_ACCESS_GRANTED:
+      want_access&= ~LOCK_TABLES_ACL;
+      break;
+    case ACL_INTERNAL_ACCESS_CHECK_GRANT:
+      const ACL_internal_table_access *table_access= get_cached_table_access(
+          &tbl->grant.m_internal, tbl->db, tbl->table_name);
+      if (table_access)
+      {
+        switch (table_access->check(LOCK_TABLES_ACL, &dummy))
+        {
+        case ACL_INTERNAL_ACCESS_DENIED:
+          *fake_lock_tables_acl= true;
+          // Fall through.
+        case ACL_INTERNAL_ACCESS_GRANTED:
+          want_access&= ~LOCK_TABLES_ACL;
+          break;
+        case ACL_INTERNAL_ACCESS_CHECK_GRANT:
+          break;
+        }
+      }
+      break;
+    }
+  }
+
+  if (!check_single_table_access(thd, want_access, tbl, true))
+    return false;
+
+  /*
+    As it was mentioned earlier mysqldump/pump tools routinely lock
+    views just to dump their definition. This is supposed to work even
+    for views with (temporarily) invalid definer. To avoid breaking
+    this scenario we allow locking of view not only when user which
+    security context will be used for its execution has LOCK TABLES
+    and SELECT privileges on its underlying tbales, but also when
+    the user which originally requested LOCK TABLES has the similar
+    privileges on its underlying tables (which is likely to be the
+    case for users invoking mysqldump/pump).
+  */
+  Security_context *save_security_ctx= tbl->security_ctx;
+  tbl->security_ctx= NULL;
+  bool top_user_has_privs=
+      !check_single_table_access(thd, want_access, tbl, true);
+  tbl->security_ctx= save_security_ctx;
+
+  if (top_user_has_privs)
+    return false;
+
+  my_error(ER_VIEW_INVALID, MYF(0), tbl->belong_to_view->get_db_name(),
+           tbl->belong_to_view->get_table_name());
+  return true;
 }

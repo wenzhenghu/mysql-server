@@ -1,14 +1,21 @@
 /*
-   Copyright (c) 2000, 2017, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2000, 2020, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -392,7 +399,7 @@ TABLE_SHARE *alloc_table_share(TABLE_LIST *table_list, const char *key,
                        table_cache_instances * sizeof(*cache_element_array),
                        NULL))
   {
-    memset(share, 0, sizeof(*share));
+    new (share) TABLE_SHARE;
 
     share->set_table_cache_key(key_buff, key, key_length);
 
@@ -458,7 +465,7 @@ void init_tmp_table_share(THD *thd, TABLE_SHARE *share, const char *key,
   DBUG_ENTER("init_tmp_table_share");
   DBUG_PRINT("enter", ("table: '%s'.'%s'", key, table_name));
 
-  memset(share, 0, sizeof(*share));
+  new (share) TABLE_SHARE;
   init_sql_alloc(key_memory_table_share,
                  &share->mem_root, TABLE_ALLOC_BLOCK_SIZE, 0);
   share->table_category=         TABLE_CATEGORY_TEMPORARY;
@@ -968,28 +975,36 @@ static void setup_key_part_field(TABLE_SHARE *share, handler *handler_file,
   @param[in]     share         Pointer to TABLE_SHARE
   @param[in]     handler       Pointer to handler
   @param[in,out] usable_parts  Pointer to usable_parts variable
+  @param[in]     use_extended_sk  TRUE if use_index_extensions is ON
 
   @retval                      Number of added key parts
 */
 
 static uint add_pk_parts_to_sk(KEY *sk, uint sk_n, KEY *pk, uint pk_n,
                                TABLE_SHARE *share, handler *handler_file,
-                               uint *usable_parts)
+                               uint *usable_parts, bool use_extended_sk)
 {
   uint max_key_length= sk->key_length;
-  bool is_unique_key= false;
+  /*
+    Secondary key becomes unique if the key does not exceed
+    key length limitation(MAX_KEY_LENGTH) and key parts
+    limitation(MAX_REF_PARTS) and PK parts are added to SK.
+  */
+  bool is_unique_key = use_extended_sk;
+  uint pk_part = 0;
   KEY_PART_INFO *current_key_part= &sk->key_part[sk->user_defined_key_parts];
 
   /* 
      For each keypart in the primary key: check if the keypart is
      already part of the secondary key and add it if not.
   */
-  for (uint pk_part= 0; pk_part < pk->user_defined_key_parts; pk_part++)
-  {
+  for (; pk_part < pk->user_defined_key_parts; pk_part++) {
     KEY_PART_INFO *pk_key_part= &pk->key_part[pk_part];
-    /* MySQL does not supports more key parts than MAX_REF_LENGTH */
-    if (sk->actual_key_parts >= MAX_REF_PARTS)
-      goto end;
+    /* No more than MAX_REF_PARTS key parts are supported. */
+    if (sk->actual_key_parts >= MAX_REF_PARTS) {
+      is_unique_key = false;
+      break;
+    }
 
     bool pk_field_is_in_sk= false;
     for (uint j= 0; j < sk->user_defined_key_parts; j++)
@@ -1003,12 +1018,18 @@ static uint add_pk_parts_to_sk(KEY *sk, uint sk_n, KEY *pk, uint pk_n,
       }
     }
 
-    /* Add PK field to secondary key if it's not already  part of the key. */
     if (!pk_field_is_in_sk)
     {
-      /* MySQL does not supports keys longer than MAX_KEY_LENGTH */
-      if (max_key_length + pk_key_part->length > MAX_KEY_LENGTH)
-        goto end;
+      if (max_key_length + pk_key_part->length > MAX_KEY_LENGTH) {
+        is_unique_key = false;
+        break;
+      }
+      max_key_length += pk_key_part->length;
+      /*
+        Do not add key part if SK is a unique key or
+        if use_index_extensions is OFF.
+      */
+      if ((sk->flags & HA_NOSAME) || !use_extended_sk) continue;
 
       *current_key_part= *pk_key_part;
       setup_key_part_field(share, handler_file, pk_n, sk, sk_n,
@@ -1018,18 +1039,20 @@ static uint add_pk_parts_to_sk(KEY *sk, uint sk_n, KEY *pk, uint pk_n,
       sk->rec_per_key[sk->actual_key_parts - 1]= 0;
       sk->set_records_per_key(sk->actual_key_parts - 1, REC_PER_KEY_UNKNOWN);
       current_key_part++;
-      max_key_length+= pk_key_part->length;
-      /*
-        Secondary key will be unique if the key  does not exceed
-        key length limitation and key parts limitation.
-      */
-      is_unique_key= true;
     }
   }
   if (is_unique_key)
     sk->actual_flags|= HA_NOSAME;
 
-end:
+  /*
+    Clean key maps for those PK parts which exceed
+    MAX_KEY_LENGTH or MAX_REF_PARTS limits.
+  */
+  for (; pk_part < pk->user_defined_key_parts; pk_part++) {
+    Field *fld = pk->key_part[pk_part].field;
+    fld->part_of_key.clear_bit(sk_n);
+    fld->part_of_sortkey.clear_bit(sk_n);
+  }
   return (sk->actual_key_parts - sk->user_defined_key_parts);
 }
 
@@ -1637,6 +1660,7 @@ static int open_binary_frm(THD *thd, TABLE_SHARE *share, uchar *head,
   uint i,j;
   bool use_extended_sk;   // Supported extending of secondary keys with PK parts
   bool use_hash;
+  bool use_packed_keys;   // Supports packed keys.
   char *keynames, *names, *comment_pos, *gcol_screen_pos;
   char *orig_comment_pos, *orig_gcol_screen_pos;
   uchar forminfo[288];
@@ -1780,6 +1804,10 @@ static int open_binary_frm(THD *thd, TABLE_SHARE *share, uchar *head,
   share->key_info= keyinfo;
   key_part= reinterpret_cast<KEY_PART_INFO*>(keyinfo+keys);
 
+  use_packed_keys=
+    ha_check_storage_engine_flag(share->db_type(),
+                                 HTON_SUPPORTS_PACKED_KEYS);
+
   for (i=0 ; i < keys ; i++, keyinfo++)
   {
     keyinfo->table= 0;                           // Updated in open_frm
@@ -1800,6 +1828,23 @@ static int open_binary_frm(THD *thd, TABLE_SHARE *share, uchar *head,
       keyinfo->algorithm= HA_KEY_ALG_UNDEF;
       strpos+=4;
     }
+
+    /*
+      Beginning in 5.7.23, HA_PACK_KEY and HA_BINARY_PACK_KEY are no longer set
+      if the SE does not support it. If the index was created prior to 5.7.23
+      these bits may be set in the flags option, and when being added to
+      key_info->flags, the ALTER algorithm analysis will be broken because the
+      intermediate table is created without these flags, and hence, the
+      analysis will incorrectly conclude that all indexes have changed.
+
+      To workaround this issue, we remove the flags below, depending on the SE
+      capabilities, when preparing the table share. Thus, if we ALTER the table
+      at a later stage, indexes not being touched by the ALTER statement will
+      have the same flags both in the source table and the intermediate table,
+      and hence, the algorithm analysis will come to the right conclusion.
+    */
+    if (!use_packed_keys)
+      keyinfo->flags &= ~(HA_PACK_KEY | HA_BINARY_PACK_KEY);
 
     keyinfo->key_part= key_part;
     keyinfo->set_rec_per_key_array(rec_per_key, rec_per_key_float);
@@ -2527,11 +2572,11 @@ static int open_binary_frm(THD *thd, TABLE_SHARE *share, uchar *head,
         }
       }
 
-
-      if (use_extended_sk && primary_key < MAX_KEY &&
-          key && !(keyinfo->flags & HA_NOSAME))
-        key_part+= add_pk_parts_to_sk(keyinfo, key, share->key_info, primary_key,
-                                      share,  handler_file, &usable_parts);
+      if (primary_key < MAX_KEY && key != primary_key &&
+          (ha_option & HA_PRIMARY_KEY_IN_READ_INDEX))
+        key_part += add_pk_parts_to_sk(keyinfo, key, share->key_info,
+                                       primary_key, share, handler_file,
+                                       &usable_parts, use_extended_sk);
 
       /* Skip unused key parts if they exist */
       key_part+= keyinfo->unused_key_parts;
@@ -2776,9 +2821,21 @@ static bool fix_fields_gcol_func(THD *thd, Field *field)
   save_use_only_table_context= thd->lex->use_only_table_context;
   thd->lex->use_only_table_context= TRUE;
 
-  /* Fix fields referenced to by the generated column function */
+  bool charset_switched= false;
+  const CHARSET_INFO *saved_collation_connection= func_expr->default_charset();
+  if (saved_collation_connection != table->s->table_charset)
+  {
+   thd->variables.collation_connection= table->s->table_charset;
+   charset_switched= true;
+  }
+
   Item *new_func= func_expr;
   error= func_expr->fix_fields(thd, &new_func);
+
+  /* Restore the current connection character set and collation. */
+  if (charset_switched)
+    thd->variables.collation_connection=  saved_collation_connection;
+
   /* Restore the original context*/
   thd->lex->use_only_table_context= save_use_only_table_context;
   context->table_list= save_table_list;
@@ -3054,7 +3111,7 @@ int open_table_from_share(THD *thd, TABLE_SHARE *share, const char *alias,
                       share->table_name.str, (long) outparam));
 
   error= 1;
-  memset(outparam, 0, sizeof(*outparam));
+  new (outparam) TABLE;
   outparam->in_use= thd;
   outparam->s= share;
   outparam->db_stat= db_stat;
@@ -3507,7 +3564,7 @@ void free_blobs(TABLE *table)
 
 /**
   Reclaims temporary blob storage which is bigger than a threshold.
-  Resets blob pointer.
+  Resets blob pointer. Unsets m_keep_old_value.
 
   @param table A handle to the TABLE object containing blob fields
   @param size The threshold value.
@@ -3524,6 +3581,9 @@ void free_blob_buffers_and_reset(TABLE *table, uint32 size)
     if (blob->get_field_buffer_size() > size)
       blob->mem_free();
     blob->reset();
+
+    if (blob->is_virtual_gcol())
+      blob->set_keep_old_value(false);
   }
 }
 
@@ -4299,7 +4359,7 @@ Table_check_intact::check(TABLE *table, const TABLE_FIELD_DEF *table_def)
 
   /* Whether the table definition has already been validated. */
   if (table->s->table_field_def_cache == table_def)
-    DBUG_RETURN(FALSE);
+    goto end;
 
   if (table->s->fields != table_def->count)
   {
@@ -4416,6 +4476,15 @@ Table_check_intact::check(TABLE *table, const TABLE_FIELD_DEF *table_def)
 
   if (! error)
     table->s->table_field_def_cache= table_def;
+
+end:
+
+  if (has_keys && !error && !table->key_info)
+  {
+    my_error(ER_MISSING_KEY, MYF(0), table->s->db.str,
+             table->s->table_name.str);
+    error= TRUE;
+  }
 
   DBUG_RETURN(error);
 }
@@ -4687,8 +4756,24 @@ void TABLE::init(THD *thd, TABLE_LIST *tl)
   /* Tables may be reused in a sub statement. */
   DBUG_ASSERT(!file->extra(HA_EXTRA_IS_ATTACHED_CHILDREN));
   
-  bool error MY_ATTRIBUTE((unused))= refix_gc_items(thd);
-  DBUG_ASSERT(!error);
+  /*
+    Do not call refix_gc_items() for tables which are not directly used by the
+    statement (i.e. used by the substatements of routines or triggers to be
+    invoked by the statement).
+
+    Firstly, there will be call to refix_gc_items() at the start of execution
+    of substatement which directly uses this table anyway.Secondly, cleanup of
+    generated column (call to cleanup_gc_items()) for the table will be done
+    only at the end of execution of substatement which uses it. Because of this
+    call to refix_gc_items() for prelocking placeholder will miss corresponding
+    call to cleanup_gc_items() if substatement which uses the table is not
+    executed for some reason.
+  */
+  if (!pos_in_table_list->prelocking_placeholder)
+  {
+    bool error MY_ATTRIBUTE((unused))= refix_gc_items(thd);
+    DBUG_ASSERT(!error);
+  }
 }
 
 
@@ -4855,14 +4940,16 @@ TABLE_LIST *TABLE_LIST::new_nested_join(MEM_ROOT *allocator,
   DBUG_ASSERT(belongs_to && select);
 
   TABLE_LIST *const join_nest=
-    (TABLE_LIST *) alloc_root(allocator, ALIGN_SIZE(sizeof(TABLE_LIST))+
-                                                    sizeof(NESTED_JOIN));
+    (TABLE_LIST*) alloc_root(allocator, sizeof(TABLE_LIST));
   if (join_nest == NULL)
     return NULL;
+  new (join_nest) TABLE_LIST;
 
-  memset(join_nest, 0, ALIGN_SIZE(sizeof(TABLE_LIST)) + sizeof(NESTED_JOIN));
   join_nest->nested_join=
-    (NESTED_JOIN *) ((uchar *)join_nest + ALIGN_SIZE(sizeof(TABLE_LIST)));
+    (NESTED_JOIN*) alloc_root(allocator, sizeof(NESTED_JOIN));
+  if (join_nest->nested_join == NULL)
+    return NULL;
+  new (join_nest->nested_join) NESTED_JOIN;
 
   join_nest->db= (char *)"";
   join_nest->db_length= 0;
@@ -5814,7 +5901,7 @@ static Item *create_view_field(THD *thd, TABLE_LIST *view, Item **field_ref,
       field= down_cast<Item_ref *>(field)->ref[0];
     }
     if (field->type() == Item::FIELD_ITEM)
-      table_name= down_cast<Item_field *>(field)->table_name;
+      table_name= thd->mem_strdup(down_cast<Item_field *>(field)->table_name);
     else
       table_name= "";
   }
@@ -7715,8 +7802,11 @@ bool update_generated_read_fields(uchar *buf, TABLE *table, uint active_index)
     if (!vfield->stored_in_db &&
         bitmap_is_set(table->read_set, vfield->field_index))
     {
-      if (vfield->type() == MYSQL_TYPE_BLOB)
-        (down_cast<Field_blob*>(vfield))->need_to_keep_old_value();
+      if ((vfield->flags & BLOB_FLAG) != 0)
+      {
+        (down_cast<Field_blob*>(vfield))->keep_old_value();
+        (down_cast<Field_blob*>(vfield))->set_keep_old_value(true);
+      }
 
       error= vfield->gcol_info->expr_item->save_in_field(vfield, 0);
       DBUG_PRINT("info", ("field '%s' - updated", vfield->field_name));
@@ -7786,12 +7876,15 @@ bool update_generated_write_fields(const MY_BITMAP *bitmap, TABLE *table)
     if (bitmap_is_set(bitmap, vfield->field_index))
     {
       /*
-        For a virtual generated column of blob type, we have to keep
+        For a virtual generated column based on the blob type, we have to keep
         the current blob value since this might be needed by the
         storage engine during updates.
       */
-      if (vfield->type() == MYSQL_TYPE_BLOB && vfield->is_virtual_gcol())
+      if ((vfield->flags & BLOB_FLAG) != 0 && vfield->is_virtual_gcol())
+      {
         (down_cast<Field_blob*>(vfield))->keep_old_value();
+        (down_cast<Field_blob*>(vfield))->set_keep_old_value(true);
+      }
 
       /* Generate the actual value of the generated fields */
       error= vfield->gcol_info->expr_item->save_in_field(vfield, 0);
@@ -7869,4 +7962,27 @@ bool TABLE::contains_records(THD *thd, bool *retval)
   end_read_record(&info_read_record);
 
   return false;
+}
+
+void TABLE::blobs_need_not_keep_old_value()
+{
+  for (Field **vfield_ptr= vfield; *vfield_ptr; vfield_ptr++)
+  {
+    Field *vfield= *vfield_ptr;
+    /*
+      Set this flag so that all blob columns can keep the old value.
+    */
+    if (vfield->type() == MYSQL_TYPE_BLOB && vfield->is_virtual_gcol())
+      (down_cast<Field_blob*>(vfield))->set_keep_old_value(false);
+  }
+}
+
+void TABLE::set_binlog_drop_if_temp(bool should_binlog)
+{
+  should_binlog_drop_if_temp_flag= should_binlog;
+}
+
+bool TABLE::should_binlog_drop_if_temp(void) const
+{
+  return should_binlog_drop_if_temp_flag;
 }

@@ -1,13 +1,20 @@
-/* Copyright (c) 2013, 2016, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2013, 2020, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software Foundation,
@@ -39,6 +46,132 @@ const ushort Binlog_sender::PACKET_SHRINK_COUNTER_THRESHOLD= 100;
 const float Binlog_sender::PACKET_GROW_FACTOR= 2.0;
 const float Binlog_sender::PACKET_SHRINK_FACTOR= 0.5;
 
+/**
+  @class Observe_transmission_guard
+
+  Sentry class to guard the transitions for `Delegate::m_observe_transmission`
+  flag within given contexts.
+
+ */
+class Observe_transmission_guard
+{
+ public:
+  /**
+    Constructor for the class. It will change the value of the `flag` parameter
+    according with the `event_type` and `event_ptr` content. The `flag` will be
+    set to `true` as follows:
+
+    - The event is an `XID_EVENT`
+    - The event is an `XA_PREPARE_LOG_EVENT`.
+    - The event is a `QUERY_EVENT` with query equal to "XA COMMIT" or "XA ABORT"
+      or "COMMIT".
+    - The event is the first `QUERY_EVENT` after a `GTID_EVENT` and the query is
+      not "BEGIN" --the statement is a DDL, for instance.
+
+    @param flag            The flag variable to guard
+    @param event_type      The type of the event being processed
+    @param event_ptr       The raw content of the event being processed
+    @param event_len       The size of the raw content of the event being
+                           processed
+    @param checksum_alg    The checksum algorithm being used currently
+    @param prev_event_type The type of the event processed just before the
+                           current one
+   */
+  Observe_transmission_guard(bool &flag, binary_log::Log_event_type event_type,
+                             const char *event_ptr, uint32 event_len,
+                             binary_log::enum_binlog_checksum_alg checksum_alg,
+                             binary_log::Log_event_type prev_event_type)
+      : m_saved(flag), m_to_set(flag)
+  {
+    if (my_atomic_load32(&opt_atomic_replication_sender_observe_commit_only))
+    {
+      switch (event_type)
+      {
+        case binary_log::XID_EVENT:
+        case binary_log::XA_PREPARE_LOG_EVENT:
+        {
+          m_to_set= true;
+          break;
+        }
+        case binary_log::QUERY_EVENT:
+        {
+          bool first_event_after_gtid=
+              prev_event_type == binary_log::ANONYMOUS_GTID_LOG_EVENT ||
+              prev_event_type == binary_log::GTID_LOG_EVENT;
+
+          Format_description_log_event fd_ev(BINLOG_VERSION);
+          fd_ev.common_footer->checksum_alg= checksum_alg;
+          Query_log_event ev(event_ptr, event_len, &fd_ev,
+                             binary_log::QUERY_EVENT);
+          if (first_event_after_gtid)
+            m_to_set= (strcmp("BEGIN", ev.query) != 0);
+          else
+            m_to_set= (strncmp("XA COMMIT", ev.query, 9) == 0) ||
+                      (strncmp("XA ABORT", ev.query, 8) == 0) ||
+                      (strncmp("COMMIT", ev.query, 6) == 0);
+          break;
+        }
+        default:
+        {
+          m_to_set= false;
+          break;
+        }
+      }
+    }
+  }
+
+  /**
+    Destructor for the sentry class. It will instantiate the guarded flag with
+    the value prior to the creation of this object.
+  */
+  ~Observe_transmission_guard() { m_to_set= m_saved; }
+
+ private:
+  /** The value of the guarded flag upon this object creation */
+  bool m_saved;
+  /** The flag variable to guard */
+  bool &m_to_set;
+};
+
+/**
+  @class Sender_context_guard
+
+  Sentry class that guards the Binlog_sender context and, at destruction, will
+  prepare it for the next event to be processed.
+ */
+class Sender_context_guard
+{
+ public:
+  /**
+    Class constructor that simply stores, internally, the reference for the
+    `Binlog_sender` to be guarded and the values to be set upon destruction.
+
+    @param target     The `Binlog_sender` object to be guarded.
+    @param event_type The currently processed event type, to be used for context
+                      of the next event processing round.
+   */
+  Sender_context_guard(Binlog_sender &target,
+                       binary_log::Log_event_type event_type)
+      : m_target(target), m_event_type(event_type)
+  {
+  }
+
+  /**
+    Class destructor that will set the proper context of the guarded
+    `Binlog_sender` object.
+   */
+  virtual ~Sender_context_guard()
+  {
+    m_target.set_prev_event_type(m_event_type);
+  }
+
+ private:
+  /** The object to be guarded */
+  Binlog_sender &m_target;
+  /** The currently being processed event type */
+  binary_log::Log_event_type m_event_type;
+};
+
 Binlog_sender::Binlog_sender(THD *thd, const char *start_file,
                              my_off_t start_pos,
                              Gtid_set *exclude_gtids, uint32 flag)
@@ -52,7 +185,8 @@ Binlog_sender::Binlog_sender(THD *thd, const char *start_file,
     m_diag_area(false),
     m_errmsg(NULL), m_errno(0), m_last_file(NULL), m_last_pos(0),
     m_half_buffer_size_req_counter(0), m_new_shrink_size(PACKET_MIN_SIZE),
-    m_flag(flag), m_observe_transmission(false), m_transmit_started(false)
+    m_flag(flag), m_observe_transmission(false), m_transmit_started(false),
+    m_prev_event_type(binary_log::UNKNOWN_EVENT)
   {}
 
 void Binlog_sender::init()
@@ -196,7 +330,7 @@ void Binlog_sender::run()
   IO_CACHE log_cache;
   my_off_t start_pos= m_start_pos;
   const char *log_file= m_linfo.log_file_name;
-
+  bool is_index_file_reopened_on_binlog_disable= false;
   init();
 
   while (!has_error() && !m_thd->killed)
@@ -230,9 +364,40 @@ void Binlog_sender::run()
 
     THD_STAGE_INFO(m_thd,
                    stage_finished_reading_one_binlog_switching_to_next_binlog);
-    int error= mysql_bin_log.find_next_log(&m_linfo, 1);
+    DBUG_EXECUTE_IF("waiting_for_disable_binlog",
+		    {
+		    const char act[]= "now "
+		    "signal dump_thread_reached_wait_point "
+		    "wait_for continue_dump_thread no_clear_event";
+		    DBUG_ASSERT(!debug_sync_set_action(current_thd,
+						       STRING_WITH_LEN(act)));
+		    };);
+    mysql_bin_log.lock_index();
+    if (!mysql_bin_log.is_open())
+    {
+      if (mysql_bin_log.open_index_file(mysql_bin_log.get_index_fname(),
+					log_file, FALSE))
+      {
+        set_fatal_error("Binary log is not open and failed to open index file "
+                        "to retrieve next file.");
+        mysql_bin_log.unlock_index();
+        break;
+      }
+      is_index_file_reopened_on_binlog_disable= true;
+    }
+    int error= mysql_bin_log.find_next_log(&m_linfo, 0);
+    mysql_bin_log.unlock_index();
     if (unlikely(error))
     {
+      DBUG_EXECUTE_IF("waiting_for_disable_binlog",
+		      {
+		      const char act[]= "now signal consumed_binlog";
+		      DBUG_ASSERT(!debug_sync_set_action(current_thd,
+							 STRING_WITH_LEN(act)));
+		      };);
+      if (is_index_file_reopened_on_binlog_disable)
+        mysql_bin_log.close(LOG_CLOSE_INDEX, true/*need_lock_log=true*/,
+                            true/*need_lock_index=true*/);
       set_fatal_error("could not find next log");
       break;
     }
@@ -394,6 +559,13 @@ int Binlog_sender::send_events(IO_CACHE *log_cache, my_off_t end_pos)
     Log_event_type event_type= (Log_event_type)event_ptr[EVENT_TYPE_OFFSET];
     if (unlikely(check_event_type(event_type, log_file, log_pos)))
       DBUG_RETURN(1);
+
+    Sender_context_guard ctx_guard(*this, event_type);
+    Observe_transmission_guard obs_guard(m_observe_transmission, event_type,
+                                         const_cast<const char*>(
+                                            reinterpret_cast<char*>(event_ptr)),
+                                         event_len, m_event_checksum_alg,
+                                         m_prev_event_type);
 
     DBUG_EXECUTE_IF("dump_thread_wait_before_send_xid",
                     {
@@ -741,7 +913,7 @@ int Binlog_sender::check_start_file()
     */
     if (!gtid_state->get_lost_gtids()->is_subset(m_exclude_gtid))
     {
-      errmsg= ER(ER_MASTER_HAS_PURGED_REQUIRED_GTIDS);
+      mysql_bin_log.report_missing_purged_gtids(m_exclude_gtid, &errmsg);
       global_sid_lock->unlock();
       set_fatal_error(errmsg);
       return 1;

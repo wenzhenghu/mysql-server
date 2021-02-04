@@ -1,14 +1,21 @@
 #ifndef BINLOG_H_INCLUDED
-/* Copyright (c) 2010, 2016, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2010, 2020, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
+   it under the terms of the GNU General Public License, version 2.0,
+   as published by the Free Software Foundation.
+
+   This program is also distributed with certain software (including
+   but not limited to OpenSSL) that is licensed under separate terms,
+   as designated in a particular file or component or in included license
+   documentation.  The authors of MySQL hereby grant you an additional
+   permission to link the program and your derivative works with the
+   separately licensed software that they have included with MySQL.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   GNU General Public License, version 2.0, for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software Foundation,
@@ -24,6 +31,8 @@
 #include "tc_log.h"                    // TC_LOG
 #include "atomic_class.h"
 #include "rpl_gtid.h"                  // Gtid_set, Sid_map
+#include "rpl_trx_tracking.h"
+
 
 class Relay_log_info;
 class Master_info;
@@ -39,45 +48,6 @@ struct Gtid;
 
 typedef int64 query_id_t;
 
-/**
-  Logical timestamp generator for logical timestamping binlog transactions.
-  A transaction is associated with two sequence numbers see
-  @c Transaction_ctx::last_committed and @c Transaction_ctx::sequence_number.
-  The class provides necessary interfaces including that of
-  generating a next consecutive value for the latter.
-*/
-class  Logical_clock
-{
-private:
-  int64 state;
-  /*
-    Offset is subtracted from the actual "absolute time" value at
-    logging a replication event. That is the event holds logical
-    timestamps in the "relative" format. They are meaningful only in
-    the context of the current binlog.
-    The member is updated (incremented) per binary log rotation.
-  */
-  int64 offset;
-public:
-  Logical_clock();
-  int64 step();
-  int64 set_if_greater(int64 new_val);
-  int64 get_timestamp();
-  int64 get_offset() { return offset; }
-  /*
-    Updates the offset.
-    This operation is invoked when binlog rotates and at that time
-    there can't any concurrent step() callers so no need to guard
-    the assignement.
-  */
-  void update_offset(int64 new_offset)
-  {
-    DBUG_ASSERT(offset <= new_offset);
-
-    offset= new_offset;
-  }
-  ~Logical_clock() { }
-};
 
 /**
   Class for maintaining the commit stages for binary log group commit.
@@ -152,7 +122,12 @@ public:
 
     /** Lock for protecting the queue. */
     mysql_mutex_t m_lock;
-  } MY_ATTRIBUTE((aligned(CPU_LEVEL1_DCACHE_LINESIZE)));
+    /*
+      This attribute did not have the desired effect, at least not according
+      to -fsanitize=undefined with gcc 5.2.1
+      Also: it fails to compile with gcc 7.2
+     */
+  }; // MY_ATTRIBUTE((aligned(CPU_LEVEL1_DCACHE_LINESIZE)));
 
 public:
   Stage_manager()
@@ -278,7 +253,7 @@ public:
                     session is waiting on
     @param stage    which stage queue size to compare count against.
    */
-  void wait_count_or_timeout(ulong count, ulong usec, StageID stage);
+  void wait_count_or_timeout(ulong count, long usec, StageID stage);
 
   void signal_done(THD *queue);
 
@@ -586,11 +561,8 @@ public:
 #endif
 
 public:
-  /* Committed transactions timestamp */
-   Logical_clock max_committed_transaction;
-  /* "Prepared" transactions timestamp */
-   Logical_clock transaction_counter;
-  void update_max_committed(THD *thd);
+  /** Manage the MTS dependency tracking */
+  Transaction_dependency_tracker m_dependency_tracker;
 
   /**
     Find the oldest binary log that contains any GTID that
@@ -700,7 +672,8 @@ private:
   int process_flush_stage_queue(my_off_t *total_bytes_var, bool *rotate_var,
                                 THD **out_queue_var);
   int ordered_commit(THD *thd, bool all, bool skip_commit = false);
-  void handle_binlog_flush_or_sync_error(THD *thd, bool need_lock_log);
+  void handle_binlog_flush_or_sync_error(THD *thd, bool need_lock_log,
+                                         const char *message);
 public:
   int open_binlog(const char *opt_name);
   void close();
@@ -725,18 +698,7 @@ public:
   {
     bytes_written = 0;
   }
-  void harvest_bytes_written(ulonglong* counter)
-  {
-#ifndef DBUG_OFF
-    char buf1[22],buf2[22];
-#endif
-    DBUG_ENTER("harvest_bytes_written");
-    (*counter)+=bytes_written;
-    DBUG_PRINT("info",("counter: %s  bytes_written: %s", llstr(*counter,buf1),
-		       llstr(bytes_written,buf2)));
-    bytes_written=0;
-    DBUG_VOID_RETURN;
-  }
+  void harvest_bytes_written(Relay_log_info *rli, bool need_log_space_lock);
   void set_max_size(ulong max_size_arg);
   void signal_update()
   {
@@ -763,10 +725,10 @@ public:
     }
   }
 
-  void update_binlog_end_pos(my_off_t pos)
+  void update_binlog_end_pos(const char *file, my_off_t pos)
   {
     lock_binlog_end_pos();
-    if (pos > binlog_end_pos)
+    if (is_active(file) && pos > binlog_end_pos)
       binlog_end_pos= pos;
     signal_update();
     unlock_binlog_end_pos();
@@ -824,23 +786,26 @@ public:
      Gtid_log_event and BEGIN, COMMIT automatically.
 
      It is aimed to handle cases of "background" logging where a statement is
-     logged indirectly, like "DELETE FROM a_memory_table". So don't use it on any
+     logged indirectly, like "TRUNCATE TABLE a_memory_table". So don't use it on any
      normal statement.
 
      @param[IN] thd  the THD object of current thread.
-     @param[IN] stmt the DELETE statement.
-     @param[IN] stmt_len the length of DELETE statement.
+     @param[IN] stmt the DML statement.
+     @param[IN] stmt_len the length of the DML statement.
+     @param[IN] sql_command the type of SQL command.
 
      @return Returns false if succeeds, otherwise true is returned.
   */
-  bool write_dml_directly(THD* thd, const char *stmt, size_t stmt_len);
+  bool write_stmt_directly(THD* thd, const char *stmt, size_t stmt_len,
+                          enum enum_sql_command sql_command);
 
   void set_write_error(THD *thd, bool is_transactional);
   bool check_write_error(THD *thd);
   bool write_incident(THD *thd, bool need_lock_log,
                       const char* err_msg,
                       bool do_flush_and_sync= true);
-  bool write_incident(Incident_log_event *ev, bool need_lock_log,
+  bool write_incident(Incident_log_event *ev, THD *thd,
+                      bool need_lock_log,
                       const char* err_msg,
                       bool do_flush_and_sync= true);
 
@@ -899,7 +864,7 @@ public:
   int purge_index_entry(THD *thd, ulonglong *decrease_log_space,
                         bool need_lock_index);
   bool reset_logs(THD* thd, bool delete_only= false);
-  void close(uint exiting);
+  void close(uint exiting, bool need_lock_log, bool need_lock_index);
 
   // iterating through the log index file
   int find_log_pos(LOG_INFO* linfo, const char* log_name,
@@ -921,6 +886,55 @@ public:
   inline IO_CACHE *get_index_file() { return &index_file;}
   inline uint32 get_open_count() { return open_count; }
 
+  /**
+    Function to report the missing GTIDs.
+
+    This function logs the missing transactions on master to its error log
+    as a warning. If the missing GTIDs are too long to print in a message,
+    it suggests the steps to extract the missing transactions.
+
+    This function also informs slave about the GTID set sent by the slave,
+    transactions missing on the master and few suggestions to recover from
+    the error. This message shall be wrapped by
+    ER_MASTER_FATAL_ERROR_READING_BINLOG on slave and will be logged as an
+    error.
+
+    This function will be called from mysql_binlog_send() function.
+
+    @param slave_executed_gtid_set     GTID set executed by slave
+    @param errmsg                      Pointer to the error message
+
+    @return void
+  */
+  void report_missing_purged_gtids(const Gtid_set* slave_executed_gtid_set,
+                                   const char** errmsg);
+
+  /**
+    Function to report the missing GTIDs.
+
+    This function logs the missing transactions on master to its error log
+    as a warning. If the missing GTIDs are too long to print in a message,
+    it suggests the steps to extract the missing transactions.
+
+    This function also informs slave about the GTID set sent by the slave,
+    transactions missing on the master and few suggestions to recover from
+    the error. This message shall be wrapped by
+    ER_MASTER_FATAL_ERROR_READING_BINLOG on slave and will be logged as an
+    error.
+
+    This function will be called from find_first_log_not_in_gtid_set()
+    function.
+
+    @param previous_gtid_set           Previous GTID set found
+    @param slave_executed_gtid_set     GTID set executed by slave
+    @param errmsg                      Pointer to the error message
+
+    @return void
+  */
+  void report_missing_gtids(const Gtid_set* previous_gtid_set,
+                            const Gtid_set* slave_executed_gtid_set,
+                            const char** errmsg);
+  static const int MAX_RETRIES_FOR_DELETE_RENAME_FAILURE = 5;
   /*
     It is called by the threads(e.g. dump thread) which want to read
     hot log without LOCK_log protection.
@@ -951,6 +965,11 @@ public:
       @retval !=0    Error
   */
   int get_gtid_executed(Sid_map *sid_map, Gtid_set *gtid_set);
+
+  /*
+    True while rotating binlog, which is caused by logging Incident_log_event.
+  */
+  bool is_rotating_caused_by_incident;
 };
 
 typedef struct st_load_file_info
@@ -962,8 +981,49 @@ typedef struct st_load_file_info
 
 extern MYSQL_PLUGIN_IMPORT MYSQL_BIN_LOG mysql_bin_log;
 
+/**
+  Check if the the transaction is empty.
+
+  @param thd The client thread that executed the current statement.
+
+  @retval true No changes found in any storage engine
+  @retval false Otherwise.
+
+**/
+bool is_transaction_empty(THD* thd);
+/**
+  Check if the transaction has no rw flag set for any of the storage engines.
+
+  @param thd The client thread that executed the current statement.
+  @param trx_scope The transaction scope to look into.
+
+  @retval the number of engines which have actual changes.
+ */
+int check_trx_rw_engines(THD *thd, Transaction_ctx::enum_trx_scope trx_scope);
+
+/**
+  Check if at least one of transacaction and statement binlog caches contains
+  an empty transaction, other one is empty or contains an empty transaction,
+  which has two binlog events "BEGIN" and "COMMIT".
+
+  @param thd The client thread that executed the current statement.
+
+  @retval true  At least one of transacaction and statement binlog caches
+                contains an empty transaction, other one is empty or
+                contains an empty transaction.
+  @retval false Otherwise.
+*/
+bool is_empty_transaction_in_binlog_cache(const THD* thd);
 bool trans_has_updated_trans_table(const THD* thd);
 bool stmt_has_updated_trans_table(Ha_trx_info* ha_list);
+/**
+  This function checks if the transaction has no operation dml.
+
+  @param ha_list Registered storage engine handler list.
+  @return true  if the transaction has no operation dml.
+          false otherwise.
+*/
+bool trans_has_noop_dml(Ha_trx_info* ha_list);
 bool ending_trans(THD* thd, const bool all);
 bool ending_single_stmt_trans(THD* thd, const bool all);
 bool trans_cannot_safely_rollback(const THD* thd);
